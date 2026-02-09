@@ -1,0 +1,186 @@
+site_name: RLM Code
+site_description: AI-Powered Interactive Development Environment for DSPy
+site_author: Superagentic AI
+site_url: https://superagenticai.github.io/rlm-code/
+
+repo_name: SuperagenticAI/rlm-code
+repo_url: https://github.com/SuperagenticAI/rlm-code
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  logo: resource/rlm-code.png
+  favicon: resource/rlm-code.png
+  palette:
+    # Light mode (default)
+    - scheme: default
+      primary: deep purple
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Dark mode
+    - scheme: slate
+      primary: deep purple
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+  font:
+    text: Roboto
+    code: Roboto Mono
+
+  features:
+    # Keep sidebar items stable and highlight current page
+    - navigation.tracking
+    # Always show full tree of pages for the active top-level section
+    - navigation.expand
+    - navigation.sections
+    # Show top-level groups (Getting Started, User Guide, etc.) as tabs
+    - navigation.tabs
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+
+  icon:
+    repo: fontawesome/brands/github
+    admonition:
+      note: octicons/tag-16
+      abstract: octicons/checklist-16
+      info: octicons/info-16
+      tip: octicons/light-bulb-16
+      success: octicons/check-16
+      question: octicons/question-16
+      warning: octicons/alert-16
+      failure: octicons/x-circle-16
+      danger: octicons/zap-16
+      bug: octicons/bug-16
+      example: octicons/beaker-16
+      quote: octicons/quote-16
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - attr_list
+  - md_in_html
+  - tables
+  - footnotes
+  - def_list
+  - pymdownx.tasklist:
+      custom_checkbox: true
+
+plugins:
+  - search:
+      lang: en
+  - minify:
+      minify_html: true
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          options:
+            show_source: true
+            show_root_heading: true
+            show_root_full_path: false
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            docstring_style: google
+            docstring_section_style: spacy
+            merge_init_into_class: true
+            show_signature_annotations: true
+            separate_signature: true
+
+extra_css:
+  - stylesheets/extra.css
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/SuperagenticAI/rlm-code
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/rlm-code/
+
+  generator: false
+
+  version:
+    provider: mike
+
+copyright: Copyright &copy; 2025 Superagentic AI. All rights reserved.
+
+nav:
+  - 🏠 Home: index.md
+  - 🚀 Getting Started:
+    - 📦 Installation: getting-started/installation.md
+    - ⚡ Quick Start: getting-started/quick-start.md
+    - 🔌 Model Connection (Cloud & Local): guide/model-connection.md
+    - 🎯 First Program: getting-started/first-program.md
+    - 💡 Understanding RLM Code: getting-started/understanding.md
+
+  - 📚 User Guide:
+    - 💬 Interactive Mode: guide/interactive-mode.md
+    - 🗣️ Natural Language Commands: guide/natural-language-commands.md
+    - ⌨️ Slash Commands: guide/slash-commands.md
+    - ✨ Generating Code: guide/generating-code.md
+    - 🔗 MCP Overview: guide/mcp-overview.md
+    - 🔌 Adapters: guide/adapters.md
+    - 🔍 Retrievers: guide/retrievers.md
+    # Model connection is linked under Getting Started to avoid duplication
+    - ✅ Code Validation: guide/validation.md
+    - 📊 Evaluation: guide/evaluation.md
+    - ⚡ Async & Streaming: guide/async-streaming.md
+    - ▶️ Running Programs: guide/running-programs.md
+    - 🎯 Optimization: guide/optimization.md
+    - 📁 Project Management: guide/project-management.md
+    - 📊 Creating Gold Data: guide/creating-gold-data.md
+
+  - 🎓 Tutorials:
+    - 📚 Running Examples: tutorials/examples.md
+    - 😊 Build a Sentiment Analyzer: tutorials/sentiment-analyzer.md
+    - 🔍 Create a RAG System: tutorials/rag-system.md
+    - ❓ Question Answering: tutorials/question-answering.md
+    - 🧬 Optimize with GEPA: tutorials/gepa-optimization.md
+    - 📂 MCP Filesystem Assistant: tutorials/mcp-filesystem-assistant.md
+    - 🐙 MCP GitHub Triage Copilot: tutorials/mcp-github-triage.md
+
+  - 📖 Reference:
+    - 🏗️ Architecture: reference/architecture.md
+    - 📝 Command Reference: reference/commands.md
+    - ⚙️ Configuration: reference/configuration.md
+    - 🔒 Security & Best Practices: reference/security.md
+    - 📋 Templates: reference/templates.md
+    - 🔧 Troubleshooting: reference/troubleshooting.md
+    - ❓ FAQ: reference/faq.md
+    - 📚 API Reference:
+      - Core: reference/api/core.md
+      - Models: reference/api/models.md
+      - MCP: reference/api/mcp.md
+      - Validation: reference/api/validation.md
+
+  - 🚀 Advanced:
+    - 🔗 MCP Integration: advanced/mcp-integration.md
+    - 🧩 Custom Modules: advanced/custom-modules.md
+    - 🚢 Deployment: advanced/deployment.md
+    - 🔄 CI/CD Integration: advanced/cicd.md
+
+  - 👩‍💻 Contributing:
+    - 🚀 Getting Started: contributing/getting-started.md
+    - 🤝 Contributing Guide: about/contributing.md
+
+  - ℹ️ About:
+    - 📖 About RLM Code: about/index.md
+    - 💡 Why RLM Code?: about/why-rlm-code.md
+    - 📝 Changelog: about/changelog.md
+    - 📄 License: about/license.md

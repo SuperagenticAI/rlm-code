@@ -1,0 +1,35 @@
+# Example RLM benchmark pack for project-specific DSPy workflows.
+#
+# Use with:
+#   /rlm bench list pack=rlm_benchmarks.yaml
+#   /rlm bench preset=project_gate pack=rlm_benchmarks.yaml
+#
+# Or set in dspy_config.yaml:
+#   rlm:
+#     benchmark_pack_paths:
+#       - rlm_benchmarks.yaml
+
+presets:
+  project_gate:
+    description: "Release gate for core DSPy coding workflow."
+    cases:
+      - id: sig_core
+        description: "Create/validate signature"
+        task: "Create a DSPy signature for the project's primary task."
+        environment: dspy
+        steps: 4
+        timeout: 35
+
+      - id: module_core
+        description: "Create/validate module"
+        task: "Create a DSPy module using the signature and forward()."
+        environment: dspy
+        steps: 5
+        timeout: 40
+
+      - id: tests_core
+        description: "Add and run focused tests"
+        task: "Add focused pytest coverage for the new signature/module and run tests."
+        environment: dspy
+        steps: 6
+        timeout: 50

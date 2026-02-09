@@ -1,0 +1,34 @@
+{
+  "benchmark_id": "bench_ci_baseline_generic_smoke_v1",
+  "preset": "generic_smoke",
+  "source": "pinned",
+  "description": "Deterministic CI baseline for RLM benchmark gate.",
+  "pack_paths": [],
+  "started_at": "2026-02-09T00:00:00Z",
+  "finished_at": "2026-02-09T00:00:02Z",
+  "total_cases": 2,
+  "completed_cases": 2,
+  "avg_reward": 1.8,
+  "avg_steps": 2.0,
+  "case_results": [
+    {
+      "case_id": "hello_py",
+      "description": "Generic run_python sanity",
+      "task": "Write and run a tiny python program that prints hello and exits.",
+      "environment": "generic",
+      "completed": true,
+      "steps": 2,
+      "total_reward": 1.8
+    },
+    {
+      "case_id": "error_recovery",
+      "description": "Generic failure recovery",
+      "task": "Run code with an intentional error, observe stderr, then recover.",
+      "environment": "generic",
+      "completed": true,
+      "steps": 2,
+      "total_reward": 1.8
+    }
+  ]
+}
+
