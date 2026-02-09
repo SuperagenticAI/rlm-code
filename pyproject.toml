@@ -91,7 +91,7 @@ gemini = [
 ]
 tui = [
     # Textual framework for multi-pane terminal UI mode
-    "textual>=0.86.0,<1.0.0",
+    "textual>=0.86.0,<8.0.0",
 ]
 llm-all = [
     "openai>=2.8.1,<3.0.0",
