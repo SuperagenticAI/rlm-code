@@ -2,9 +2,13 @@
 
 import json
 import time
+from pathlib import Path
 from types import SimpleNamespace
 
 from rlm__code.rlm import RLMRunner
+from rlm__code.rlm.benchmarks import load_benchmark_packs
+from rlm__code.rlm.context_store import ContextRef, LazyFileContext
+from rlm__code.rlm.frameworks import FrameworkEpisodeResult, FrameworkStepRecord
 
 
 class _FakeConnector:
@@ -440,6 +444,322 @@ def test_rlm_run_benchmark_from_yaml_pack(tmp_path):
     assert payload["source"].endswith("rlm_benchmarks.yaml")
 
 
+def test_load_benchmark_pack_from_pydantic_dataset_yaml(tmp_path):
+    dataset_path = tmp_path / "time_range_v1.yaml"
+    dataset_path.write_text(
+        (
+            "name: Time Range V1\n"
+            "description: Imported from pydantic eval\n"
+            "cases:\n"
+            "  - name: single day mention\n"
+            "    inputs:\n"
+            "      prompt: I want to see logs from 2021-05-08\n"
+            "      now: '2023-10-28T09:30:00Z'\n"
+            "    expected_output:\n"
+            "      min_timestamp_with_offset: '2021-05-08T00:00:00Z'\n"
+            "  - name: relative mention\n"
+            "    inputs:\n"
+            "      prompt: Check logs from 2 hours ago\n"
+        ),
+        encoding="utf-8",
+    )
+
+    presets, descriptions, sources = load_benchmark_packs([dataset_path], workdir=tmp_path)
+    assert "time_range_v1" in presets
+    assert len(presets["time_range_v1"]) == 2
+    assert presets["time_range_v1"][0].task == "I want to see logs from 2021-05-08"
+    assert descriptions["time_range_v1"] == "Imported from pydantic eval"
+    assert sources["time_range_v1"].endswith("time_range_v1.yaml")
+
+
+def test_load_benchmark_pack_from_adk_eval_json(tmp_path):
+    eval_path = tmp_path / "adk_eval.json"
+    eval_path.write_text(
+        json.dumps(
+            {
+                "name": "Home Automation Memory",
+                "eval_cases": [
+                    {
+                        "eval_id": "case_turns_1",
+                        "conversation": [
+                            {
+                                "user_content": {
+                                    "parts": [{"text": "Turn off device_2 in the Bedroom."}],
+                                    "role": "user",
+                                }
+                            },
+                            {
+                                "user_content": {
+                                    "parts": [{"text": "What's the command I just issued?"}],
+                                    "role": "user",
+                                }
+                            },
+                        ],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    presets, descriptions, sources = load_benchmark_packs([eval_path], workdir=tmp_path)
+    assert "home_automation_memory" in presets
+    assert len(presets["home_automation_memory"]) == 1
+    case = presets["home_automation_memory"][0]
+    assert case.case_id == "case_turns_1"
+    assert "User request" in case.task
+    assert "What's the command I just issued?" in case.task
+    assert descriptions["home_automation_memory"] == "Imported Google ADK eval set."
+    assert sources["home_automation_memory"].endswith("adk_eval.json")
+
+
+def test_load_benchmark_pack_from_jsonl_records(tmp_path):
+    dataset_path = tmp_path / "qa_dataset.jsonl"
+    dataset_path.write_text(
+        (
+            '{"id":"q1","question":"What is machine learning?","answer":"..."}\n'
+            '{"id":"q2","prompt":"Define reinforcement learning.","answer":"..."}\n'
+        ),
+        encoding="utf-8",
+    )
+
+    presets, descriptions, sources = load_benchmark_packs([dataset_path], workdir=tmp_path)
+    assert "qa_dataset" in presets
+    assert len(presets["qa_dataset"]) == 2
+    assert presets["qa_dataset"][0].task == "What is machine learning?"
+    assert presets["qa_dataset"][1].task == "Define reinforcement learning."
+    assert descriptions["qa_dataset"] == "Imported benchmark dataset."
+    assert sources["qa_dataset"].endswith("qa_dataset.jsonl")
+
+
+def test_repo_eval_packs_are_loadable():
+    repo_root = Path(__file__).resolve().parents[1]
+    pack_paths = [
+        "eval/packs/pydantic_time_range_v1.yaml",
+        "eval/packs/google_adk_memory_eval.json",
+        "eval/packs/superoptix_qa_pairs.json",
+    ]
+    presets, descriptions, sources = load_benchmark_packs(pack_paths, workdir=repo_root)
+    assert presets
+    assert descriptions is not None
+    assert sources is not None
+
+
+def test_runner_benchmark_pack_aliases_and_preview(tmp_path):
+    repo_root = Path(__file__).resolve().parents[1]
+    connector = _FakeConnector(
+        responses=[
+            '{"action":"final","done":true,"final_response":"done"}',
+        ]
+    )
+    engine = _FakeExecutionEngine()
+    runner = RLMRunner(
+        llm_connector=connector,
+        execution_engine=engine,
+        run_dir=tmp_path / "runs",
+        workdir=repo_root,
+    )
+    aliases = runner.benchmark_pack_aliases()
+    assert "pydantic_time_range_v1" in aliases
+
+    rows = runner.import_benchmark_pack_preview(pack_paths=["pydantic_time_range_v1"], per_preset_limit=1)
+    assert rows
+    assert rows[0]["previewed_cases"] == 1
+
+
+def test_rlm_visualize_run_extracts_failures_changes_and_children(tmp_path):
+    run_dir = tmp_path / "runs"
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    root_path = run_dir / "run_root.jsonl"
+    root_events = [
+        {
+            "type": "step",
+            "run_id": "run_root",
+            "timestamp": "2026-01-01T00:00:00Z",
+            "step": 1,
+            "action": {"action": "run_python", "code": "print(1/0)"},
+            "observation": {"success": False, "stderr": "ZeroDivisionError"},
+            "reward": -0.2,
+        },
+        {
+            "type": "step",
+            "run_id": "run_root",
+            "timestamp": "2026-01-01T00:00:01Z",
+            "step": 2,
+            "action": {
+                "action": "patch_file",
+                "path": "module.py",
+                "search": "bad_line",
+                "replace": "good_line",
+            },
+            "observation": {
+                "success": True,
+                "path": "module.py",
+                "replacements": 1,
+                "bytes_written": 42,
+                "results": [
+                    {
+                        "run_id": "run_child",
+                        "run_path": str(run_dir / "run_child.jsonl"),
+                        "completed": True,
+                        "total_reward": 0.4,
+                    }
+                ],
+            },
+            "reward": 0.3,
+        },
+        {
+            "type": "final",
+            "run_id": "run_root",
+            "timestamp": "2026-01-01T00:00:02Z",
+            "completed": True,
+            "steps": 2,
+            "total_reward": 0.1,
+            "final_response": "done",
+            "environment": "dspy",
+            "framework": "native",
+            "task": "root task",
+            "usage": {"total_calls": 1, "prompt_tokens": 10, "completion_tokens": 5},
+        },
+    ]
+    root_path.write_text(
+        "\n".join(json.dumps(event, ensure_ascii=True) for event in root_events) + "\n",
+        encoding="utf-8",
+    )
+
+    child_path = run_dir / "run_child.jsonl"
+    child_events = [
+        {
+            "type": "step",
+            "run_id": "run_child",
+            "timestamp": "2026-01-01T00:00:01Z",
+            "step": 1,
+            "action": {"action": "write_file", "path": "child.py", "content": "print('hi')"},
+            "observation": {"success": True, "path": "child.py", "bytes_written": 11},
+            "reward": 0.2,
+        },
+        {
+            "type": "final",
+            "run_id": "run_child",
+            "timestamp": "2026-01-01T00:00:02Z",
+            "completed": True,
+            "steps": 1,
+            "total_reward": 0.4,
+            "final_response": "child done",
+            "environment": "dspy",
+            "framework": "native",
+            "task": "child task",
+            "usage": {"total_calls": 1, "prompt_tokens": 8, "completion_tokens": 4},
+        },
+    ]
+    child_path.write_text(
+        "\n".join(json.dumps(event, ensure_ascii=True) for event in child_events) + "\n",
+        encoding="utf-8",
+    )
+
+    runner = RLMRunner(
+        llm_connector=SimpleNamespace(current_model="mock-model"),
+        execution_engine=_FakeExecutionEngine(),
+        run_dir=run_dir,
+        workdir=tmp_path,
+    )
+
+    summary = runner.visualize_run("run_root", include_children=True, max_depth=3)
+    assert summary["run_id"] == "run_root"
+    assert summary["step_count"] == 2
+    assert summary["action_counts"]["patch_file"] == 1
+    assert len(summary["failures"]) == 1
+    assert "ZeroDivisionError" in summary["failures"][0]["error"]
+    assert len(summary["changes"]) == 1
+    assert "diff_preview" in summary["changes"][0]
+    assert len(summary["children"]) == 1
+    assert summary["children"][0]["run_id"] == "run_child"
+
+
+def test_rlm_visualize_run_raises_for_missing_run(tmp_path):
+    runner = RLMRunner(
+        llm_connector=SimpleNamespace(current_model="mock-model"),
+        execution_engine=_FakeExecutionEngine(),
+        run_dir=tmp_path / "runs",
+        workdir=tmp_path,
+    )
+    try:
+        runner.visualize_run("missing_run")
+        assert False, "Expected ValueError for missing run"
+    except ValueError as exc:
+        assert "Run not found" in str(exc)
+
+
+def test_rlm_import_benchmark_pack_preview(tmp_path):
+    pack_path = tmp_path / "rlm_benchmarks.yaml"
+    pack_path.write_text(
+        (
+            "presets:\n"
+            "  project_gate:\n"
+            "    description: Project-specific gate\n"
+            "    cases:\n"
+            "      - id: smoke_custom\n"
+            "        description: custom smoke\n"
+            "        task: run a tiny python check\n"
+            "        environment: generic\n"
+            "      - id: smoke_two\n"
+            "        description: custom smoke two\n"
+            "        task: run another tiny python check\n"
+            "        environment: generic\n"
+        ),
+        encoding="utf-8",
+    )
+
+    connector = _FakeConnector(
+        responses=[
+            '{"action":"final","done":true,"final_response":"done"}',
+        ]
+    )
+    engine = _FakeExecutionEngine()
+    runner = RLMRunner(
+        llm_connector=connector,
+        execution_engine=engine,
+        run_dir=tmp_path / "runs",
+        workdir=tmp_path,
+    )
+
+    rows = runner.import_benchmark_pack_preview(
+        pack_paths=["rlm_benchmarks.yaml"],
+        per_preset_limit=1,
+    )
+    assert len(rows) == 1
+    assert rows[0]["preset"] == "project_gate"
+    assert rows[0]["total_cases"] == 2
+    assert rows[0]["previewed_cases"] == 1
+    assert rows[0]["cases"][0]["case_id"] == "smoke_custom"
+
+
+def test_load_benchmark_packs_accepts_eval_dir_paths(tmp_path):
+    eval_pack = tmp_path / "eval" / "adk_eval.json"
+    eval_pack.parent.mkdir(parents=True, exist_ok=True)
+    eval_pack.write_text(
+        json.dumps(
+            {
+                "name": "Imported",
+                "eval_cases": [
+                    {
+                        "eval_id": "case_1",
+                        "conversation": [
+                            {"user_content": {"parts": [{"text": "hello"}], "role": "user"}}
+                        ],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    presets, _, _ = load_benchmark_packs([eval_pack], workdir=tmp_path)
+    assert "imported" in presets
+    assert presets["imported"][0].task == "hello"
+
+
 def test_rlm_list_benchmark_runs_and_compare(tmp_path):
     connector = _FakeConnector(
         responses=[
@@ -494,3 +814,169 @@ def test_rlm_compare_benchmarks_requires_two_runs(tmp_path):
         assert False, "Expected ValueError for missing previous benchmark"
     except ValueError as exc:
         assert "Baseline benchmark not found" in str(exc)
+
+
+def test_lazy_file_context_resolves_and_renders(tmp_path):
+    sample = tmp_path / "sample.py"
+    sample.write_text("line1\nline2\nline3\n", encoding="utf-8")
+    ctx = LazyFileContext(workdir=tmp_path)
+    rendered = ctx.render([ContextRef(path="sample.py", start_line=2, end_line=3)])
+    assert "[sample.py]" in rendered
+    assert "line2" in rendered
+    assert "line3" in rendered
+
+
+def test_rlm_delegate_runs_child_episode(tmp_path):
+    (tmp_path / "README.md").write_text("delegate context", encoding="utf-8")
+    connector = _FakeConnector(
+        responses=[
+            '{"action":"delegate","task":"solve child","context_refs":["README.md"],"done":false}',
+            '{"action":"final","done":true,"final_response":"child done"}',
+            '{"action":"final","done":true,"final_response":"parent done"}',
+        ]
+    )
+    engine = _FakeExecutionEngine()
+    seen_events: list[str] = []
+    runner = RLMRunner(
+        llm_connector=connector,
+        execution_engine=engine,
+        run_dir=tmp_path / "runs",
+        workdir=tmp_path,
+    )
+    runner.event_bus.subscribe(lambda event: seen_events.append(event.name))
+
+    result = runner.run_task(
+        "run parent",
+        max_steps=3,
+        exec_timeout=5,
+        environment="dspy",
+        max_depth=2,
+        max_children_per_step=2,
+        parallelism=2,
+    )
+
+    assert result.completed is True
+    events = runner.load_run_events(result.run_id)
+    step_event = next(event for event in events if event.get("type") == "step")
+    observation = step_event.get("observation", {})
+    assert observation.get("children_executed", 0) >= 1
+    assert isinstance(observation.get("results"), list)
+    assert "child_run_start" in seen_events
+    assert "child_run_end" in seen_events
+
+
+def test_rlm_delegate_respects_max_depth_guard(tmp_path):
+    connector = _FakeConnector(
+        responses=[
+            '{"action":"delegate","task":"blocked child","done":false}',
+            '{"action":"final","done":true,"final_response":"done"}',
+        ]
+    )
+    engine = _FakeExecutionEngine()
+    runner = RLMRunner(
+        llm_connector=connector,
+        execution_engine=engine,
+        run_dir=tmp_path / "runs",
+        workdir=tmp_path,
+    )
+
+    result = runner.run_task(
+        "depth guard",
+        max_steps=2,
+        exec_timeout=5,
+        environment="dspy",
+        max_depth=0,
+    )
+    assert result.completed is True
+    events = runner.load_run_events(result.run_id)
+    step_event = next(event for event in events if event.get("type") == "step")
+    assert "max_depth" in str(step_event.get("observation", {}))
+
+
+class _FakeFrameworkAdapter:
+    framework_id = "fake-framework"
+
+    def doctor(self):
+        return (True, "ok")
+
+    def run_episode(
+        self,
+        *,
+        task: str,
+        llm_connector,
+        max_steps: int,
+        exec_timeout: int,
+        workdir: str,
+        sub_model: str | None = None,
+        sub_provider: str | None = None,
+        context: dict | None = None,
+    ):
+        return FrameworkEpisodeResult(
+            completed=True,
+            final_response=f"framework:{task}",
+            steps=[
+                FrameworkStepRecord(
+                    action="framework_model",
+                    observation={"task": task, "provider": sub_provider},
+                    reward=0.3,
+                )
+            ],
+            total_reward=0.3,
+            metadata={"adapter": "fake-framework"},
+        )
+
+
+def test_rlm_run_task_framework_adapter_mode(tmp_path):
+    connector = _FakeConnector(responses=[])
+    engine = _FakeExecutionEngine()
+    runner = RLMRunner(
+        llm_connector=connector,
+        execution_engine=engine,
+        run_dir=tmp_path,
+        workdir=tmp_path,
+    )
+    runner.framework_registry.register(_FakeFrameworkAdapter())
+
+    result = runner.run_task(
+        "use adapter",
+        max_steps=2,
+        exec_timeout=5,
+        framework="fake-framework",
+        sub_provider="openai",
+    )
+
+    assert result.completed is True
+    assert "framework:use adapter" in result.final_response
+    events = runner.load_run_events(result.run_id)
+    final_event = next(event for event in events if event.get("type") == "final")
+    assert final_event.get("framework") == "fake-framework"
+
+
+def test_rlm_run_task_framework_dspy_uses_native_dspy_loop(tmp_path):
+    connector = _FakeConnector(
+        responses=[
+            '{"action":"write_file","path":"sig.py","content":"import dspy\\n","done":false}',
+            '{"action":"final","done":true,"final_response":"done"}',
+        ]
+    )
+    engine = _FakeExecutionEngine()
+    runner = RLMRunner(
+        llm_connector=connector,
+        execution_engine=engine,
+        run_dir=tmp_path,
+        workdir=tmp_path,
+    )
+
+    result = runner.run_task(
+        "dspy framework route",
+        max_steps=3,
+        exec_timeout=5,
+        framework="dspy",
+        environment="generic",
+    )
+    assert result.completed is True
+    assert (tmp_path / "sig.py").exists()
+    events = runner.load_run_events(result.run_id)
+    final_event = next(event for event in events if event.get("type") == "final")
+    assert final_event.get("framework") == "dspy"
+    assert final_event.get("environment") == "dspy"

@@ -101,6 +101,16 @@ llm-all = [
 mlflow = [
     "mlflow>=2.17.0",
 ]
+pydantic = [
+    "pydantic-ai>=0.4.0",
+]
+adk = [
+    "google-adk>=1.12.0",
+]
+frameworks = [
+    "pydantic-ai>=0.4.0",
+    "google-adk>=1.12.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/SuperagenticAI/rlm-code"

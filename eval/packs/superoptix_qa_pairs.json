@@ -1,0 +1,53 @@
+[
+  {
+    "question": "What is machine learning?",
+    "answer": "Machine learning is a subset of artificial intelligence that enables systems to learn and improve from experience without being explicitly programmed.",
+    "category": "AI"
+  },
+  {
+    "question": "What is deep learning?",
+    "answer": "Deep learning is a type of machine learning based on artificial neural networks with multiple layers, inspired by the structure of the human brain.",
+    "category": "AI"
+  },
+  {
+    "question": "What is natural language processing?",
+    "answer": "Natural Language Processing (NLP) is a field of AI that focuses on enabling computers to understand, interpret, and generate human language.",
+    "category": "AI"
+  },
+  {
+    "question": "What is supervised learning?",
+    "answer": "Supervised learning is a type of machine learning where the model is trained on labeled data, learning to map inputs to known outputs.",
+    "category": "ML"
+  },
+  {
+    "question": "What is unsupervised learning?",
+    "answer": "Unsupervised learning is a type of machine learning where the model finds patterns in data without labeled examples.",
+    "category": "ML"
+  },
+  {
+    "question": "What is reinforcement learning?",
+    "answer": "Reinforcement learning is a type of machine learning where an agent learns to make decisions by receiving rewards or penalties for its actions.",
+    "category": "ML"
+  },
+  {
+    "question": "What is a neural network?",
+    "answer": "A neural network is a computing system inspired by biological neural networks, consisting of interconnected nodes (neurons) that process information.",
+    "category": "DL"
+  },
+  {
+    "question": "What is a transformer model?",
+    "answer": "A transformer is a deep learning architecture that uses self-attention mechanisms to process sequential data, particularly effective for NLP tasks.",
+    "category": "DL"
+  },
+  {
+    "question": "What is training data?",
+    "answer": "Training data is the dataset used to teach a machine learning model, containing examples of inputs and their corresponding outputs.",
+    "category": "ML"
+  },
+  {
+    "question": "What is overfitting?",
+    "answer": "Overfitting occurs when a model learns the training data too well, including noise, resulting in poor performance on new, unseen data.",
+    "category": "ML"
+  }
+]
+

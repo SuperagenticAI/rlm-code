@@ -8,6 +8,14 @@ from .environments import (
     GenericRLMEnvironment,
     RLMRewardProfile,
 )
+from .events import RLMEventBus, RLMRuntimeEvent
+from .frameworks import (
+    FrameworkAdapterRegistry,
+    FrameworkEpisodeResult,
+    FrameworkStepRecord,
+    GoogleADKFrameworkAdapter,
+    PydanticAIFrameworkAdapter,
+)
 from .observability import RLMObservability
 from .runner import (
     RLMBenchmarkComparison,
@@ -19,11 +27,18 @@ from .runner import (
 __all__ = [
     "DSPyCodingRLMEnvironment",
     "EnvironmentDoctorCheck",
+    "FrameworkAdapterRegistry",
+    "FrameworkEpisodeResult",
+    "FrameworkStepRecord",
     "GenericRLMEnvironment",
+    "GoogleADKFrameworkAdapter",
     "RLMBenchmarkResult",
     "RLMBenchmarkComparison",
+    "RLMEventBus",
     "RLMRewardProfile",
+    "RLMRuntimeEvent",
     "RLMObservability",
     "RLMRunResult",
     "RLMRunner",
+    "PydanticAIFrameworkAdapter",
 ]

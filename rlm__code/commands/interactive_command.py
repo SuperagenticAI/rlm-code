@@ -1696,7 +1696,7 @@ Your job is to help users with agent-system development by:
 
 You have access to:
 - Real DSPy source code examples from the user's installed version
-- Template examples (as reference/guidance)
+- Template examples (for guidance)
 - MCP context (if available)
 - Conversation history
 - Framework reference documentation
@@ -1709,7 +1709,7 @@ Always provide helpful, accurate, and context-aware responses."""
 Framework Codebase Examples:
 {context.get("codebase_examples", "None")[:2000]}
 
-Template Examples (Reference):
+Template Examples:
 {context.get("template_examples", "None")[:1500]}
 
 MCP Context:
@@ -1845,7 +1845,7 @@ Be conversational, helpful, and use the context to provide accurate information.
 
         Provides:
         - Reference documentation
-        - Template examples (as reference/guidance)
+        - Template examples (for guidance)
         - MCP context (if available)
         - Conversation history
 

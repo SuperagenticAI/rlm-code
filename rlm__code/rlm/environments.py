@@ -306,7 +306,7 @@ class DSPyCodingRLMEnvironment(GenericRLMEnvironment):
             "{"
             '"action": "run_python" | "write_file" | "patch_file" | "read_file" | '
             '"search_code" | "list_tree" | "run_tests" | "analyze_code" | "analyze_dspy" | '
-            '"llm_query" | "llm_query_batched" | "final", '
+            '"llm_query" | "llm_query_batched" | "delegate" | "delegate_batch" | "final", '
             '"code": "<python code>", '
             '"path": "<relative file path>", '
             '"content": "<file content>", '
@@ -315,6 +315,11 @@ class DSPyCodingRLMEnvironment(GenericRLMEnvironment):
             '"pattern": "<regex for search_code>", '
             '"prompt": "<string prompt for llm_query>", '
             '"prompts": ["<prompt1>", "<prompt2>"], '
+            '"task": "<subtask for delegate>", '
+            '"tasks": ["<subtask1>", "<subtask2>"], '
+            '"context_refs": [{"path":"file.py","start_line":1,"end_line":80}] or ["file.py"], '
+            '"parallel": <optional integer>, '
+            '"max_children": <optional integer>, '
             '"role": "root" | "sub", '
             '"model": "<optional provider/model or model>", '
             '"provider": "<optional provider id>", '
@@ -328,6 +333,7 @@ class DSPyCodingRLMEnvironment(GenericRLMEnvironment):
             "- Prefer patch_file for focused edits and write_file for full rewrites.\n"
             "- Use list_tree to discover project layout.\n"
             "- Use llm_query/llm_query_batched for delegated analysis.\n"
+            "- Use delegate/delegate_batch for recursive subtasks when decomposition improves reliability.\n"
             "- Use run_tests after edits.\n"
             "- Use analyze_code (or analyze_dspy) to score code quality before finalizing.\n"
             "- Keep actions incremental and focused.\n"
@@ -1103,7 +1109,7 @@ class DSPyCodingRLMEnvironment(GenericRLMEnvironment):
 
     def _load_reference_hints(self) -> str:
         """
-        Return built-in DSPy hints without relying on local Reference/ files.
+        Return built-in DSPy hints without relying on local external files.
         """
         return (
             "[dspy-signature]\n"

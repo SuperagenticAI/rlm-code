@@ -13,6 +13,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
+from rich.tree import Tree
 
 from ..core.exceptions import (
     ExecutionTimeoutError,
@@ -1202,13 +1203,16 @@ class SlashCommandHandler:
         Manage RLM runs.
 
         Usage:
-            /rlm run <task> [steps=N] [timeout=N] [branch=N] [env=generic|dspy] [sub=provider/model]
-            /rlm bench [list|preset=name] [pack=path[,path2]] [limit=N] [steps=N] [timeout=N] [branch=N] [env=generic|dspy] [sub=provider/model]
+            /rlm run <task> [steps=N] [timeout=N] [branch=N] [depth=N] [children=N] [parallel=N] [budget=N] [framework=native|dspy|pydantic-ai|google-adk] [env=generic|dspy] [sub=provider/model]
+            /rlm bench [list|preset=name] [pack=path[,path2]] [limit=N] [steps=N] [timeout=N] [branch=N] [framework=native|dspy|pydantic-ai|google-adk] [env=generic|dspy] [sub=provider/model]
             /rlm bench compare [candidate=<id|path|latest>] [baseline=<id|path|previous>] [min_reward_delta=N] [min_completion_delta=N] [max_steps_increase=N]
+            /rlm bench validate [candidate=<id|path|latest>] [baseline=<id|path|previous>] [min_reward_delta=N] [min_completion_delta=N] [max_steps_increase=N] [--json]
+            /rlm import-evals pack=path[,path2] [limit=N]
+            /rlm viz [run_id|latest] [depth=N] [children=on|off] [--json]
             /rlm status [run_id]
             /rlm replay <run_id>
             /rlm doctor [env=generic|dspy] [--json]
-            /rlm chat <message> [session=name] [env=generic|dspy] [branch=N] [sub=provider/model]
+            /rlm chat <message> [session=name] [env=generic|dspy] [branch=N] [depth=N] [children=N] [parallel=N] [budget=N] [framework=native|dspy|pydantic-ai|google-adk] [sub=provider/model]
             /rlm chat status [session=name]
             /rlm chat reset [session=name]
             /rlm observability
@@ -1217,22 +1221,32 @@ class SlashCommandHandler:
             console.print()
             console.print("[bold cyan]🧠 RLM Commands[/bold cyan]")
             console.print(
-                "  [yellow]/rlm run <task> [steps=N] [timeout=N] [branch=N] [env=generic|dspy] "
+                "  [yellow]/rlm run <task> [steps=N] [timeout=N] [branch=N] [depth=N] [children=N] "
+                "[parallel=N] [budget=N] [framework=native|dspy|pydantic-ai|google-adk] [env=generic|dspy] "
                 "[sub=provider/model][/yellow]"
             )
             console.print(
                 "  [yellow]/rlm bench [list|preset=name] [pack=path[,path2]] [limit=N] [steps=N] "
-                "[timeout=N] [branch=N] [env=generic|dspy] [sub=provider/model][/yellow]"
+                "[timeout=N] [branch=N] [framework=native|dspy|pydantic-ai|google-adk] [env=generic|dspy] [sub=provider/model][/yellow]"
             )
             console.print(
                 "  [yellow]/rlm bench compare [candidate=<id|path|latest>] [baseline=<id|path|previous>] "
                 "[min_reward_delta=N] [min_completion_delta=N] [max_steps_increase=N][/yellow]"
             )
+            console.print(
+                "  [yellow]/rlm bench validate [candidate=<id|path|latest>] [baseline=<id|path|previous>] "
+                "[min_reward_delta=N] [min_completion_delta=N] [max_steps_increase=N] [--json][/yellow]"
+            )
+            console.print("  [yellow]/rlm import-evals pack=path[,path2] [limit=N][/yellow]")
+            console.print(
+                "  [yellow]/rlm viz [run_id|latest] [depth=N] [children=on|off] [--json][/yellow]"
+            )
             console.print("  [yellow]/rlm status [run_id][/yellow]")
             console.print("  [yellow]/rlm replay <run_id>[/yellow]")
             console.print("  [yellow]/rlm doctor [env=generic|dspy] [--json][/yellow]")
             console.print(
-                "  [yellow]/rlm chat <message> [session=name] [env=generic|dspy] [branch=N] "
+                "  [yellow]/rlm chat <message> [session=name] [env=generic|dspy] [branch=N] [depth=N] "
+                "[children=N] [parallel=N] [budget=N] [framework=native|dspy|pydantic-ai|google-adk] "
                 "[sub=provider/model][/yellow]"
             )
             console.print("  [yellow]/rlm chat status [session=name][/yellow]")
@@ -1243,6 +1257,109 @@ class SlashCommandHandler:
 
         action = args[0].lower()
 
+        if action == "import-evals":
+            pack_paths: list[str] = []
+            preview_limit = 5
+            for token in args[1:]:
+                lowered = token.lower()
+                if lowered.startswith("pack="):
+                    raw_paths = token.split("=", 1)[1].strip()
+                    if not raw_paths:
+                        show_error_message("Invalid pack value. Use pack=<path[,path2]>.")
+                        return
+                    parsed_paths = [item.strip() for item in raw_paths.split(",") if item.strip()]
+                    if not parsed_paths:
+                        show_error_message("Invalid pack value. Use pack=<path[,path2]>.")
+                        return
+                    pack_paths.extend(parsed_paths)
+                elif lowered.startswith("limit="):
+                    try:
+                        preview_limit = max(1, int(token.split("=", 1)[1]))
+                    except ValueError:
+                        show_error_message("Invalid limit value. Use limit=<integer>.")
+                        return
+                elif "=" not in token:
+                    pack_paths.append(token)
+                else:
+                    show_error_message(
+                        "Usage: /rlm import-evals pack=<path[,path2]> [limit=N]"
+                    )
+                    return
+
+            deduped_paths = [item for item in dict.fromkeys(pack_paths) if str(item).strip()]
+            if not deduped_paths:
+                show_error_message("Usage: /rlm import-evals pack=<path[,path2]> [limit=N]")
+                return
+
+            try:
+                rows = self.rlm_runner.import_benchmark_pack_preview(
+                    pack_paths=deduped_paths,
+                    per_preset_limit=preview_limit,
+                )
+            except ValueError as exc:
+                show_error_message(str(exc))
+                return
+
+            self.current_context["rlm_last_import_pack_paths"] = deduped_paths
+            self.current_context["rlm_last_import_preset_count"] = len(rows)
+            self.current_context["rlm_last_import_case_count"] = sum(
+                int(item.get("total_cases", 0)) for item in rows
+            )
+
+            console.print()
+            console.print("[bold cyan]📥 RLM Eval Import Preview[/bold cyan]")
+            console.print(f"  Pack(s): [cyan]{', '.join(deduped_paths)}[/cyan]")
+            console.print(f"  Preview limit per preset: [cyan]{preview_limit}[/cyan]")
+            console.print()
+
+            if not rows:
+                show_warning_message("No presets found in supplied pack(s).")
+                console.print()
+                return
+
+            preset_table = Table(show_header=True, header_style="bold cyan")
+            preset_table.add_column("Preset", style="cyan")
+            preset_table.add_column("Source", style="dim")
+            preset_table.add_column("Cases", justify="right")
+            preset_table.add_column("Description", style="dim")
+            for row in rows:
+                preset_table.add_row(
+                    str(row.get("preset", "")),
+                    str(row.get("source", "")),
+                    str(row.get("total_cases", 0)),
+                    str(row.get("description", "")),
+                )
+            console.print(preset_table)
+            console.print()
+
+            for row in rows:
+                case_table = Table(
+                    title=f"Cases · {row.get('preset', 'unknown')}",
+                    show_header=True,
+                    header_style="bold cyan",
+                )
+                case_table.add_column("Case", style="cyan")
+                case_table.add_column("Env", justify="center")
+                case_table.add_column("Steps", justify="right")
+                case_table.add_column("Timeout", justify="right")
+                case_table.add_column("Task Preview", style="dim")
+                for case in row.get("cases", []):
+                    case_table.add_row(
+                        str(case.get("case_id", "")),
+                        str(case.get("environment", "")),
+                        str(case.get("max_steps", "")),
+                        str(case.get("exec_timeout", "")),
+                        str(case.get("task_preview", "")),
+                    )
+                console.print(case_table)
+            console.print()
+            show_info_message(
+                "Run one preset with: /rlm bench preset=<name> pack=<path[,path2]> "
+                "(example: pack=eval/packs/pydantic_time_range_v1.yaml)"
+            )
+            console.print()
+            return
+
         if action == "run":
             if not self.llm_connector.current_model:
                 show_error_message("No model connected. Use /connect first.")
@@ -1251,6 +1368,11 @@ class SlashCommandHandler:
             max_steps = 4
             timeout = 30
             branch_width = 1
+            max_depth = 2
+            max_children = 4
+            parallelism = 2
+            time_budget: int | None = None
+            framework: str | None = None
             environment = "generic"
             sub_model: str | None = None
             sub_provider: str | None = None
@@ -1276,6 +1398,32 @@ class SlashCommandHandler:
                     except ValueError:
                         show_error_message("Invalid branch value. Use branch=<integer>.")
                         return
+                elif lowered.startswith("depth="):
+                    try:
+                        max_depth = max(0, int(token.split("=", 1)[1]))
+                    except ValueError:
+                        show_error_message("Invalid depth value. Use depth=<integer>.")
+                        return
+                elif lowered.startswith("children="):
+                    try:
+                        max_children = max(1, int(token.split("=", 1)[1]))
+                    except ValueError:
+                        show_error_message("Invalid children value. Use children=<integer>.")
+                        return
+                elif lowered.startswith("parallel="):
+                    try:
+                        parallelism = max(1, int(token.split("=", 1)[1]))
+                    except ValueError:
+                        show_error_message("Invalid parallel value. Use parallel=<integer>.")
+                        return
+                elif lowered.startswith("budget="):
+                    try:
+                        time_budget = max(1, int(token.split("=", 1)[1]))
+                    except ValueError:
+                        show_error_message("Invalid budget value. Use budget=<integer seconds>.")
+                        return
+                elif lowered.startswith("framework=") or lowered.startswith("fw="):
+                    framework = token.split("=", 1)[1].strip().lower() or None
                 elif lowered.startswith("env="):
                     environment = token.split("=", 1)[1].strip().lower() or "generic"
                 elif lowered.startswith("sub="):
@@ -1298,6 +1446,8 @@ class SlashCommandHandler:
             if not task:
                 show_error_message(
                     "Usage: /rlm run <task> [steps=N] [timeout=N] [env=generic|dspy] "
+                    "[depth=N] [children=N] [parallel=N] [budget=N] "
+                    "[framework=native|dspy|pydantic-ai|google-adk] "
                     "[branch=N] [sub=provider/model]"
                 )
                 return
@@ -1308,6 +1458,13 @@ class SlashCommandHandler:
             console.print(f"  Max steps: [cyan]{max_steps}[/cyan]")
             console.print(f"  Exec timeout: [cyan]{timeout}s[/cyan]")
             console.print(f"  Branch width: [cyan]{branch_width}[/cyan]")
+            console.print(f"  Recursion depth: [cyan]{max_depth}[/cyan]")
+            console.print(f"  Max children/step: [cyan]{max_children}[/cyan]")
+            console.print(f"  Parallel child slots: [cyan]{parallelism}[/cyan]")
+            if time_budget is not None:
+                console.print(f"  Time budget: [cyan]{time_budget}s[/cyan]")
+            if framework:
+                console.print(f"  Framework: [cyan]{framework}[/cyan]")
             console.print(f"  Environment: [cyan]{environment}[/cyan]")
             if sub_model:
                 sub_display = f"{sub_provider}/{sub_model}" if sub_provider else sub_model
@@ -1321,7 +1478,14 @@ class SlashCommandHandler:
                 "exec_timeout": timeout,
                 "environment": environment,
                 "branch_width": branch_width,
+                "max_depth": max_depth,
+                "max_children_per_step": max_children,
+                "parallelism": parallelism,
             }
+            if time_budget is not None:
+                run_kwargs["time_budget_seconds"] = time_budget
+            if framework:
+                run_kwargs["framework"] = framework
             if sub_model:
                 run_kwargs["sub_model"] = sub_model
             if sub_provider:
@@ -1363,13 +1527,15 @@ class SlashCommandHandler:
                 if isinstance(cfg_default, str) and cfg_default.strip():
                     default_preset = cfg_default.strip().lower()
 
-            if len(args) >= 2 and args[1].lower() == "compare":
+            if len(args) >= 2 and args[1].lower() in {"compare", "validate"}:
+                bench_mode = args[1].lower()
                 candidate_ref = "latest"
                 baseline_ref = "previous"
                 min_reward_delta = 0.0
                 min_completion_delta = 0.0
                 max_steps_increase = 0.0
                 fail_on_completion_regression = True
+                output_json = False
 
                 positional_refs: list[str] = []
                 for token in args[2:]:
@@ -1413,11 +1579,13 @@ class SlashCommandHandler:
                                 "Invalid fail_on_completion_regression value. Use on|off."
                             )
                             return
+                    elif lowered in {"--json", "format=json", "output=json"}:
+                        output_json = True
                     elif "=" not in token:
                         positional_refs.append(token)
                     else:
                         show_error_message(
-                            "Usage: /rlm bench compare [candidate=<id|path|latest>] "
+                            f"Usage: /rlm bench {bench_mode} [candidate=<id|path|latest>] "
                             "[baseline=<id|path|previous>] [min_reward_delta=N] "
                             "[min_completion_delta=N] [max_steps_increase=N]"
                         )
@@ -1429,7 +1597,7 @@ class SlashCommandHandler:
                     baseline_ref = positional_refs[1]
                 if len(positional_refs) > 2:
                     show_error_message(
-                        "Usage: /rlm bench compare [candidate=<id|path|latest>] "
+                        f"Usage: /rlm bench {bench_mode} [candidate=<id|path|latest>] "
                         "[baseline=<id|path|previous>] [min_reward_delta=N] "
                         "[min_completion_delta=N] [max_steps_increase=N]"
                     )
@@ -1448,12 +1616,49 @@ class SlashCommandHandler:
                     show_error_message(str(exc))
                     return
 
-                self.current_context["rlm_last_benchmark_compare_candidate"] = comparison.candidate_id
-                self.current_context["rlm_last_benchmark_compare_baseline"] = comparison.baseline_id
-                self.current_context["rlm_last_benchmark_compare_passed"] = bool(comparison.passed)
+                if bench_mode == "compare":
+                    self.current_context["rlm_last_benchmark_compare_candidate"] = comparison.candidate_id
+                    self.current_context["rlm_last_benchmark_compare_baseline"] = comparison.baseline_id
+                    self.current_context["rlm_last_benchmark_compare_passed"] = bool(comparison.passed)
+                else:
+                    self.current_context["rlm_last_benchmark_validate_candidate"] = comparison.candidate_id
+                    self.current_context["rlm_last_benchmark_validate_baseline"] = comparison.baseline_id
+                    self.current_context["rlm_last_benchmark_validate_passed"] = bool(comparison.passed)
+                    self.current_context["rlm_last_benchmark_validate_exit_code"] = (
+                        0 if comparison.passed else 1
+                    )
+
+                if output_json:
+                    payload = {
+                        "command": f"rlm_bench_{bench_mode}",
+                        "candidate_id": comparison.candidate_id,
+                        "baseline_id": comparison.baseline_id,
+                        "candidate_path": str(comparison.candidate_path),
+                        "baseline_path": str(comparison.baseline_path),
+                        "candidate_metrics": comparison.candidate_metrics,
+                        "baseline_metrics": comparison.baseline_metrics,
+                        "deltas": comparison.deltas,
+                        "case_summary": comparison.case_summary,
+                        "gates": comparison.gates,
+                        "passed": bool(comparison.passed),
+                        "exit_code": 0 if comparison.passed else 1,
+                        "thresholds": {
+                            "min_reward_delta": float(min_reward_delta),
+                            "min_completion_delta": float(min_completion_delta),
+                            "max_steps_increase": float(max_steps_increase),
+                            "fail_on_completion_regression": bool(fail_on_completion_regression),
+                        },
+                    }
+                    console.print(json.dumps(payload, indent=2, ensure_ascii=False))
+                    return
 
                 console.print()
-                console.print("[bold cyan]📈 RLM Benchmark Compare[/bold cyan]")
+                title = (
+                    "[bold cyan]📈 RLM Benchmark Compare[/bold cyan]"
+                    if bench_mode == "compare"
+                    else "[bold cyan]✅ RLM Benchmark Validate[/bold cyan]"
+                )
+                console.print(title)
                 console.print(
                     f"  Candidate: [cyan]{comparison.candidate_id}[/cyan]  "
                     f"[dim]({comparison.candidate_path})[/dim]"
@@ -1501,9 +1706,15 @@ class SlashCommandHandler:
                 console.print()
 
                 if comparison.passed:
-                    show_success_message("Benchmark comparison gate passed.")
+                    if bench_mode == "compare":
+                        show_success_message("Benchmark comparison gate passed.")
+                    else:
+                        show_success_message("Benchmark validation gate passed.")
                 else:
-                    show_warning_message("Benchmark comparison gate failed.")
+                    if bench_mode == "compare":
+                        show_warning_message("Benchmark comparison gate failed.")
+                    else:
+                        show_warning_message("Benchmark validation gate failed.")
                 console.print()
                 return
 
@@ -1514,6 +1725,7 @@ class SlashCommandHandler:
             max_steps: int | None = None
             timeout: int | None = None
             branch_width = 1
+            framework: str | None = None
             environment: str | None = None
             sub_model: str | None = None
             sub_provider: str | None = None
@@ -1560,6 +1772,8 @@ class SlashCommandHandler:
                         return
                 elif lowered.startswith("env="):
                     environment = token.split("=", 1)[1].strip().lower() or None
+                elif lowered.startswith("framework=") or lowered.startswith("fw="):
+                    framework = token.split("=", 1)[1].strip().lower() or None
                 elif lowered.startswith("sub="):
                     sub_spec = token.split("=", 1)[1].strip()
                     if not sub_spec:
@@ -1578,7 +1792,9 @@ class SlashCommandHandler:
                 else:
                     show_error_message(
                         "Usage: /rlm bench [list|preset=name] [pack=path[,path2]] [limit=N] "
-                        "[steps=N] [timeout=N] [branch=N] [env=generic|dspy] [sub=provider/model]"
+                        "[steps=N] [timeout=N] [branch=N] [framework=native|dspy|pydantic-ai|google-adk] [env=generic|dspy] [sub=provider/model]\n"
+                        "       /rlm bench compare [candidate=<id|path|latest>] [baseline=<id|path|previous>] ...\n"
+                        "       /rlm bench validate [candidate=<id|path|latest>] [baseline=<id|path|previous>] ..."
                     )
                     return
 
@@ -1602,6 +1818,18 @@ class SlashCommandHandler:
                         str(row.get("description", "")),
                     )
                 console.print(table)
+                aliases = self.rlm_runner.benchmark_pack_aliases()
+                if aliases:
+                    alias_table = Table(
+                        title="Bundled Eval Pack Aliases",
+                        show_header=True,
+                        header_style="bold cyan",
+                    )
+                    alias_table.add_column("Alias", style="cyan")
+                    alias_table.add_column("Path", style="dim")
+                    for alias, resolved_path in sorted(aliases.items()):
+                        alias_table.add_row(str(alias), str(resolved_path))
+                    console.print(alias_table)
                 recent = self.rlm_runner.list_benchmark_runs(limit=limit or 10)
                 if recent:
                     recent_table = Table(
@@ -1648,6 +1876,8 @@ class SlashCommandHandler:
                 console.print(f"  Benchmark packs: [cyan]{', '.join(pack_paths_override)}[/cyan]")
             if environment:
                 console.print(f"  Override environment: [cyan]{environment}[/cyan]")
+            if framework:
+                console.print(f"  Framework: [cyan]{framework}[/cyan]")
             if sub_model:
                 sub_display = f"{sub_provider}/{sub_model}" if sub_provider else sub_model
                 console.print(f"  Sub-model route: [cyan]{sub_display}[/cyan]")
@@ -1658,6 +1888,7 @@ class SlashCommandHandler:
                     preset=preset,
                     limit=limit,
                     environment=environment,
+                    framework=framework,
                     max_steps=max_steps,
                     exec_timeout=timeout,
                     branch_width=branch_width,
@@ -1699,6 +1930,182 @@ class SlashCommandHandler:
                     str(case.get("steps", 0)),
                 )
             console.print(case_table)
+            console.print()
+            return
+
+        if action == "viz":
+            run_ref = "latest"
+            output_json = False
+            include_children = True
+            max_depth = 3
+
+            for token in args[1:]:
+                lowered = token.lower()
+                if lowered in {"--json", "format=json", "output=json"}:
+                    output_json = True
+                elif lowered.startswith("depth="):
+                    try:
+                        max_depth = max(0, int(token.split("=", 1)[1]))
+                    except ValueError:
+                        show_error_message("Invalid depth value. Use depth=<integer>.")
+                        return
+                elif lowered.startswith("children="):
+                    value = token.split("=", 1)[1].strip().lower()
+                    if value in {"on", "true", "1", "yes"}:
+                        include_children = True
+                    elif value in {"off", "false", "0", "no"}:
+                        include_children = False
+                    else:
+                        show_error_message("Invalid children value. Use children=on|off.")
+                        return
+                elif lowered.startswith("run="):
+                    run_ref = token.split("=", 1)[1].strip() or "latest"
+                elif "=" not in token:
+                    run_ref = token.strip() or "latest"
+                else:
+                    show_error_message(
+                        "Usage: /rlm viz [run_id|latest] [depth=N] [children=on|off] [--json]"
+                    )
+                    return
+
+            run_id = None if run_ref.lower() == "latest" else run_ref
+            try:
+                summary = self.rlm_runner.visualize_run(
+                    run_id=run_id,
+                    include_children=include_children,
+                    max_depth=max_depth,
+                )
+            except ValueError as exc:
+                show_error_message(str(exc))
+                return
+
+            self.current_context["rlm_last_viz_run_id"] = str(summary.get("run_id", run_ref))
+            self.current_context["rlm_last_viz_run_path"] = str(summary.get("run_path", ""))
+            self.current_context["rlm_last_viz_total_reward"] = float(summary.get("total_reward", 0.0))
+            self.current_context["rlm_last_viz_failures"] = len(summary.get("failures", []))
+
+            if output_json:
+                payload = {
+                    "command": "rlm_viz",
+                    "run_id": summary.get("run_id"),
+                    "run_path": summary.get("run_path"),
+                    "include_children": include_children,
+                    "max_depth": max_depth,
+                    "summary": summary,
+                }
+                console.print(json.dumps(payload, indent=2, ensure_ascii=False))
+                return
+
+            console.print()
+            console.print("[bold cyan]🧭 RLM Trajectory Visualizer[/bold cyan]")
+            console.print(
+                f"  Run: [cyan]{summary.get('run_id', '')}[/cyan]  "
+                f"[dim]({summary.get('run_path', '')})[/dim]"
+            )
+            console.print(
+                f"  Environment: [cyan]{summary.get('environment', 'unknown')}[/cyan]  "
+                f"Framework: [cyan]{summary.get('framework', 'native')}[/cyan]"
+            )
+            console.print()
+
+            overview = Table(show_header=True, header_style="bold cyan")
+            overview.add_column("Completed", justify="center")
+            overview.add_column("Steps", justify="right")
+            overview.add_column("Reward", justify="right")
+            overview.add_column("Started", style="dim")
+            overview.add_column("Finished", style="dim")
+            overview.add_row(
+                "yes" if bool(summary.get("completed", False)) else "no",
+                str(summary.get("step_count", 0)),
+                f"{float(summary.get('total_reward', 0.0)):.2f}",
+                str(summary.get("started_at", "")),
+                str(summary.get("finished_at", "")),
+            )
+            console.print(overview)
+
+            action_counts = summary.get("action_counts") or {}
+            if isinstance(action_counts, dict) and action_counts:
+                action_table = Table(title="Action Counts", show_header=True, header_style="bold cyan")
+                action_table.add_column("Action", style="cyan")
+                action_table.add_column("Count", justify="right")
+                for action_name, count in sorted(action_counts.items(), key=lambda item: str(item[0])):
+                    action_table.add_row(str(action_name), str(count))
+                console.print(action_table)
+
+            failures = summary.get("failures") or []
+            if isinstance(failures, list) and failures:
+                failure_table = Table(title="Failures", show_header=True, header_style="bold red")
+                failure_table.add_column("Step", justify="right")
+                failure_table.add_column("Action", style="cyan")
+                failure_table.add_column("Error", style="red")
+                for failure in failures[:12]:
+                    failure_table.add_row(
+                        str(failure.get("step", "")),
+                        str(failure.get("action", "")),
+                        str(failure.get("error", "")),
+                    )
+                console.print(failure_table)
+
+            changes = summary.get("changes") or []
+            if isinstance(changes, list) and changes:
+                change_table = Table(title="File Changes", show_header=True, header_style="bold magenta")
+                change_table.add_column("Step", justify="right")
+                change_table.add_column("Action", style="cyan")
+                change_table.add_column("Path", style="dim")
+                change_table.add_column("Details", style="dim")
+                for change in changes[:20]:
+                    details = []
+                    if int(change.get("bytes_written", 0) or 0) > 0:
+                        details.append(f"bytes={int(change.get('bytes_written', 0))}")
+                    if "replacements" in change:
+                        details.append(f"replacements={int(change.get('replacements', 0))}")
+                    if change.get("diff_preview"):
+                        details.append(str(change.get("diff_preview")))
+                    change_table.add_row(
+                        str(change.get("step", "")),
+                        str(change.get("action", "")),
+                        str(change.get("path", "")),
+                        " | ".join(details),
+                    )
+                console.print(change_table)
+
+            def _add_child_nodes(node: dict, tree: Tree) -> None:
+                for child in node.get("children", []):
+                    if not isinstance(child, dict):
+                        continue
+                    child_label = (
+                        f"[cyan]{child.get('run_id', 'unknown')}[/cyan] "
+                        f"[dim]reward={float(child.get('total_reward', 0.0)):.2f} "
+                        f"steps={int(child.get('step_count', 0) or 0)} "
+                        f"done={'yes' if bool(child.get('completed', False)) else 'no'}[/dim]"
+                    )
+                    if child.get("missing"):
+                        child_label += " [red](missing trace)[/red]"
+                    if child.get("cycle_detected"):
+                        child_label += " [yellow](cycle guard)[/yellow]"
+                    if child.get("error"):
+                        child_label += f" [red](error: {child.get('error')})[/red]"
+                    child_node = tree.add(child_label)
+                    _add_child_nodes(child, child_node)
+
+            tree = Tree(
+                f"[bold cyan]{summary.get('run_id', 'run')}[/bold cyan] "
+                f"[dim]reward={float(summary.get('total_reward', 0.0)):.2f} "
+                f"steps={int(summary.get('step_count', 0) or 0)} "
+                f"done={'yes' if bool(summary.get('completed', False)) else 'no'}[/dim]"
+            )
+            _add_child_nodes(summary, tree)
+            console.print(tree)
+
+            final_preview = str(summary.get("final_response_preview", "")).strip()
+            if final_preview:
+                console.print(
+                    Panel(
+                        final_preview,
+                        title="[bold green]Final Response Preview[/bold green]",
+                        border_style="green",
+                    )
+                )
             console.print()
             return
 
@@ -1867,6 +2274,11 @@ class SlashCommandHandler:
             max_steps = 4
             timeout = 30
             branch_width = 1
+            max_depth = 2
+            max_children = 4
+            parallelism = 2
+            time_budget: int | None = None
+            framework: str | None = None
             enable_compaction = True
             compaction_limit = 6
             keep_recent = 4
@@ -1939,6 +2351,32 @@ class SlashCommandHandler:
                     except ValueError:
                         show_error_message("Invalid branch value. Use branch=<integer>.")
                         return
+                elif lowered.startswith("depth="):
+                    try:
+                        max_depth = max(0, int(token.split("=", 1)[1]))
+                    except ValueError:
+                        show_error_message("Invalid depth value. Use depth=<integer>.")
+                        return
+                elif lowered.startswith("children="):
+                    try:
+                        max_children = max(1, int(token.split("=", 1)[1]))
+                    except ValueError:
+                        show_error_message("Invalid children value. Use children=<integer>.")
+                        return
+                elif lowered.startswith("parallel="):
+                    try:
+                        parallelism = max(1, int(token.split("=", 1)[1]))
+                    except ValueError:
+                        show_error_message("Invalid parallel value. Use parallel=<integer>.")
+                        return
+                elif lowered.startswith("budget="):
+                    try:
+                        time_budget = max(1, int(token.split("=", 1)[1]))
+                    except ValueError:
+                        show_error_message("Invalid budget value. Use budget=<integer seconds>.")
+                        return
+                elif lowered.startswith("framework=") or lowered.startswith("fw="):
+                    framework = token.split("=", 1)[1].strip().lower() or None
                 elif lowered.startswith("compact="):
                     value = token.split("=", 1)[1].strip().lower()
                     if value in {"off", "false", "0", "no"}:
@@ -1980,6 +2418,8 @@ class SlashCommandHandler:
             if not message:
                 show_error_message(
                     "Usage: /rlm chat <message> [session=name] [env=generic|dspy] [branch=N] "
+                    "[depth=N] [children=N] [parallel=N] [budget=N] "
+                    "[framework=native|dspy|pydantic-ai|google-adk] "
                     "[sub=provider/model]"
                 )
                 return
@@ -1992,6 +2432,13 @@ class SlashCommandHandler:
             console.print(f"  Session: [cyan]{session_id}[/cyan]")
             console.print(f"  Environment: [cyan]{environment}[/cyan]")
             console.print(f"  Branch width: [cyan]{branch_width}[/cyan]")
+            console.print(f"  Recursion depth: [cyan]{max_depth}[/cyan]")
+            console.print(f"  Max children/step: [cyan]{max_children}[/cyan]")
+            console.print(f"  Parallel child slots: [cyan]{parallelism}[/cyan]")
+            if time_budget is not None:
+                console.print(f"  Time budget: [cyan]{time_budget}s[/cyan]")
+            if framework:
+                console.print(f"  Framework: [cyan]{framework}[/cyan]")
             console.print(f"  Compaction: [cyan]{'on' if enable_compaction else 'off'}[/cyan]")
             if sub_model:
                 sub_display = f"{sub_provider}/{sub_model}" if sub_provider else sub_model
@@ -2002,9 +2449,14 @@ class SlashCommandHandler:
                 message=message,
                 session_id=session_id,
                 environment=environment,
+                framework=framework,
                 max_steps=max_steps,
                 exec_timeout=timeout,
                 branch_width=branch_width,
+                max_depth=max_depth,
+                max_children_per_step=max_children,
+                parallelism=parallelism,
+                time_budget_seconds=time_budget,
                 sub_model=sub_model,
                 sub_provider=sub_provider,
                 enable_compaction=enable_compaction,
@@ -2060,7 +2512,9 @@ class SlashCommandHandler:
             console.print()
             return
 
-        show_error_message("Usage: /rlm <run|bench|status|replay|doctor|chat|observability>")
+        show_error_message(
+            "Usage: /rlm <run|bench|import-evals|viz|status|replay|doctor|chat|observability>"
+        )
 
     def cmd_save(self, args: list):
         """
@@ -3077,13 +3531,16 @@ class SlashCommandHandler:
   [yellow]/test[/yellow] [file]                       - Run tests on generated code
 
 [bold magenta]RLM Workflows:[/bold magenta]
-  [yellow]/rlm run[/yellow] <task> [steps=N] [timeout=N] [branch=N] [env=generic|dspy] [sub=provider/model] - Run an RLM coding episode
-  [yellow]/rlm bench[/yellow] [list|preset=name] [pack=path[,path2]] [limit=N] [steps=N] [timeout=N] [branch=N] [env=generic|dspy] [sub=provider/model] - Run benchmark preset
+  [yellow]/rlm run[/yellow] <task> [steps=N] [timeout=N] [branch=N] [depth=N] [children=N] [parallel=N] [budget=N] [framework=native|dspy|pydantic-ai|google-adk] [env=generic|dspy] [sub=provider/model] - Run an RLM coding episode
+  [yellow]/rlm bench[/yellow] [list|preset=name] [pack=path[,path2]] [limit=N] [steps=N] [timeout=N] [branch=N] [framework=native|dspy|pydantic-ai|google-adk] [env=generic|dspy] [sub=provider/model] - Run benchmark preset
   [yellow]/rlm bench compare[/yellow] [candidate=<id|path|latest>] [baseline=<id|path|previous>] [min_reward_delta=N] [min_completion_delta=N] [max_steps_increase=N] - Gate regressions
+  [yellow]/rlm bench validate[/yellow] [candidate=<id|path|latest>] [baseline=<id|path|previous>] [min_reward_delta=N] [min_completion_delta=N] [max_steps_increase=N] [--json] - CI-style gate output
+  [yellow]/rlm import-evals[/yellow] pack=path[,path2] [limit=N] - Preview imported eval packs before benchmarking
+  [yellow]/rlm viz[/yellow] [run_id|latest] [depth=N] [children=on|off] [--json] - Visualize trajectory tree, failures, and changes
   [yellow]/rlm status[/yellow] [run_id]                - Show latest/specific run status
   [yellow]/rlm replay[/yellow] <run_id>                - Replay stored trajectory
   [yellow]/rlm doctor[/yellow] [env=generic|dspy] [--json] - Validate RLM environment readiness
-  [yellow]/rlm chat[/yellow] <message> [session=name] [env=generic|dspy] [branch=N] [sub=provider/model] - Persistent RLM chat turn
+  [yellow]/rlm chat[/yellow] <message> [session=name] [env=generic|dspy] [branch=N] [depth=N] [children=N] [parallel=N] [budget=N] [framework=native|dspy|pydantic-ai|google-adk] [sub=provider/model] - Persistent RLM chat turn
   [yellow]/rlm chat status[/yellow] [session=name]      - Show persistent chat memory stats
   [yellow]/rlm chat reset[/yellow] [session=name]       - Clear persistent chat memory
   [yellow]/rlm observability[/yellow]                   - Show local/MLflow observability sink status

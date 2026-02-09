@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -176,7 +178,7 @@ def load_benchmark_packs(
     dict[str, str],
 ]:
     """
-    Load benchmark presets from one or more YAML files.
+    Load benchmark presets from one or more pack files.
 
     Supported shapes:
     1) ``presets`` wrapper:
@@ -185,6 +187,9 @@ def load_benchmark_packs(
            description: ...
            cases: [...]
     2) top-level mapping of ``preset -> {description, cases}``.
+    3) Pydantic-style dataset with top-level ``cases``.
+    4) Google ADK eval set JSON with top-level ``eval_cases``.
+    5) Generic JSON/JSONL record datasets with question/prompt/task-like fields.
     """
     if not paths:
         return {}, {}, {}
@@ -203,41 +208,325 @@ def load_benchmark_packs(
         if not path.exists():
             raise ValueError(f"Benchmark pack file not found: {path}")
 
-        try:
-            payload = yaml.safe_load(path.read_text(encoding="utf-8"))
-        except Exception as exc:
-            raise ValueError(f"Failed to parse benchmark pack '{path}': {exc}") from exc
+        payload = _load_pack_payload(path)
         if payload is None:
             continue
-        if not isinstance(payload, dict):
-            raise ValueError(f"Invalid benchmark pack '{path}': expected mapping at top level.")
 
-        presets_block = payload.get("presets", payload)
-        if not isinstance(presets_block, dict):
-            raise ValueError(f"Invalid benchmark pack '{path}': 'presets' must be a mapping.")
-
-        for preset_name, preset_payload in presets_block.items():
-            normalized_name = str(preset_name).strip().lower()
-            if not normalized_name:
-                continue
-            if not isinstance(preset_payload, dict):
-                raise ValueError(
-                    f"Invalid preset '{preset_name}' in '{path}': expected mapping with cases."
-                )
-
-            description = str(preset_payload.get("description") or "").strip()
-            raw_cases = preset_payload.get("cases", [])
-            if not isinstance(raw_cases, list) or not raw_cases:
-                raise ValueError(
-                    f"Invalid preset '{preset_name}' in '{path}': 'cases' must be a non-empty list."
-                )
-            cases = _parse_cases(raw_cases, preset_name=normalized_name, path=path)
-            merged_presets[normalized_name] = cases
+        presets, descriptions = _parse_pack_payload(payload, path=path)
+        for preset_name, cases in presets.items():
+            merged_presets[preset_name] = cases
+            description = descriptions.get(preset_name, "")
             if description:
-                merged_descriptions[normalized_name] = description
-            merged_sources[normalized_name] = str(path)
+                merged_descriptions[preset_name] = description
+            merged_sources[preset_name] = str(path)
 
     return merged_presets, merged_descriptions, merged_sources
+
+
+def _load_pack_payload(path: Path) -> Any:
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except Exception as exc:
+        raise ValueError(f"Failed to read benchmark pack '{path}': {exc}") from exc
+
+    suffix = path.suffix.lower()
+    if suffix == ".jsonl":
+        rows: list[Any] = []
+        for line_number, line in enumerate(raw.splitlines(), start=1):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            try:
+                rows.append(json.loads(stripped))
+            except Exception as exc:
+                raise ValueError(
+                    f"Failed to parse JSONL benchmark pack '{path}' on line {line_number}: {exc}"
+                ) from exc
+        return rows
+
+    if suffix == ".json":
+        try:
+            return json.loads(raw)
+        except Exception as exc:
+            raise ValueError(f"Failed to parse benchmark pack '{path}': {exc}") from exc
+
+    try:
+        return yaml.safe_load(raw)
+    except Exception as exc:
+        raise ValueError(f"Failed to parse benchmark pack '{path}': {exc}") from exc
+
+
+def _parse_pack_payload(
+    payload: Any,
+    *,
+    path: Path,
+) -> tuple[dict[str, list[RLMBenchmarkCase]], dict[str, str]]:
+    if isinstance(payload, dict) and _looks_like_explicit_preset_mapping(payload):
+        return _parse_explicit_preset_mapping(payload, path=path)
+
+    if isinstance(payload, dict):
+        if isinstance(payload.get("eval_cases"), list):
+            return _parse_adk_eval_set(payload, path=path)
+        if isinstance(payload.get("cases"), list):
+            return _parse_dataset_cases_block(payload, path=path)
+        for key in ("records", "items", "examples", "data"):
+            rows = payload.get(key)
+            if isinstance(rows, list):
+                return _parse_record_rows(
+                    rows,
+                    path=path,
+                    preset_name=payload.get("name"),
+                    description=payload.get("description"),
+                )
+        raise ValueError(
+            f"Invalid benchmark pack '{path}': unsupported mapping shape. "
+            "Expected presets/cases/eval_cases."
+        )
+
+    if isinstance(payload, list):
+        return _parse_record_rows(payload, path=path)
+
+    raise ValueError(
+        f"Invalid benchmark pack '{path}': expected mapping/list at top level."
+    )
+
+
+def _looks_like_explicit_preset_mapping(payload: dict[str, Any]) -> bool:
+    candidate = payload.get("presets", payload)
+    if not isinstance(candidate, dict) or not candidate:
+        return False
+    for preset_payload in candidate.values():
+        if not isinstance(preset_payload, dict):
+            return False
+        raw_cases = preset_payload.get("cases")
+        if not isinstance(raw_cases, list):
+            return False
+    return True
+
+
+def _parse_explicit_preset_mapping(
+    payload: dict[str, Any],
+    *,
+    path: Path,
+) -> tuple[dict[str, list[RLMBenchmarkCase]], dict[str, str]]:
+    presets_block = payload.get("presets", payload)
+    if not isinstance(presets_block, dict):
+        raise ValueError(f"Invalid benchmark pack '{path}': 'presets' must be a mapping.")
+
+    parsed_presets: dict[str, list[RLMBenchmarkCase]] = {}
+    parsed_descriptions: dict[str, str] = {}
+    for preset_name, preset_payload in presets_block.items():
+        normalized_name = _normalize_preset_name(preset_name, fallback=path.stem)
+        if not isinstance(preset_payload, dict):
+            raise ValueError(
+                f"Invalid preset '{preset_name}' in '{path}': expected mapping with cases."
+            )
+
+        description = str(preset_payload.get("description") or "").strip()
+        raw_cases = preset_payload.get("cases", [])
+        if not isinstance(raw_cases, list) or not raw_cases:
+            raise ValueError(
+                f"Invalid preset '{preset_name}' in '{path}': 'cases' must be a non-empty list."
+            )
+        cases = _parse_cases(raw_cases, preset_name=normalized_name, path=path)
+        parsed_presets[normalized_name] = cases
+        if description:
+            parsed_descriptions[normalized_name] = description
+    return parsed_presets, parsed_descriptions
+
+
+def _parse_dataset_cases_block(
+    payload: dict[str, Any],
+    *,
+    path: Path,
+) -> tuple[dict[str, list[RLMBenchmarkCase]], dict[str, str]]:
+    raw_cases = payload.get("cases")
+    if not isinstance(raw_cases, list) or not raw_cases:
+        raise ValueError(f"Invalid benchmark pack '{path}': 'cases' must be a non-empty list.")
+
+    preset_name = _normalize_preset_name(payload.get("name"), fallback=path.stem)
+    cases: list[dict[str, Any]] = []
+    for index, raw_case in enumerate(raw_cases, start=1):
+        if not isinstance(raw_case, dict):
+            raise ValueError(
+                f"Invalid dataset case #{index} in '{path}': expected mapping."
+            )
+        case_id = str(
+            raw_case.get("id") or raw_case.get("case_id") or raw_case.get("name") or f"{preset_name}_{index}"
+        ).strip()
+        description = str(raw_case.get("description") or raw_case.get("name") or case_id).strip()
+        task = _extract_task_from_dataset_case(raw_case)
+        if not task:
+            raise ValueError(
+                f"Invalid dataset case '{case_id}' in '{path}': unable to infer task prompt."
+            )
+        case_payload: dict[str, Any] = {
+            "id": case_id,
+            "description": description,
+            "task": task,
+            "environment": raw_case.get("environment", "generic"),
+            "max_steps": raw_case.get("max_steps", raw_case.get("steps", 4)),
+            "exec_timeout": raw_case.get("exec_timeout", raw_case.get("timeout", 30)),
+        }
+        cases.append(case_payload)
+
+    description = str(payload.get("description") or "Imported dataset cases.").strip()
+    parsed_cases = _parse_cases(cases, preset_name=preset_name, path=path)
+    return {preset_name: parsed_cases}, {preset_name: description}
+
+
+def _parse_adk_eval_set(
+    payload: dict[str, Any],
+    *,
+    path: Path,
+) -> tuple[dict[str, list[RLMBenchmarkCase]], dict[str, str]]:
+    raw_eval_cases = payload.get("eval_cases")
+    if not isinstance(raw_eval_cases, list) or not raw_eval_cases:
+        raise ValueError(f"Invalid ADK eval set '{path}': 'eval_cases' must be a non-empty list.")
+
+    preset_name = _normalize_preset_name(payload.get("name"), fallback=path.stem)
+    cases: list[dict[str, Any]] = []
+    for index, raw_case in enumerate(raw_eval_cases, start=1):
+        if not isinstance(raw_case, dict):
+            raise ValueError(f"Invalid ADK eval case #{index} in '{path}': expected mapping.")
+        case_id = str(
+            raw_case.get("eval_id")
+            or raw_case.get("id")
+            or raw_case.get("name")
+            or f"{preset_name}_{index}"
+        ).strip()
+        turns = _extract_adk_user_turns(raw_case.get("conversation"))
+        if turns:
+            if len(turns) == 1:
+                task = turns[0]
+            else:
+                context_lines = "\n".join(f"- {turn}" for turn in turns[:-1])
+                task = f"Conversation context:\n{context_lines}\nUser request:\n{turns[-1]}"
+        else:
+            session_input = _extract_text_from_adk_content(raw_case.get("session_input"))
+            task = session_input or ""
+        if not task:
+            raise ValueError(
+                f"Invalid ADK eval case '{case_id}' in '{path}': no user task text found."
+            )
+        case_payload: dict[str, Any] = {
+            "id": case_id,
+            "description": str(raw_case.get("description") or case_id).strip(),
+            "task": task,
+            "environment": "generic",
+            "max_steps": raw_case.get("max_steps", 4),
+            "exec_timeout": raw_case.get("exec_timeout", raw_case.get("timeout", 45)),
+        }
+        cases.append(case_payload)
+
+    description = str(payload.get("description") or "Imported Google ADK eval set.").strip()
+    parsed_cases = _parse_cases(cases, preset_name=preset_name, path=path)
+    return {preset_name: parsed_cases}, {preset_name: description}
+
+
+def _parse_record_rows(
+    rows: list[Any],
+    *,
+    path: Path,
+    preset_name: Any = None,
+    description: Any = None,
+) -> tuple[dict[str, list[RLMBenchmarkCase]], dict[str, str]]:
+    if not rows:
+        raise ValueError(f"Invalid benchmark pack '{path}': dataset list is empty.")
+
+    normalized_name = _normalize_preset_name(preset_name, fallback=path.stem)
+    cases: list[dict[str, Any]] = []
+    for index, row in enumerate(rows, start=1):
+        if not isinstance(row, dict):
+            raise ValueError(f"Invalid record #{index} in '{path}': expected mapping.")
+        case_id = str(
+            row.get("id") or row.get("case_id") or row.get("name") or f"{normalized_name}_{index}"
+        ).strip()
+        task = _extract_task_from_dataset_case(row)
+        if not task:
+            raise ValueError(
+                f"Invalid record '{case_id}' in '{path}': unable to infer task prompt."
+            )
+        case_payload: dict[str, Any] = {
+            "id": case_id,
+            "description": str(row.get("description") or row.get("name") or case_id).strip(),
+            "task": task,
+            "environment": row.get("environment", "generic"),
+            "max_steps": row.get("max_steps", row.get("steps", 4)),
+            "exec_timeout": row.get("exec_timeout", row.get("timeout", 30)),
+        }
+        cases.append(case_payload)
+
+    parsed_cases = _parse_cases(cases, preset_name=normalized_name, path=path)
+    parsed_description = str(description or "Imported benchmark dataset.").strip()
+    return {normalized_name: parsed_cases}, {normalized_name: parsed_description}
+
+
+def _extract_task_from_dataset_case(raw_case: dict[str, Any]) -> str:
+    for key in ("task", "prompt", "question", "query", "instruction", "input"):
+        value = raw_case.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+
+    inputs = raw_case.get("inputs")
+    if isinstance(inputs, str) and inputs.strip():
+        return inputs.strip()
+    if isinstance(inputs, dict):
+        for key in ("prompt", "question", "query", "task", "instruction", "input", "text"):
+            value = inputs.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        for value in inputs.values():
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return json.dumps(inputs, sort_keys=True, ensure_ascii=True)
+
+    session_input = raw_case.get("session_input")
+    if session_input is not None:
+        extracted = _extract_text_from_adk_content(session_input)
+        if extracted:
+            return extracted
+
+    return ""
+
+
+def _extract_adk_user_turns(conversation: Any) -> list[str]:
+    if not isinstance(conversation, list):
+        return []
+    turns: list[str] = []
+    for item in conversation:
+        if not isinstance(item, dict):
+            continue
+        user_content = item.get("user_content")
+        text = _extract_text_from_adk_content(user_content)
+        if text:
+            turns.append(text)
+    return turns
+
+
+def _extract_text_from_adk_content(content: Any) -> str:
+    if isinstance(content, str):
+        return content.strip()
+    if not isinstance(content, dict):
+        return ""
+    parts = content.get("parts")
+    if not isinstance(parts, list):
+        return ""
+    snippets: list[str] = []
+    for part in parts:
+        if not isinstance(part, dict):
+            continue
+        text = part.get("text")
+        if isinstance(text, str) and text.strip():
+            snippets.append(text.strip())
+    return "\n".join(snippets).strip()
+
+
+def _normalize_preset_name(name: Any, *, fallback: str) -> str:
+    text = str(name or fallback).strip().lower()
+    text = re.sub(r"[^a-z0-9]+", "_", text)
+    text = re.sub(r"_+", "_", text).strip("_")
+    return text or "imported_pack"
 
 
 def _parse_cases(

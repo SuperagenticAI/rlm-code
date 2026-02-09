@@ -7,10 +7,14 @@ context -> action proposal -> sandbox execution -> observation -> reward -> memo
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shutil
 import tempfile
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,14 +28,19 @@ from .benchmarks import (
     list_benchmark_presets,
     load_benchmark_packs,
 )
+from .context_store import LazyFileContext
 from .environments import (
     DSPyCodingRLMEnvironment,
+    EnvironmentActionResult,
     EnvironmentDoctorCheck,
     GenericRLMEnvironment,
     RLMEnvironment,
     RLMRewardProfile,
 )
+from .events import RLMEventBus
+from .frameworks import FrameworkAdapterRegistry, FrameworkEpisodeResult
 from .observability import RLMObservability
+from .visualizer import build_run_visualization
 
 logger = get_logger(__name__)
 
@@ -167,8 +176,22 @@ class RLMBenchmarkComparison:
     passed: bool
 
 
+@dataclass(slots=True)
+class _RecursionState:
+    started_monotonic: float
+    deadline_monotonic: float | None
+    active_task_hashes: set[str]
+    lock: threading.RLock
+
+
 class RLMRunner:
     """CLI-native RLM run manager with trajectory persistence."""
+
+    _BUNDLED_PACK_ALIASES: dict[str, str] = {
+        "pydantic_time_range_v1": "eval/packs/pydantic_time_range_v1.yaml",
+        "google_adk_memory_eval": "eval/packs/google_adk_memory_eval.json",
+        "superoptix_qa_pairs": "eval/packs/superoptix_qa_pairs.json",
+    }
 
     def __init__(
         self,
@@ -177,12 +200,19 @@ class RLMRunner:
         run_dir: Path | None = None,
         workdir: Path | None = None,
         observability: RLMObservability | None = None,
+        event_bus: RLMEventBus | None = None,
         reward_profile: RLMRewardProfile | dict[str, Any] | None = None,
         benchmark_pack_paths: list[str | Path] | None = None,
+        max_parallelism: int = 4,
     ):
         self.llm_connector = llm_connector
         self.execution_engine = execution_engine
         self.workdir = (workdir or Path.cwd()).resolve()
+        self.event_bus = event_bus or RLMEventBus()
+        self.context_store = LazyFileContext(workdir=self.workdir)
+        self._max_parallelism = max(1, int(max_parallelism))
+        self._parallel_semaphore = threading.BoundedSemaphore(value=self._max_parallelism)
+        self.framework_registry = FrameworkAdapterRegistry.default(workdir=str(self.workdir))
         default_run_dir = self.workdir / ".rlm__code" / "rlm" / "runs"
         legacy_run_dirs = [
             self.workdir / ".rlm_code" / "rlm" / "runs",
@@ -247,6 +277,14 @@ class RLMRunner:
         sub_model: str | None = None,
         sub_provider: str | None = None,
         branch_width: int = 1,
+        framework: str | None = None,
+        max_depth: int = 2,
+        max_children_per_step: int = 4,
+        parallelism: int = 2,
+        time_budget_seconds: int | None = None,
+        _recursion_state: _RecursionState | None = None,
+        _depth: int = 0,
+        _parent_run_id: str | None = None,
     ) -> RLMRunResult:
         """Run one RLM episode and persist trajectory as JSONL."""
         cleaned_task = task.strip()
@@ -256,7 +294,86 @@ class RLMRunner:
             raise ValueError("max_steps must be at least 1.")
         if branch_width < 1:
             raise ValueError("branch_width must be at least 1.")
+        if max_depth < 0:
+            raise ValueError("max_depth must be >= 0.")
+        if max_children_per_step < 1:
+            raise ValueError("max_children_per_step must be >= 1.")
+        framework_id = self._resolve_framework_id(framework)
+        if framework_id == "dspy":
+            environment = "dspy"
         env = self._get_environment(environment)
+        native_framework = "dspy" if framework_id == "dspy" else "native"
+        if framework_id is not None and framework_id != "dspy":
+            return self._run_task_with_framework_adapter(
+                framework_id=framework_id,
+                task=cleaned_task,
+                env=env,
+                max_steps=max_steps,
+                exec_timeout=exec_timeout,
+                branch_width=branch_width,
+                sub_model=sub_model,
+                sub_provider=sub_provider,
+            )
+        normalized_parallelism = max(1, min(int(parallelism), self._max_parallelism))
+
+        recursion_state = _recursion_state
+        if recursion_state is None:
+            deadline: float | None = None
+            if time_budget_seconds is not None and int(time_budget_seconds) > 0:
+                deadline = time.monotonic() + int(time_budget_seconds)
+            recursion_state = _RecursionState(
+                started_monotonic=time.monotonic(),
+                deadline_monotonic=deadline,
+                active_task_hashes=set(),
+                lock=threading.RLock(),
+            )
+
+        task_hash = self._task_fingerprint(cleaned_task, env.name)
+        with recursion_state.lock:
+            if _depth > 0 and task_hash in recursion_state.active_task_hashes:
+                run_id = self._new_run_id()
+                run_path = self.run_dir / f"{run_id}.jsonl"
+                started = self._utc_now()
+                final = {
+                    "type": "final",
+                    "run_id": run_id,
+                    "environment": env.name,
+                    "framework": native_framework,
+                    "task": cleaned_task,
+                    "timestamp": self._utc_now(),
+                    "completed": False,
+                    "steps": 0,
+                    "total_reward": -0.25,
+                    "final_response": "Skipped recursive task due to cycle guard.",
+                    "usage": {"total_calls": 0, "prompt_tokens": 0, "completion_tokens": 0},
+                    "depth": _depth,
+                    "parent_run_id": _parent_run_id,
+                    "blocked_by_cycle_guard": True,
+                }
+                self._append_event(run_path, final)
+                self._emit_runtime_event(
+                    "run_cycle_guard",
+                    {
+                        "run_id": run_id,
+                        "task": cleaned_task,
+                        "depth": _depth,
+                        "parent_run_id": _parent_run_id,
+                    },
+                )
+                return RLMRunResult(
+                    run_id=run_id,
+                    run_path=run_path,
+                    completed=False,
+                    steps=0,
+                    total_reward=-0.25,
+                    final_response="Skipped recursive task due to cycle guard.",
+                    started_at=started,
+                    finished_at=final["timestamp"],
+                    environment=env.name,
+                    task=cleaned_task,
+                    usage_summary={"total_calls": 0, "prompt_tokens": 0, "completion_tokens": 0},
+                )
+            recursion_state.active_task_hashes.add(task_hash)
 
         model_router = _RoleAwareConnector(
             self.llm_connector,
@@ -281,92 +398,169 @@ class RLMRunner:
                 "max_steps": max_steps,
                 "exec_timeout": exec_timeout,
                 "branch_width": branch_width,
+                "framework": native_framework,
                 "sub_model": sub_model,
                 "sub_provider": sub_provider,
+                "max_depth": max_depth,
+                "depth": _depth,
+                "parallelism": normalized_parallelism,
+                "max_children_per_step": max_children_per_step,
+                "parent_run_id": _parent_run_id,
+            },
+        )
+        self._emit_runtime_event(
+            "run_start",
+            {
+                "run_id": run_id,
+                "task": cleaned_task,
+                "environment": env.name,
+                "framework": native_framework,
+                "depth": _depth,
+                "parent_run_id": _parent_run_id,
             },
         )
 
-        for step_index in range(1, max_steps + 1):
-            step_usage_before = self._usage_snapshot()
-            planner_prompt = env.planner_prompt(cleaned_task, memory, trajectory, step_index)
-            candidates = self._propose_step_candidates(
-                planner_prompt=planner_prompt,
-                env=env,
-                model_router=model_router,
-                branch_width=branch_width,
-                execution_engine=self.execution_engine,
-                exec_timeout=exec_timeout,
-            )
-            selected = max(candidates, key=lambda item: item["score"])
-            planner_raw = str(selected["planner_raw"])
-            action_dict = dict(selected["action"])
+        try:
+            for step_index in range(1, max_steps + 1):
+                if (
+                    recursion_state.deadline_monotonic is not None
+                    and time.monotonic() > recursion_state.deadline_monotonic
+                ):
+                    break
 
-            step_event: dict[str, Any] = {
-                "type": "step",
-                "run_id": run_id,
-                "environment": env.name,
-                "task": cleaned_task,
-                "timestamp": self._utc_now(),
-                "step": step_index,
-                "action": action_dict,
-                "planner_raw": planner_raw,
-            }
-            if branch_width > 1:
-                step_event["branch"] = {
-                    "width": branch_width,
-                    "selected_index": int(selected["index"]),
-                    "candidates": [
-                        {
-                            "index": int(item["index"]),
-                            "action": dict(item["action"]),
-                            "score": float(item["score"]),
-                            "reward": float(item["reward"]),
-                            "done": bool(item["done"]),
-                        }
-                        for item in candidates
-                    ],
-                }
-
-            action_result = env.execute_action(
-                action=action_dict,
-                execution_engine=self.execution_engine,
-                exec_timeout=exec_timeout,
-                llm_connector=model_router,
-            )
-            action_result.reward = self.reward_profile.apply_global_scale(action_result.reward)
-            total_reward += action_result.reward
-            step_usage_after = self._usage_snapshot()
-            step_usage = self._usage_delta(step_usage_before, step_usage_after)
-            step_event["observation"] = action_result.observation
-            step_event["reward"] = action_result.reward
-            step_event["usage"] = step_usage
-            trajectory.append(step_event)
-            self._append_event(run_path, step_event)
-            self.observability.on_step(
-                run_id,
-                event=step_event,
-                cumulative_reward=total_reward,
-            )
-            if action_result.memory_note:
-                memory.append(action_result.memory_note)
-                memory = memory[-8:]
-
-            if action_result.done:
-                completed = True
-                final_response = (
-                    action_result.final_response
-                    or (action.final_response or "").strip()
-                    or f"Completed task '{cleaned_task}'."
+                step_usage_before = self._usage_snapshot()
+                planner_prompt = env.planner_prompt(cleaned_task, memory, trajectory, step_index)
+                candidates = self._propose_step_candidates(
+                    planner_prompt=planner_prompt,
+                    env=env,
+                    model_router=model_router,
+                    branch_width=branch_width,
+                    execution_engine=self.execution_engine,
+                    exec_timeout=exec_timeout,
                 )
-                break
+                selected = max(candidates, key=lambda item: item["score"])
+                planner_raw = str(selected["planner_raw"])
+                action_dict = dict(selected["action"])
+                action_name = str(action_dict.get("action", "")).strip().lower()
+
+                step_event: dict[str, Any] = {
+                    "type": "step",
+                    "run_id": run_id,
+                    "environment": env.name,
+                    "framework": native_framework,
+                    "task": cleaned_task,
+                    "timestamp": self._utc_now(),
+                    "step": step_index,
+                    "action": action_dict,
+                    "planner_raw": planner_raw,
+                    "depth": _depth,
+                    "parent_run_id": _parent_run_id,
+                }
+                if branch_width > 1:
+                    step_event["branch"] = {
+                        "width": branch_width,
+                        "selected_index": int(selected["index"]),
+                        "candidates": [
+                            {
+                                "index": int(item["index"]),
+                                "action": dict(item["action"]),
+                                "score": float(item["score"]),
+                                "reward": float(item["reward"]),
+                                "done": bool(item["done"]),
+                            }
+                            for item in candidates
+                        ],
+                    }
+
+                self._emit_runtime_event(
+                    "step_start",
+                    {
+                        "run_id": run_id,
+                        "step": step_index,
+                        "action": action_name,
+                        "depth": _depth,
+                    },
+                )
+
+                if action_name in {"delegate", "delegate_batch"}:
+                    action_result = self._execute_delegate_action(
+                        parent_run_id=run_id,
+                        action=action_dict,
+                        default_environment=env.name,
+                        model_router=model_router,
+                        max_steps=max_steps,
+                        exec_timeout=exec_timeout,
+                        branch_width=branch_width,
+                        sub_model=sub_model,
+                        sub_provider=sub_provider,
+                        max_depth=max_depth,
+                        max_children_per_step=max_children_per_step,
+                        parallelism=normalized_parallelism,
+                        recursion_state=recursion_state,
+                        depth=_depth,
+                        framework=native_framework,
+                        time_budget_seconds=time_budget_seconds,
+                    )
+                else:
+                    action_result = env.execute_action(
+                        action=action_dict,
+                        execution_engine=self.execution_engine,
+                        exec_timeout=exec_timeout,
+                        llm_connector=model_router,
+                    )
+
+                action_result.reward = self.reward_profile.apply_global_scale(action_result.reward)
+                total_reward += action_result.reward
+                step_usage_after = self._usage_snapshot()
+                step_usage = self._usage_delta(step_usage_before, step_usage_after)
+                step_event["observation"] = action_result.observation
+                step_event["reward"] = action_result.reward
+                step_event["usage"] = step_usage
+                trajectory.append(step_event)
+                self._append_event(run_path, step_event)
+                self.observability.on_step(
+                    run_id,
+                    event=step_event,
+                    cumulative_reward=total_reward,
+                )
+                self._emit_runtime_event(
+                    "step_end",
+                    {
+                        "run_id": run_id,
+                        "step": step_index,
+                        "action": action_name,
+                        "reward": float(action_result.reward),
+                        "done": bool(action_result.done),
+                        "framework": native_framework,
+                        "depth": _depth,
+                    },
+                )
+                if action_result.memory_note:
+                    memory.append(action_result.memory_note)
+                    memory = memory[-8:]
+
+                if action_result.done:
+                    completed = True
+                    final_response = (
+                        action_result.final_response
+                        or str(action_dict.get("final_response") or "").strip()
+                        or f"Completed task '{cleaned_task}'."
+                    )
+                    break
+        finally:
+            with recursion_state.lock:
+                recursion_state.active_task_hashes.discard(task_hash)
 
         if not final_response:
-            final_response = self._synthesize_final_response(
-                cleaned_task,
-                trajectory,
-                completed,
-                environment=env.name,
-            )
+            if recursion_state.deadline_monotonic is not None and time.monotonic() > recursion_state.deadline_monotonic:
+                final_response = "Stopped due to time budget."
+            else:
+                final_response = self._synthesize_final_response(
+                    cleaned_task,
+                    trajectory,
+                    completed,
+                    environment=env.name,
+                )
 
         finished = self._utc_now()
         usage_end = self._usage_snapshot()
@@ -375,6 +569,7 @@ class RLMRunner:
             "type": "final",
             "run_id": run_id,
             "environment": env.name,
+            "framework": native_framework,
             "task": cleaned_task,
             "timestamp": finished,
             "completed": completed,
@@ -382,6 +577,8 @@ class RLMRunner:
             "total_reward": round(total_reward, 4),
             "final_response": final_response,
             "usage": run_usage,
+            "depth": _depth,
+            "parent_run_id": _parent_run_id,
         }
         self._append_event(run_path, final_event)
         result = RLMRunResult(
@@ -402,6 +599,18 @@ class RLMRunner:
             result=result,
             run_path=run_path,
         )
+        self._emit_runtime_event(
+            "run_end",
+            {
+                "run_id": run_id,
+                "completed": bool(result.completed),
+                "steps": int(result.steps),
+                "total_reward": float(result.total_reward),
+                "framework": native_framework,
+                "depth": _depth,
+                "parent_run_id": _parent_run_id,
+            },
+        )
         return result
 
     def list_runs(self, limit: int = 10) -> list[dict[str, Any]]:
@@ -418,6 +627,10 @@ class RLMRunner:
         """Return sorted list of supported environment aliases."""
         return sorted(self.environments.keys())
 
+    def supported_frameworks(self) -> list[str]:
+        """Return sorted list of adapter-backed framework ids."""
+        return sorted({"native", "dspy", *self.framework_registry.list_ids()})
+
     def benchmark_presets(
         self,
         *,
@@ -433,12 +646,65 @@ class RLMRunner:
             extra_sources=extra_sources,
         )
 
+    def benchmark_pack_aliases(self) -> dict[str, str]:
+        """Return bundled benchmark pack aliases that are available on disk."""
+        repo_root = Path(__file__).resolve().parents[2]
+        aliases: dict[str, str] = {}
+        for alias, relative_path in self._BUNDLED_PACK_ALIASES.items():
+            candidate = (repo_root / relative_path).resolve()
+            if candidate.exists():
+                aliases[alias] = str(candidate)
+        return aliases
+
+    def import_benchmark_pack_preview(
+        self,
+        *,
+        pack_paths: list[str | Path],
+        per_preset_limit: int = 5,
+    ) -> list[dict[str, Any]]:
+        """Preview imported external benchmark presets/cases without executing them."""
+        if not pack_paths:
+            raise ValueError("No benchmark pack paths provided.")
+        extra_presets, extra_descriptions, extra_sources = self._load_external_benchmark_presets(
+            pack_paths=pack_paths
+        )
+        if not extra_presets:
+            return []
+
+        limit = max(1, int(per_preset_limit))
+        rows: list[dict[str, Any]] = []
+        for preset in sorted(extra_presets.keys()):
+            cases = list(extra_presets.get(preset, []))
+            case_previews = [
+                {
+                    "case_id": case.case_id,
+                    "description": case.description,
+                    "environment": case.environment,
+                    "max_steps": case.max_steps,
+                    "exec_timeout": case.exec_timeout,
+                    "task_preview": self._clip_text(case.task, limit=120),
+                }
+                for case in cases[:limit]
+            ]
+            rows.append(
+                {
+                    "preset": preset,
+                    "source": extra_sources.get(preset, "external"),
+                    "description": extra_descriptions.get(preset, ""),
+                    "total_cases": len(cases),
+                    "previewed_cases": len(case_previews),
+                    "cases": case_previews,
+                }
+            )
+        return rows
+
     def run_benchmark(
         self,
         *,
         preset: str = "dspy_quick",
         limit: int | None = None,
         environment: str | None = None,
+        framework: str | None = None,
         max_steps: int | None = None,
         exec_timeout: int | None = None,
         branch_width: int = 1,
@@ -468,6 +734,7 @@ class RLMRunner:
                     max_steps=max(1, chosen_steps),
                     exec_timeout=max(1, chosen_timeout),
                     environment=chosen_env,
+                    framework=framework,
                     branch_width=max(1, int(branch_width)),
                     sub_model=sub_model,
                     sub_provider=sub_provider,
@@ -651,9 +918,14 @@ class RLMRunner:
         session_id: str = "default",
         *,
         environment: str = "generic",
+        framework: str | None = None,
         max_steps: int = 4,
         exec_timeout: int = 30,
         branch_width: int = 1,
+        max_depth: int = 2,
+        max_children_per_step: int = 4,
+        parallelism: int = 2,
+        time_budget_seconds: int | None = None,
         sub_model: str | None = None,
         sub_provider: str | None = None,
         enable_compaction: bool = True,
@@ -676,9 +948,14 @@ class RLMRunner:
             max_steps=max_steps,
             exec_timeout=exec_timeout,
             environment=environment,
+            framework=framework,
             sub_model=sub_model,
             sub_provider=sub_provider,
             branch_width=branch_width,
+            max_depth=max_depth,
+            max_children_per_step=max_children_per_step,
+            parallelism=parallelism,
+            time_budget_seconds=time_budget_seconds,
         )
 
         history_entry = {
@@ -690,6 +967,8 @@ class RLMRunner:
         state["contexts"].append(cleaned_message)
         state["histories"].append(history_entry)
         state["environment"] = environment
+        if framework:
+            state["framework"] = framework
         state["last_run_id"] = result.run_id
         state["updated_at"] = self._utc_now()
 
@@ -717,6 +996,7 @@ class RLMRunner:
         return {
             "session_id": state["session_id"],
             "environment": state.get("environment", "generic"),
+            "framework": state.get("framework", "native"),
             "created_at": state.get("created_at", ""),
             "updated_at": state.get("updated_at", ""),
             "context_count": len(state.get("contexts", [])),
@@ -795,6 +1075,22 @@ class RLMRunner:
                 recommendation=None if connected_model else "Connect a model with /connect before /rlm run.",
             )
         )
+
+        for row in self.framework_registry.doctor():
+            framework = str(row.get("framework", "unknown"))
+            ok = bool(row.get("ok", False))
+            checks.append(
+                EnvironmentDoctorCheck(
+                    name=f"framework_{framework}",
+                    status="pass" if ok else "warn",
+                    detail=str(row.get("detail", "")),
+                    recommendation=(
+                        None
+                        if ok
+                        else f"Install optional dependency for {framework} or use framework=native."
+                    ),
+                )
+            )
 
         checks.extend(env.doctor_checks())
         return checks
@@ -957,6 +1253,7 @@ class RLMRunner:
         state = {
             "session_id": session_id,
             "environment": str(payload.get("environment") or environment),
+            "framework": str(payload.get("framework") or "native"),
             "created_at": str(payload.get("created_at") or now),
             "updated_at": str(payload.get("updated_at") or now),
             "last_run_id": payload.get("last_run_id"),
@@ -971,6 +1268,7 @@ class RLMRunner:
         return {
             "session_id": session_id,
             "environment": environment,
+            "framework": "native",
             "created_at": now,
             "updated_at": now,
             "last_run_id": None,
@@ -1018,6 +1316,7 @@ class RLMRunner:
             "completed": completed,
             "total_reward": total_reward,
             "environment": str(final_event.get("environment", "unknown")),
+            "framework": str(final_event.get("framework", "native")),
             "task": str(final_event.get("task", "")),
             "started_at": started_at,
             "finished_at": finished_at,
@@ -1042,6 +1341,24 @@ class RLMRunner:
             if isinstance(payload, dict):
                 events.append(payload)
         return events
+
+    def visualize_run(
+        self,
+        run_id: str | None = None,
+        *,
+        include_children: bool = True,
+        max_depth: int = 3,
+    ) -> dict[str, Any]:
+        """Build a nested visualization payload for a run id (latest when omitted)."""
+        target = self._resolve_run_path(run_id)
+        if target is None or not target.exists():
+            raise ValueError(f"Run not found: {run_id or 'latest'}")
+        return build_run_visualization(
+            run_path=target,
+            run_dir=self.run_dir,
+            include_children=include_children,
+            max_depth=max(0, int(max_depth)),
+        )
 
     def _resolve_run_path(self, run_id: str | None) -> Path | None:
         if run_id:
@@ -1168,7 +1485,468 @@ class RLMRunner:
         selected = pack_paths
         if selected is None:
             selected = self._benchmark_pack_paths
-        return load_benchmark_packs(selected, workdir=self.workdir)
+        return load_benchmark_packs(
+            self._resolve_benchmark_pack_aliases(selected),
+            workdir=self.workdir,
+        )
+
+    def _resolve_benchmark_pack_aliases(
+        self,
+        selected: list[str | Path] | None,
+    ) -> list[str | Path] | None:
+        if selected is None:
+            return None
+        aliases = self.benchmark_pack_aliases()
+        if not aliases:
+            return selected
+
+        resolved: list[str | Path] = []
+        for item in selected:
+            token = str(item).strip()
+            if not token:
+                continue
+            key = token.lower()
+            resolved.append(aliases.get(key, item))
+        return resolved
+
+    def _run_task_with_framework_adapter(
+        self,
+        *,
+        framework_id: str,
+        task: str,
+        env: RLMEnvironment,
+        max_steps: int,
+        exec_timeout: int,
+        branch_width: int,
+        sub_model: str | None,
+        sub_provider: str | None,
+    ) -> RLMRunResult:
+        adapter = self.framework_registry.get(framework_id)
+        if adapter is None:
+            raise ValueError(
+                f"Unsupported framework '{framework_id}'. Supported: {', '.join(self.framework_registry.list_ids())}"
+            )
+        ok, detail = adapter.doctor()
+        if not ok:
+            raise ValueError(detail)
+
+        run_id = self._new_run_id()
+        run_path = self.run_dir / f"{run_id}.jsonl"
+        started = self._utc_now()
+        usage_start = self._usage_snapshot()
+        self.observability.on_run_start(
+            run_id,
+            task=task,
+            environment=env.name,
+            params={
+                "framework": framework_id,
+                "max_steps": max_steps,
+                "exec_timeout": exec_timeout,
+                "branch_width": branch_width,
+                "sub_model": sub_model,
+                "sub_provider": sub_provider,
+            },
+        )
+        self._emit_runtime_event(
+            "run_start",
+            {
+                "run_id": run_id,
+                "task": task,
+                "environment": env.name,
+                "framework": framework_id,
+                "mode": "framework_adapter",
+            },
+        )
+
+        steps_written = 0
+        total_reward = 0.0
+        completed = False
+        final_response = ""
+        framework_metadata: dict[str, Any] = {}
+
+        try:
+            episode: FrameworkEpisodeResult = adapter.run_episode(
+                task=task,
+                llm_connector=self.llm_connector,
+                max_steps=max_steps,
+                exec_timeout=exec_timeout,
+                workdir=str(self.workdir),
+                sub_model=sub_model,
+                sub_provider=sub_provider,
+                context={"environment": env.name, "branch_width": branch_width},
+            )
+            framework_metadata = dict(episode.metadata or {})
+
+            for index, step in enumerate(episode.steps, start=1):
+                reward = self.reward_profile.apply_global_scale(float(step.reward))
+                total_reward += reward
+                step_event = {
+                    "type": "step",
+                    "run_id": run_id,
+                    "environment": env.name,
+                    "framework": framework_id,
+                    "task": task,
+                    "timestamp": self._utc_now(),
+                    "step": index,
+                    "action": {"action": str(step.action or "framework_step")},
+                    "observation": dict(step.observation or {}),
+                    "reward": reward,
+                    "usage": {"total_calls": 0, "prompt_tokens": 0, "completion_tokens": 0},
+                }
+                self._append_event(run_path, step_event)
+                self.observability.on_step(
+                    run_id,
+                    event=step_event,
+                    cumulative_reward=total_reward,
+                )
+                steps_written += 1
+
+            if steps_written == 0:
+                total_reward = self.reward_profile.apply_global_scale(float(episode.total_reward or 0.0))
+            completed = bool(episode.completed)
+            final_response = str(episode.final_response or "").strip()
+        except Exception as exc:
+            completed = False
+            total_reward = self.reward_profile.apply_global_scale(-0.4)
+            final_response = f"Framework run failed ({framework_id}): {exc}"
+            error_event = {
+                "type": "step",
+                "run_id": run_id,
+                "environment": env.name,
+                "framework": framework_id,
+                "task": task,
+                "timestamp": self._utc_now(),
+                "step": 1,
+                "action": {"action": "framework_error"},
+                "observation": {"error": str(exc)},
+                "reward": total_reward,
+                "usage": {"total_calls": 0, "prompt_tokens": 0, "completion_tokens": 0},
+            }
+            self._append_event(run_path, error_event)
+            self.observability.on_step(run_id, event=error_event, cumulative_reward=total_reward)
+            steps_written = 1
+
+        if not final_response:
+            final_response = self._synthesize_final_response(task, [], completed, environment=env.name)
+
+        finished = self._utc_now()
+        usage_end = self._usage_snapshot()
+        run_usage = self._usage_delta(usage_start, usage_end)
+        final_event = {
+            "type": "final",
+            "run_id": run_id,
+            "environment": env.name,
+            "framework": framework_id,
+            "task": task,
+            "timestamp": finished,
+            "completed": completed,
+            "steps": steps_written,
+            "total_reward": round(total_reward, 4),
+            "final_response": final_response,
+            "usage": run_usage,
+            "framework_metadata": framework_metadata,
+        }
+        self._append_event(run_path, final_event)
+        result = RLMRunResult(
+            run_id=run_id,
+            run_path=run_path,
+            completed=completed,
+            steps=steps_written,
+            total_reward=round(total_reward, 4),
+            final_response=final_response,
+            started_at=started,
+            finished_at=finished,
+            environment=env.name,
+            task=task,
+            usage_summary=run_usage,
+        )
+        self.observability.on_run_end(run_id, result=result, run_path=run_path)
+        self._emit_runtime_event(
+            "run_end",
+            {
+                "run_id": run_id,
+                "framework": framework_id,
+                "completed": bool(completed),
+                "steps": int(steps_written),
+                "total_reward": float(result.total_reward),
+            },
+        )
+        return result
+
+    def _execute_delegate_action(
+        self,
+        *,
+        parent_run_id: str,
+        action: dict[str, Any],
+        default_environment: str,
+        model_router: _RoleAwareConnector,
+        max_steps: int,
+        exec_timeout: int,
+        branch_width: int,
+        sub_model: str | None,
+        sub_provider: str | None,
+        max_depth: int,
+        max_children_per_step: int,
+        parallelism: int,
+        recursion_state: _RecursionState,
+        depth: int,
+        framework: str | None,
+        time_budget_seconds: int | None,
+    ) -> EnvironmentActionResult:
+        if depth >= max_depth:
+            return EnvironmentActionResult(
+                observation={
+                    "success": False,
+                    "error": "delegate blocked by max_depth guard.",
+                    "max_depth": max_depth,
+                    "depth": depth,
+                },
+                reward=-0.3,
+                memory_note="delegate blocked by max_depth guard.",
+            )
+
+        action_name = str(action.get("action", "")).strip().lower()
+        requested_children = self._as_int(action.get("max_children"), default=max_children_per_step, minimum=1)
+        child_limit = max(1, min(requested_children, max_children_per_step))
+
+        raw_tasks: list[str] = []
+        if action_name == "delegate_batch":
+            payload = action.get("tasks")
+            if isinstance(payload, list):
+                raw_tasks = [str(item).strip() for item in payload if str(item).strip()]
+        else:
+            single = (
+                action.get("task")
+                or action.get("subtask")
+                or action.get("prompt")
+                or action.get("rationale")
+            )
+            if isinstance(single, str) and single.strip():
+                raw_tasks = [single.strip()]
+
+        raw_tasks = raw_tasks[:child_limit]
+        if not raw_tasks:
+            return EnvironmentActionResult(
+                observation={"success": False, "error": "delegate requires task/tasks payload."},
+                reward=-0.25,
+                memory_note="delegate missing tasks.",
+            )
+
+        context_refs = self.context_store.resolve_many(action.get("context_refs"), limit=8)
+        if not context_refs:
+            include = action.get("context_include")
+            include_globs = include if isinstance(include, list) else None
+            auto_refs = self.context_store.discover(include=include_globs, limit=4)
+            context_refs.extend(auto_refs)
+        context_block = self.context_store.render(context_refs, max_chars=6000, max_chars_per_ref=1400)
+
+        child_environment = str(action.get("environment") or action.get("env") or default_environment).strip()
+        child_steps = self._as_int(
+            action.get("steps"),
+            default=max(1, min(3, max_steps)),
+            minimum=1,
+            maximum=max(1, max_steps),
+        )
+        child_timeout = self._as_int(
+            action.get("timeout"),
+            default=max(1, exec_timeout),
+            minimum=1,
+            maximum=3600,
+        )
+        child_branch = self._as_int(
+            action.get("branch"),
+            default=1,
+            minimum=1,
+            maximum=max(1, branch_width),
+        )
+        child_parallel = self._as_int(action.get("parallel"), default=parallelism, minimum=1)
+        child_parallel = max(1, min(child_parallel, len(raw_tasks), self._max_parallelism))
+        child_sub_model = str(action.get("model") or sub_model or "").strip() or None
+        child_sub_provider = str(action.get("provider") or sub_provider or "").strip() or None
+
+        delegate_tasks: list[str] = []
+        for raw_task in raw_tasks:
+            delegate_task = raw_task
+            if context_block:
+                delegate_task = f"{raw_task}\n\nContext snippets:\n{context_block}"
+            delegate_tasks.append(delegate_task)
+
+        results: list[dict[str, Any]] = []
+
+        def _run_child(index: int, child_task: str, original_task: str) -> dict[str, Any]:
+            child_hash = self._task_fingerprint(original_task, child_environment)
+            with recursion_state.lock:
+                if child_hash in recursion_state.active_task_hashes:
+                    return {
+                        "index": index,
+                        "task": original_task,
+                        "skipped": True,
+                        "reason": "cycle_guard",
+                    }
+
+            if recursion_state.deadline_monotonic is not None:
+                remaining = recursion_state.deadline_monotonic - time.monotonic()
+                if remaining <= 0:
+                    return {
+                        "index": index,
+                        "task": original_task,
+                        "skipped": True,
+                        "reason": "time_budget",
+                    }
+                effective_timeout = max(1, min(child_timeout, int(remaining)))
+            else:
+                effective_timeout = child_timeout
+
+            acquired = self._parallel_semaphore.acquire(blocking=False)
+            if not acquired:
+                return {
+                    "index": index,
+                    "task": original_task,
+                    "skipped": True,
+                    "reason": "parallel_capacity",
+                }
+
+            try:
+                self._emit_runtime_event(
+                    "child_run_start",
+                    {
+                        "parent_run_id": parent_run_id,
+                        "index": index,
+                        "task": original_task,
+                        "depth": depth + 1,
+                    },
+                )
+                try:
+                    child_result = self.run_task(
+                        task=child_task,
+                        max_steps=child_steps,
+                        exec_timeout=effective_timeout,
+                        environment=child_environment,
+                        framework=framework,
+                        sub_model=child_sub_model,
+                        sub_provider=child_sub_provider,
+                        branch_width=child_branch,
+                        max_depth=max_depth,
+                        max_children_per_step=max_children_per_step,
+                        parallelism=parallelism,
+                        time_budget_seconds=time_budget_seconds,
+                        _recursion_state=recursion_state,
+                        _depth=depth + 1,
+                        _parent_run_id=parent_run_id,
+                    )
+                    payload = {
+                        "index": index,
+                        "task": original_task,
+                        "run_id": child_result.run_id,
+                        "run_path": str(child_result.run_path),
+                        "completed": bool(child_result.completed),
+                        "steps": int(child_result.steps),
+                        "total_reward": float(child_result.total_reward),
+                        "final_response": str(child_result.final_response),
+                        "skipped": False,
+                    }
+                    self._emit_runtime_event(
+                        "child_run_end",
+                        {
+                            "parent_run_id": parent_run_id,
+                            "index": index,
+                            "run_id": child_result.run_id,
+                            "completed": bool(child_result.completed),
+                            "depth": depth + 1,
+                        },
+                    )
+                    return payload
+                except Exception as exc:
+                    self._emit_runtime_event(
+                        "child_run_error",
+                        {
+                            "parent_run_id": parent_run_id,
+                            "index": index,
+                            "task": original_task,
+                            "error": str(exc),
+                            "depth": depth + 1,
+                        },
+                    )
+                    return {
+                        "index": index,
+                        "task": original_task,
+                        "skipped": False,
+                        "error": str(exc),
+                    }
+            finally:
+                self._parallel_semaphore.release()
+
+        if child_parallel <= 1 or len(delegate_tasks) <= 1:
+            for idx, (delegate_task, original_task) in enumerate(zip(delegate_tasks, raw_tasks)):
+                results.append(_run_child(idx, delegate_task, original_task))
+        else:
+            with ThreadPoolExecutor(max_workers=child_parallel) as executor:
+                future_map = {
+                    executor.submit(_run_child, idx, delegate_task, original_task): idx
+                    for idx, (delegate_task, original_task) in enumerate(zip(delegate_tasks, raw_tasks))
+                }
+                for future in as_completed(future_map):
+                    try:
+                        results.append(future.result())
+                    except Exception as exc:  # pragma: no cover - defensive fallback
+                        idx = future_map[future]
+                        results.append(
+                            {
+                                "index": idx,
+                                "task": raw_tasks[idx],
+                                "skipped": False,
+                                "error": str(exc),
+                            }
+                        )
+
+        results.sort(key=lambda item: int(item.get("index", 0)))
+        attempted = len(results)
+        skipped = len([item for item in results if item.get("skipped")])
+        failures = len([item for item in results if item.get("error")])
+        completed_children = len([item for item in results if item.get("completed")])
+        rewards = [float(item.get("total_reward", 0.0)) for item in results if not item.get("skipped")]
+        avg_reward = (sum(rewards) / len(rewards)) if rewards else 0.0
+
+        if attempted == 0:
+            reward = -0.3
+        else:
+            completion_ratio = completed_children / attempted
+            failure_ratio = failures / attempted
+            skip_ratio = skipped / attempted
+            reward = 0.2 + (0.5 * completion_ratio) - (0.35 * failure_ratio) - (0.1 * skip_ratio)
+        reward = self.reward_profile.clamp(reward)
+
+        return EnvironmentActionResult(
+            observation={
+                "success": completed_children > 0 and failures == 0,
+                "mode": action_name,
+                "children_requested": len(raw_tasks),
+                "children_executed": attempted - skipped,
+                "children_completed": completed_children,
+                "children_failed": failures,
+                "children_skipped": skipped,
+                "average_child_reward": round(avg_reward, 4),
+                "context_refs": [ref.path for ref in context_refs],
+                "results": results,
+            },
+            reward=reward,
+            done=bool(action.get("done", False)),
+            final_response=(
+                str(action.get("final_response") or "").strip()
+                if bool(action.get("done", False))
+                else None
+            ),
+            memory_note=(
+                f"delegate completed {completed_children}/{attempted} children "
+                f"(failed={failures}, skipped={skipped})."
+            ),
+        )
+
+    def _emit_runtime_event(self, name: str, payload: dict[str, Any]) -> None:
+        try:
+            self.event_bus.emit(name, payload)
+        except Exception as exc:
+            logger.debug(f"Failed to emit runtime event '{name}': {exc}")
 
     def _append_event(self, run_path: Path, event: dict[str, Any]) -> None:
         run_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1399,6 +2177,12 @@ class RLMRunner:
             final_response = str(action.get("final_response") or "").strip()
             bonus = 0.1 if final_response else 0.0
             return 0.8 + bonus, True
+        if action_name in {"delegate", "delegate_batch"}:
+            tasks = action.get("tasks") if action_name == "delegate_batch" else [action.get("task")]
+            count = 0
+            if isinstance(tasks, list):
+                count = len([item for item in tasks if str(item or "").strip()])
+            return min(0.65, 0.35 + (0.05 * max(0, count - 1))), False
 
         with tempfile.TemporaryDirectory(prefix="rlm_branch_") as temp_dir:
             temp_workdir = Path(temp_dir)
@@ -1512,6 +2296,52 @@ class RLMRunner:
         if environment is not None:
             return environment
         return self.environments["generic"]
+
+    @staticmethod
+    def _task_fingerprint(task: str, environment: str) -> str:
+        payload = f"{environment.strip().lower()}::{task.strip().lower()}".encode("utf-8")
+        return hashlib.sha1(payload).hexdigest()
+
+    def _resolve_framework_id(self, framework: str | None) -> str | None:
+        if framework is None:
+            return None
+        raw = str(framework).strip().lower()
+        if not raw:
+            return None
+        aliases = {
+            "native": None,
+            "rlm": None,
+            "dspy": "dspy",
+            "dspy-coding": "dspy",
+            "generic": None,
+            "pydantic": "pydantic-ai",
+            "pydantic_ai": "pydantic-ai",
+            "pydantic-ai": "pydantic-ai",
+            "adk": "google-adk",
+            "google-adk": "google-adk",
+            "google_adk": "google-adk",
+        }
+        resolved = aliases.get(raw, raw)
+        if resolved is None:
+            return None
+        return str(resolved)
+
+    @staticmethod
+    def _as_int(
+        value: Any,
+        *,
+        default: int,
+        minimum: int = 1,
+        maximum: int | None = None,
+    ) -> int:
+        try:
+            parsed = int(value)
+        except Exception:
+            parsed = int(default)
+        parsed = max(int(minimum), parsed)
+        if maximum is not None:
+            parsed = min(parsed, int(maximum))
+        return parsed
 
     @staticmethod
     def _is_writable_dir(path: Path) -> bool:

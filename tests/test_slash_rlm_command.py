@@ -18,6 +18,9 @@ class _FakeRunner:
         self.last_chat_session = "default"
         self.last_benchmark_kwargs = {}
         self.last_benchmark_list_pack_paths = None
+        self.last_import_preview_kwargs = {}
+        self.last_compare_kwargs = {}
+        self.last_viz_kwargs = {}
 
     def run_task(
         self,
@@ -26,6 +29,11 @@ class _FakeRunner:
         exec_timeout: int = 30,
         environment: str = "dspy",
         branch_width: int = 1,
+        framework: str | None = None,
+        max_depth: int = 2,
+        max_children_per_step: int = 4,
+        parallelism: int = 2,
+        time_budget_seconds: int | None = None,
         sub_model: str | None = None,
         sub_provider: str | None = None,
     ):
@@ -35,6 +43,11 @@ class _FakeRunner:
             "exec_timeout": exec_timeout,
             "environment": environment,
             "branch_width": branch_width,
+            "framework": framework,
+            "max_depth": max_depth,
+            "max_children_per_step": max_children_per_step,
+            "parallelism": parallelism,
+            "time_budget_seconds": time_budget_seconds,
             "sub_model": sub_model,
             "sub_provider": sub_provider,
         }
@@ -92,9 +105,14 @@ class _FakeRunner:
         session_id: str = "default",
         *,
         environment: str = "dspy",
+        framework: str | None = None,
         max_steps: int = 4,
         exec_timeout: int = 30,
         branch_width: int = 1,
+        max_depth: int = 2,
+        max_children_per_step: int = 4,
+        parallelism: int = 2,
+        time_budget_seconds: int | None = None,
         sub_model: str | None = None,
         sub_provider: str | None = None,
         enable_compaction: bool = True,
@@ -106,9 +124,14 @@ class _FakeRunner:
             "message": message,
             "session_id": session_id,
             "environment": environment,
+            "framework": framework,
             "max_steps": max_steps,
             "exec_timeout": exec_timeout,
             "branch_width": branch_width,
+            "max_depth": max_depth,
+            "max_children_per_step": max_children_per_step,
+            "parallelism": parallelism,
+            "time_budget_seconds": time_budget_seconds,
             "sub_model": sub_model,
             "sub_provider": sub_provider,
             "enable_compaction": enable_compaction,
@@ -168,6 +191,12 @@ class _FakeRunner:
             {"preset": "generic_smoke", "cases": 2, "description": "generic preset"},
         ]
 
+    def benchmark_pack_aliases(self):
+        return {
+            "pydantic_time_range_v1": "eval/packs/pydantic_time_range_v1.yaml",
+            "google_adk_memory_eval": "eval/packs/google_adk_memory_eval.json",
+        }
+
     def list_benchmark_runs(self, limit: int = 20):
         return [
             {
@@ -186,6 +215,7 @@ class _FakeRunner:
         preset: str = "dspy_quick",
         limit: int | None = None,
         environment: str | None = None,
+        framework: str | None = None,
         max_steps: int | None = None,
         exec_timeout: int | None = None,
         branch_width: int = 1,
@@ -197,6 +227,7 @@ class _FakeRunner:
             "preset": preset,
             "limit": limit,
             "environment": environment,
+            "framework": framework,
             "max_steps": max_steps,
             "exec_timeout": exec_timeout,
             "branch_width": branch_width,
@@ -233,6 +264,14 @@ class _FakeRunner:
         max_steps_increase: float = 0.0,
         fail_on_completion_regression: bool = True,
     ):
+        self.last_compare_kwargs = {
+            "candidate": candidate,
+            "baseline": baseline,
+            "min_reward_delta": min_reward_delta,
+            "min_completion_delta": min_completion_delta,
+            "max_steps_increase": max_steps_increase,
+            "fail_on_completion_regression": fail_on_completion_regression,
+        }
         return SimpleNamespace(
             candidate_id="bench_new",
             baseline_id="bench_old",
@@ -245,6 +284,72 @@ class _FakeRunner:
             gates={"reward": True, "completion": True, "steps": True, "completion_regressions": True},
             passed=True,
         )
+
+    def import_benchmark_pack_preview(self, *, pack_paths, per_preset_limit: int = 5):
+        self.last_import_preview_kwargs = {
+            "pack_paths": pack_paths,
+            "per_preset_limit": per_preset_limit,
+        }
+        return [
+            {
+                "preset": "time_range_v1",
+                "source": "/tmp/time_range_v1.yaml",
+                "description": "Imported from pydantic eval",
+                "total_cases": 2,
+                "previewed_cases": 2,
+                "cases": [
+                    {
+                        "case_id": "single_day_mention",
+                        "environment": "generic",
+                        "max_steps": 4,
+                        "exec_timeout": 30,
+                        "task_preview": "I want to see logs from 2021-05-08",
+                    }
+                ],
+            }
+        ]
+
+    def visualize_run(
+        self,
+        run_id: str | None = None,
+        *,
+        include_children: bool = True,
+        max_depth: int = 3,
+    ):
+        self.last_viz_kwargs = {
+            "run_id": run_id,
+            "include_children": include_children,
+            "max_depth": max_depth,
+        }
+        return {
+            "run_id": run_id or "run_latest",
+            "run_path": "/tmp/run_latest.jsonl",
+            "environment": "dspy",
+            "framework": "native",
+            "task": "demo task",
+            "started_at": "2026-01-01T00:00:00Z",
+            "finished_at": "2026-01-01T00:00:01Z",
+            "completed": True,
+            "step_count": 2,
+            "total_reward": 0.8,
+            "final_response_preview": "done",
+            "usage": {"total_calls": 1, "prompt_tokens": 9, "completion_tokens": 5},
+            "action_counts": {"run_python": 1, "patch_file": 1},
+            "timeline": [],
+            "reward_curve": [],
+            "failures": [{"step": 1, "action": "run_python", "error": "boom"}],
+            "changes": [{"step": 2, "action": "patch_file", "path": "a.py", "diff_preview": "- a | + b"}],
+            "child_refs": [{"run_id": "run_child", "parent_step": 2}],
+            "children": [
+                {
+                    "run_id": "run_child",
+                    "total_reward": 0.2,
+                    "step_count": 1,
+                    "completed": True,
+                    "children": [],
+                }
+            ],
+        }
 
 
 def _build_handler():
@@ -268,6 +373,30 @@ def test_rlm_status_and_replay_do_not_fail():
     handler = _build_handler()
     handler.cmd_rlm(["status"])
     handler.cmd_rlm(["replay", "run_latest"])
+
+
+def test_rlm_viz_updates_context_and_forwards_options():
+    handler = _build_handler()
+    handler.cmd_rlm(["viz", "run_123", "depth=4", "children=off"])
+    assert handler.rlm_runner.last_viz_kwargs["run_id"] == "run_123"
+    assert handler.rlm_runner.last_viz_kwargs["max_depth"] == 4
+    assert handler.rlm_runner.last_viz_kwargs["include_children"] is False
+    assert handler.current_context["rlm_last_viz_run_id"] == "run_123"
+    assert handler.current_context["rlm_last_viz_failures"] == 1
+
+
+def test_rlm_viz_json_output(monkeypatch):
+    handler = _build_handler()
+    output = io.StringIO()
+    test_console = Console(file=output, force_terminal=False, color_system=None, width=120)
+    monkeypatch.setattr("rlm__code.commands.slash_commands.console", test_console)
+
+    handler.cmd_rlm(["viz", "--json"])
+
+    payload = json.loads(output.getvalue())
+    assert payload["command"] == "rlm_viz"
+    assert payload["run_id"] == "run_latest"
+    assert payload["summary"]["total_reward"] == 0.8
 
 
 def test_rlm_doctor_does_not_fail():
@@ -310,6 +439,37 @@ def test_rlm_run_passes_sub_model_route():
     assert handler.rlm_runner.last_run_kwargs["sub_model"] == "gpt-4o-mini"
 
 
+def test_rlm_run_passes_recursive_options():
+    handler = _build_handler()
+    handler.cmd_rlm(
+        [
+            "run",
+            "build",
+            "recursive",
+            "depth=3",
+            "children=5",
+            "parallel=4",
+            "budget=90",
+        ]
+    )
+    assert handler.rlm_runner.last_run_kwargs["max_depth"] == 3
+    assert handler.rlm_runner.last_run_kwargs["max_children_per_step"] == 5
+    assert handler.rlm_runner.last_run_kwargs["parallelism"] == 4
+    assert handler.rlm_runner.last_run_kwargs["time_budget_seconds"] == 90
+
+
+def test_rlm_run_passes_framework_option():
+    handler = _build_handler()
+    handler.cmd_rlm(["run", "framework", "check", "framework=pydantic-ai"])
+    assert handler.rlm_runner.last_run_kwargs["framework"] == "pydantic-ai"
+
+
+def test_rlm_run_passes_framework_dspy_option():
+    handler = _build_handler()
+    handler.cmd_rlm(["run", "framework", "check", "framework=dspy"])
+    assert handler.rlm_runner.last_run_kwargs["framework"] == "dspy"
+
+
 def test_rlm_chat_turn_passes_options():
     handler = _build_handler()
     handler.cmd_rlm(
@@ -335,6 +495,31 @@ def test_rlm_chat_turn_passes_options():
     assert handler.rlm_runner.last_chat_kwargs["keep_recent"] == 2
 
 
+def test_rlm_chat_turn_passes_recursive_options():
+    handler = _build_handler()
+    handler.cmd_rlm(
+        [
+            "chat",
+            "hello",
+            "recursive",
+            "depth=4",
+            "children=6",
+            "parallel=3",
+            "budget=45",
+        ]
+    )
+    assert handler.rlm_runner.last_chat_kwargs["max_depth"] == 4
+    assert handler.rlm_runner.last_chat_kwargs["max_children_per_step"] == 6
+    assert handler.rlm_runner.last_chat_kwargs["parallelism"] == 3
+    assert handler.rlm_runner.last_chat_kwargs["time_budget_seconds"] == 45
+
+
+def test_rlm_chat_turn_passes_framework_option():
+    handler = _build_handler()
+    handler.cmd_rlm(["chat", "hi", "there", "framework=google-adk"])
+    assert handler.rlm_runner.last_chat_kwargs["framework"] == "google-adk"
+
+
 def test_rlm_chat_status_and_reset_do_not_fail():
     handler = _build_handler()
     handler.cmd_rlm(["chat", "status", "session=demo"])
@@ -356,6 +541,12 @@ def test_rlm_bench_updates_context():
     handler.cmd_rlm(["bench", "preset=dspy_quick", "limit=1"])
     assert handler.current_context["rlm_last_benchmark_id"] == "bench_test"
     assert handler.current_context["rlm_last_benchmark_preset"] == "dspy_quick"
+
+
+def test_rlm_bench_passes_framework_option():
+    handler = _build_handler()
+    handler.cmd_rlm(["bench", "preset=dspy_quick", "framework=pydantic-ai"])
+    assert handler.rlm_runner.last_benchmark_kwargs["framework"] == "pydantic-ai"
 
 
 def test_rlm_bench_pack_paths_are_forwarded():
@@ -389,8 +580,57 @@ def test_rlm_bench_compare_updates_context():
     assert handler.current_context["rlm_last_benchmark_compare_passed"] is True
 
 
+def test_rlm_bench_validate_updates_context():
+    handler = _build_handler()
+    handler.cmd_rlm(
+        [
+            "bench",
+            "validate",
+            "candidate=bench_new",
+            "baseline=bench_old",
+            "min_reward_delta=0.05",
+        ]
+    )
+    assert handler.current_context["rlm_last_benchmark_validate_candidate"] == "bench_new"
+    assert handler.current_context["rlm_last_benchmark_validate_baseline"] == "bench_old"
+    assert handler.current_context["rlm_last_benchmark_validate_passed"] is True
+    assert handler.current_context["rlm_last_benchmark_validate_exit_code"] == 0
+    assert handler.rlm_runner.last_compare_kwargs["min_reward_delta"] == 0.05
+
+
+def test_rlm_bench_validate_json_output(monkeypatch):
+    handler = _build_handler()
+    output = io.StringIO()
+    test_console = Console(file=output, force_terminal=False, color_system=None, width=120)
+    monkeypatch.setattr("rlm__code.commands.slash_commands.console", test_console)
+
+    handler.cmd_rlm(["bench", "validate", "--json"])
+
+    payload = json.loads(output.getvalue())
+    assert payload["command"] == "rlm_bench_validate"
+    assert payload["passed"] is True
+    assert payload["exit_code"] == 0
+    assert payload["candidate_id"] == "bench_new"
+
+
 def test_rlm_bench_compare_works_without_connected_model():
     handler = _build_handler()
     handler.llm_connector.current_model = None
     handler.cmd_rlm(["bench", "compare"])
     assert handler.current_context["rlm_last_benchmark_compare_passed"] is True
+
+
+def test_rlm_import_evals_forwards_pack_paths_and_limit():
+    handler = _build_handler()
+    handler.cmd_rlm(["import-evals", "pack=a.yaml,b.json", "limit=3"])
+    assert handler.rlm_runner.last_import_preview_kwargs["pack_paths"] == ["a.yaml", "b.json"]
+    assert handler.rlm_runner.last_import_preview_kwargs["per_preset_limit"] == 3
+    assert handler.current_context["rlm_last_import_preset_count"] == 1
+    assert handler.current_context["rlm_last_import_case_count"] == 2
+
+
+def test_rlm_import_evals_works_without_connected_model():
+    handler = _build_handler()
+    handler.llm_connector.current_model = None
+    handler.cmd_rlm(["import-evals", "pack=adk_eval.json"])
+    assert handler.rlm_runner.last_import_preview_kwargs["pack_paths"] == ["adk_eval.json"]
