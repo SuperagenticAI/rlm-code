@@ -9,10 +9,10 @@ from pathlib import Path
 
 import pytest
 
-from rlm__code.execution import ExecutionEngine
-from rlm__code.export import ExportImportHandler, PackageBuilder, PackageMetadata
-from rlm__code.optimization import Example, OptimizationWorkflowManager
-from rlm__code.session import SessionStateManager
+from rlm_code.execution import ExecutionEngine
+from rlm_code.export import ExportImportHandler, PackageBuilder, PackageMetadata
+from rlm_code.optimization import Example, OptimizationWorkflowManager
+from rlm_code.session import SessionStateManager
 
 
 class MockSession:

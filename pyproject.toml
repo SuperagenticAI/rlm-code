@@ -120,10 +120,11 @@ Repository = "https://github.com/SuperagenticAI/rlm-code"
 Changelog = "https://github.com/SuperagenticAI/rlm-code/blob/main/CHANGELOG.md"
 
 [project.scripts]
-rlm-code = "rlm__code.main:main"
+rlm-code = "rlm_code.main:main"
+rlm-research = "rlm_code.rlm.research_tui:run_tui"
 
 [tool.hatch.build.targets.wheel]
-packages = ["rlm__code"]
+packages = ["rlm_code"]
 exclude = [
     "docs/",
     "mkdocs.yml",
@@ -131,11 +132,11 @@ exclude = [
 
 # Include py.typed marker for PEP 561 compliance
 [tool.hatch.build.targets.wheel.force-include]
-"rlm__code/py.typed" = "rlm__code/py.typed"
+"rlm_code/py.typed" = "rlm_code/py.typed"
 
 [tool.hatch.build.targets.sdist]
 include = [
-    "rlm__code/",
+    "rlm_code/",
     "tests/",
     "README.md",
     "LICENSE",
@@ -183,7 +184,7 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 
 [tool.ruff.lint.isort]
-known-first-party = ["rlm__code"]
+known-first-party = ["rlm_code"]
 
 [tool.mypy]
 python_version = "3.10"
@@ -215,13 +216,13 @@ ignore_missing_imports = true
 # Strict typing for core modules we've improved
 [[tool.mypy.overrides]]
 module = [
-    "rlm__code.core.config",
-    "rlm__code.core.debug_logger",
-    "rlm__code.mcp.utils",
-    "rlm__code.mcp.retry",
-    "rlm__code.models.cache",
-    "rlm__code.models.streaming",
-    "rlm__code.validation.security",
+    "rlm_code.core.config",
+    "rlm_code.core.debug_logger",
+    "rlm_code.mcp.utils",
+    "rlm_code.mcp.retry",
+    "rlm_code.models.cache",
+    "rlm_code.models.streaming",
+    "rlm_code.validation.security",
 ]
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
@@ -240,7 +241,7 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["rlm__code"]
+source = ["rlm_code"]
 omit = [
     "*/tests/*",
     "*/test_*",

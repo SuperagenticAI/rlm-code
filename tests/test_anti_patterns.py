@@ -6,8 +6,8 @@ import ast
 
 import pytest
 
-from rlm__code.validation.anti_patterns import AntiPatternDetector
-from rlm__code.validation.models import IssueCategory, IssueSeverity
+from rlm_code.validation.anti_patterns import AntiPatternDetector
+from rlm_code.validation.models import IssueCategory, IssueSeverity
 
 
 @pytest.fixture

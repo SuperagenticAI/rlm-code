@@ -4,8 +4,8 @@ Tests for DSPy code validation.
 
 import pytest
 
-from rlm__code.validation import DSPyValidator, ValidationIssue, ValidationReport
-from rlm__code.validation.models import IssueCategory, IssueSeverity
+from rlm_code.validation import DSPyValidator, ValidationIssue, ValidationReport
+from rlm_code.validation.models import IssueCategory, IssueSeverity
 
 
 class TestDSPyValidator:
@@ -105,7 +105,7 @@ def broken_function(
 
     def test_quality_metrics_grade_calculation(self):
         """Test quality metrics grade calculation."""
-        from rlm__code.validation.models import QualityMetrics
+        from rlm_code.validation.models import QualityMetrics
 
         assert QualityMetrics.calculate_grade(95) == "A"
         assert QualityMetrics.calculate_grade(85) == "B"

@@ -6,8 +6,8 @@ import ast
 
 import pytest
 
-from rlm__code.validation.models import IssueSeverity
-from rlm__code.validation.signature_validator import SignatureValidator
+from rlm_code.validation.models import IssueSeverity
+from rlm_code.validation.signature_validator import SignatureValidator
 
 
 class TestSignatureValidator:
@@ -157,7 +157,7 @@ class TestSignatureValidatorIntegration:
 
     def test_full_validation_with_signature(self):
         """Test full validation including signature checks."""
-        from rlm__code.validation import DSPyValidator
+        from rlm_code.validation import DSPyValidator
 
         code = """
 import dspy
@@ -175,7 +175,7 @@ class EmailSignature(dspy.Signature):
 
     def test_validation_with_perfect_signature(self):
         """Test validation with perfect signature."""
-        from rlm__code.validation import DSPyValidator
+        from rlm_code.validation import DSPyValidator
 
         code = '''
 import dspy

@@ -3,7 +3,7 @@
 import threading
 import time
 
-from rlm__code.rlm.environments import DSPyCodingRLMEnvironment
+from rlm_code.rlm.environments import DSPyCodingRLMEnvironment
 
 
 class _FakeEngine:

@@ -5,10 +5,10 @@ from textwrap import dedent
 
 import pytest
 
-from rlm__code.core.config import ProjectConfig
-from rlm__code.core.exceptions import ConfigurationError
-from rlm__code.execution.sandbox import ExecutionSandbox
-from rlm__code.sandbox.runtimes import (
+from rlm_code.core.config import ProjectConfig
+from rlm_code.core.exceptions import ConfigurationError
+from rlm_code.execution.sandbox import ExecutionSandbox
+from rlm_code.sandbox.runtimes import (
     RuntimeExecutionResult,
     create_runtime,
     detect_runtime_health,
@@ -75,7 +75,7 @@ def test_execution_sandbox_uses_runtime_override(monkeypatch):
             assert request.timeout_seconds == 7
             return RuntimeExecutionResult(return_code=0, stdout="ok", stderr="")
 
-    monkeypatch.setattr("rlm__code.execution.sandbox.create_runtime", lambda name, cfg: _FakeRuntime())
+    monkeypatch.setattr("rlm_code.execution.sandbox.create_runtime", lambda name, cfg: _FakeRuntime())
 
     code = "print('hello')"
     return_code, stdout, stderr = sandbox.execute(code)

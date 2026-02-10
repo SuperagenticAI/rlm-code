@@ -4,8 +4,8 @@ import json
 import os
 from types import SimpleNamespace
 
-from rlm__code.rlm.observability import LocalJSONLSink, RLMObservability
-from rlm__code.rlm.runner import RLMRunner
+from rlm_code.rlm.observability import LocalJSONLSink, RLMObservability
+from rlm_code.rlm.runner import RLMRunner
 
 
 class _FakeConnector:

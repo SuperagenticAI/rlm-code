@@ -6,7 +6,7 @@ import asyncio
 import pytest
 from hypothesis import given, strategies as st, assume
 
-from rlm__code.mcp.retry import RetryConfig, RetryController
+from rlm_code.mcp.retry import RetryConfig, RetryController
 
 
 class TestRetryConfig:

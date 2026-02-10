@@ -5,8 +5,8 @@ Tests for security validator.
 import pytest
 from hypothesis import given, strategies as st
 
-from rlm__code.validation.security import SecurityValidator
-from rlm__code.validation.models import IssueSeverity
+from rlm_code.validation.security import SecurityValidator
+from rlm_code.validation.models import IssueSeverity
 
 
 class TestEvalDetection:
@@ -173,8 +173,8 @@ class TestGeneratedCodeSafety:
 
         **Validates: Requirements 8.3**
         """
-        from rlm__code.models.code_generator import CodeGenerator
-        from rlm__code.models.task_collector import (
+        from rlm_code.models.code_generator import CodeGenerator
+        from rlm_code.models.task_collector import (
             FieldDefinition,
             ReasoningPattern,
             TaskDefinition,
@@ -210,7 +210,7 @@ class TestGeneratedCodeSafety:
         program = generator.generate_from_task(task_def, [], pattern, use_cache=False)
 
         # Check that generated code doesn't contain eval()
-        from rlm__code.validation.security import SecurityValidator
+        from rlm_code.validation.security import SecurityValidator
 
         validator = SecurityValidator()
 

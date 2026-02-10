@@ -6,8 +6,8 @@ import ast
 
 import pytest
 
-from rlm__code.validation.models import IssueSeverity
-from rlm__code.validation.module_validator import ModuleValidator
+from rlm_code.validation.models import IssueSeverity
+from rlm_code.validation.module_validator import ModuleValidator
 
 
 class TestModuleValidator:
@@ -207,7 +207,7 @@ class TestModuleValidatorIntegration:
 
     def test_full_validation_with_module(self):
         """Test full validation including module checks."""
-        from rlm__code.validation import DSPyValidator
+        from rlm_code.validation import DSPyValidator
 
         code = """
 import dspy
@@ -228,7 +228,7 @@ class EmailClassifier(dspy.Module):
 
     def test_validation_with_perfect_module(self):
         """Test validation with perfect module."""
-        from rlm__code.validation import DSPyValidator
+        from rlm_code.validation import DSPyValidator
 
         code = '''
 import dspy

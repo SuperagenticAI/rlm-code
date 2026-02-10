@@ -5,7 +5,7 @@ Tests for MCP utility functions.
 import pytest
 from hypothesis import given, strategies as st
 
-from rlm__code.mcp.utils import is_closed_connection_error, format_mcp_error_message
+from rlm_code.mcp.utils import is_closed_connection_error, format_mcp_error_message
 
 
 class TestIsClosedConnectionError:

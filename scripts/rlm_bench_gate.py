@@ -13,7 +13,7 @@ import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
-from rlm__code.rlm import RLMRunner
+from rlm_code.rlm import RLMRunner
 
 
 class _GateConnector:

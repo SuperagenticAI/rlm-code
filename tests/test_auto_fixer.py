@@ -4,8 +4,8 @@ Tests for DSPy Auto-Fixer
 
 import pytest
 
-from rlm__code.validation.auto_fixer import AutoFixer, CodeFix
-from rlm__code.validation.models import IssueCategory, IssueSeverity, ValidationIssue
+from rlm_code.validation.auto_fixer import AutoFixer, CodeFix
+from rlm_code.validation.models import IssueCategory, IssueSeverity, ValidationIssue
 
 
 @pytest.fixture

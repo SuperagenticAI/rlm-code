@@ -5,14 +5,14 @@ Tests for Validation Report Generator
 import pytest
 from rich.console import Console
 
-from rlm__code.validation.models import (
+from rlm_code.validation.models import (
     IssueCategory,
     IssueSeverity,
     ValidationIssue,
     ValidationReport,
 )
-from rlm__code.validation.quality_scorer import QualityMetrics
-from rlm__code.validation.report_generator import ReportGenerator
+from rlm_code.validation.quality_scorer import QualityMetrics
+from rlm_code.validation.report_generator import ReportGenerator
 
 
 @pytest.fixture

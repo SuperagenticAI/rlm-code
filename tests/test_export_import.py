@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from rlm__code.core.exceptions import ExportError, ImportError
-from rlm__code.export import ExportImportHandler, PackageBuilder, PackageMetadata
+from rlm_code.core.exceptions import ExportError, ImportError
+from rlm_code.export import ExportImportHandler, PackageBuilder, PackageMetadata
 
 
 @pytest.fixture

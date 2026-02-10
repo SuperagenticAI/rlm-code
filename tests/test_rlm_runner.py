@@ -5,10 +5,10 @@ import time
 from pathlib import Path
 from types import SimpleNamespace
 
-from rlm__code.rlm import RLMRunner
-from rlm__code.rlm.benchmarks import load_benchmark_packs
-from rlm__code.rlm.context_store import ContextRef, LazyFileContext
-from rlm__code.rlm.frameworks import FrameworkEpisodeResult, FrameworkStepRecord
+from rlm_code.rlm import RLMRunner
+from rlm_code.rlm.benchmarks import load_benchmark_packs
+from rlm_code.rlm.context_store import ContextRef, LazyFileContext
+from rlm_code.rlm.frameworks import FrameworkEpisodeResult, FrameworkStepRecord
 
 
 class _FakeConnector:

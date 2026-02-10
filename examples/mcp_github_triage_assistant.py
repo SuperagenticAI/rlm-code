@@ -52,8 +52,8 @@ from typing import Any
 
 import dspy
 
-from rlm__code.core.config import ConfigManager
-from rlm__code.mcp import MCPClientManager
+from rlm_code.core.config import ConfigManager
+from rlm_code.mcp import MCPClientManager
 
 
 class GitHubTriageSignature(dspy.Signature):

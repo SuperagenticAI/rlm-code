@@ -5,7 +5,7 @@ Tests for streaming support.
 import asyncio
 import pytest
 
-from rlm__code.models.streaming import (
+from rlm_code.models.streaming import (
     StreamConfig,
     StreamManager,
     StreamingFallback,

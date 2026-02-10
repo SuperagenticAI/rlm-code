@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from rlm__code.project.scanner import ProjectScanner, ProjectType
+from rlm_code.project.scanner import ProjectScanner, ProjectType
 
 
 @pytest.fixture

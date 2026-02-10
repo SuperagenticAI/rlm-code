@@ -4,8 +4,8 @@ Tests for DSPy Learning Integration
 
 import pytest
 
-from rlm__code.validation.learning_integration import LearningIntegration, LearningResource
-from rlm__code.validation.models import IssueCategory, IssueSeverity, ValidationIssue
+from rlm_code.validation.learning_integration import LearningIntegration, LearningResource
+from rlm_code.validation.models import IssueCategory, IssueSeverity, ValidationIssue
 
 
 @pytest.fixture

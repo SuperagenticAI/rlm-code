@@ -1,6 +1,6 @@
 """Tests for RLM-related project config sections."""
 
-from rlm__code.core.config import ConfigManager, ProjectConfig
+from rlm_code.core.config import ConfigManager, ProjectConfig
 
 
 def test_project_config_loads_rlm_reward_section(tmp_path):

@@ -6,8 +6,8 @@ import ast
 
 import pytest
 
-from rlm__code.validation.models import IssueSeverity
-from rlm__code.validation.predictor_validator import PredictorValidator
+from rlm_code.validation.models import IssueSeverity
+from rlm_code.validation.predictor_validator import PredictorValidator
 
 
 class TestPredictorValidator:
@@ -160,7 +160,7 @@ class TestPredictorValidatorIntegration:
 
     def test_full_validation_with_predictors(self):
         """Test full validation including predictor checks."""
-        from rlm__code.validation import DSPyValidator
+        from rlm_code.validation import DSPyValidator
 
         code = '''
 import dspy
@@ -184,7 +184,7 @@ class EmailClassifier(dspy.Module):
 
     def test_validation_with_good_predictor_usage(self):
         """Test validation with proper predictor usage."""
-        from rlm__code.validation import DSPyValidator
+        from rlm_code.validation import DSPyValidator
 
         code = '''
 import dspy

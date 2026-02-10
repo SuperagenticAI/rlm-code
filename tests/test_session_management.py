@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from rlm__code.core.exceptions import SessionNotFoundError
-from rlm__code.session import SessionInfo, SessionState, SessionStateManager
+from rlm_code.core.exceptions import SessionNotFoundError
+from rlm_code.session import SessionInfo, SessionState, SessionStateManager
 
 
 class MockSession:

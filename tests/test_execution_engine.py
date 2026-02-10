@@ -4,8 +4,8 @@ Unit tests for execution engine.
 
 import pytest
 
-from rlm__code.core.exceptions import CodeValidationError
-from rlm__code.execution import ExecutionEngine
+from rlm_code.core.exceptions import CodeValidationError
+from rlm_code.execution import ExecutionEngine
 
 
 @pytest.fixture

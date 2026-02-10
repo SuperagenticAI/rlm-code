@@ -47,8 +47,8 @@ import asyncio
 
 import dspy
 
-from rlm__code.core.config import ConfigManager
-from rlm__code.mcp import MCPClientManager
+from rlm_code.core.config import ConfigManager
+from rlm_code.mcp import MCPClientManager
 
 
 class FileSummarySignature(dspy.Signature):
@@ -168,8 +168,8 @@ async def run_demo() -> None:
 
     # Example: inspect a couple of files in this repo
     paths = [
-        "rlm__code/main.py",
-        "rlm__code/commands/interactive_command.py",
+        "rlm_code/main.py",
+        "rlm_code/commands/interactive_command.py",
     ]
     question = "Briefly explain what these files do and how they fit into the CLI."
 

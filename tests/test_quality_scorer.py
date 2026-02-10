@@ -4,8 +4,8 @@ Tests for DSPy Quality Scorer
 
 import pytest
 
-from rlm__code.validation.models import IssueCategory, IssueSeverity, ValidationIssue
-from rlm__code.validation.quality_scorer import QualityScorer
+from rlm_code.validation.models import IssueCategory, IssueSeverity, ValidationIssue
+from rlm_code.validation.quality_scorer import QualityScorer
 
 
 @pytest.fixture

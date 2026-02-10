@@ -7,8 +7,8 @@ import time
 import pytest
 from hypothesis import given, strategies as st
 
-from rlm__code.models.cache import CacheConfig, CacheEntry, CodeGenerationCache
-from rlm__code.models.task_collector import FieldDefinition, ReasoningPattern, TaskDefinition
+from rlm_code.models.cache import CacheConfig, CacheEntry, CodeGenerationCache
+from rlm_code.models.task_collector import FieldDefinition, ReasoningPattern, TaskDefinition
 
 
 def make_task_def(description: str = "Test task", input_name: str = "input", output_name: str = "output") -> TaskDefinition:

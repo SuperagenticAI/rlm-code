@@ -1,6 +1,6 @@
 """Tests for persistent shell behavior used by TUI mode."""
 
-from rlm__code.ui.persistent_shell import PersistentShell
+from rlm_code.ui.persistent_shell import PersistentShell
 
 
 def test_persistent_shell_preserves_state():

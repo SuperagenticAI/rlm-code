@@ -110,7 +110,7 @@ def sentiment_accuracy_with_feedback(gold, pred, trace=None, pred_name=None, pre
     score = 1.0 if correct else 0.0
 
     # GEPA expects: return score (float) when correct, or dict with score+feedback when incorrect
-    # This matches the format used in rlm__code/generators/gepa_generator.py
+    # This matches the format used in rlm_code/generators/gepa_generator.py
     if correct:
         return score
     else:

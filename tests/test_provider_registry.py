@@ -4,10 +4,10 @@ from pathlib import Path
 
 import pytest
 
-from rlm__code.core.config import ConfigManager
-from rlm__code.core.exceptions import ModelError
-from rlm__code.models.llm_connector import LLMConnector
-from rlm__code.models.providers import ProviderRegistry
+from rlm_code.core.config import ConfigManager
+from rlm_code.core.exceptions import ModelError
+from rlm_code.models.llm_connector import LLMConnector
+from rlm_code.models.providers import ProviderRegistry
 
 
 def make_connector(tmp_path: Path) -> LLMConnector:
@@ -80,7 +80,7 @@ def test_opencode_keyless_generation_uses_http_without_auth_header(tmp_path: Pat
     """Keyless OpenCode responses should not inject fake bearer tokens."""
     connector = make_connector(tmp_path)
     connector.connect_to_model("kimi-k2.5-free", "opencode")
-    monkeypatch.setattr("rlm__code.models.llm_connector.shutil.which", lambda _: None)
+    monkeypatch.setattr("rlm_code.models.llm_connector.shutil.which", lambda _: None)
 
     captured: dict[str, object] = {}
 
@@ -98,7 +98,7 @@ def test_opencode_keyless_generation_uses_http_without_auth_header(tmp_path: Pat
         captured["timeout"] = timeout
         return _Response()
 
-    monkeypatch.setattr("rlm__code.models.llm_connector.requests.post", fake_post)
+    monkeypatch.setattr("rlm_code.models.llm_connector.requests.post", fake_post)
 
     reply = connector.generate_response("say hello")
     assert reply == "hello from opencode"
@@ -114,7 +114,7 @@ def test_opencode_keyless_generation_uses_cli_when_available(tmp_path: Path, mon
     connector = make_connector(tmp_path)
     connector.connect_to_model("kimi-k2.5-free", "opencode")
 
-    monkeypatch.setattr("rlm__code.models.llm_connector.shutil.which", lambda _: "/usr/bin/opencode")
+    monkeypatch.setattr("rlm_code.models.llm_connector.shutil.which", lambda _: "/usr/bin/opencode")
 
     class _Proc:
         def __init__(self):
@@ -133,7 +133,7 @@ def test_opencode_keyless_generation_uses_cli_when_available(tmp_path: Path, mon
         captured["cmd"] = cmd
         return _Proc()
 
-    monkeypatch.setattr("rlm__code.models.llm_connector.subprocess.run", fake_run)
+    monkeypatch.setattr("rlm_code.models.llm_connector.subprocess.run", fake_run)
 
     reply = connector.generate_response("say hello")
     assert reply == "hello from cli"
@@ -216,7 +216,7 @@ def test_connector_prefers_opencode_cli_models(tmp_path: Path, monkeypatch):
     def fake_run(cmd, capture_output, text, timeout, check):  # noqa: ARG001
         return _Proc()
 
-    monkeypatch.setattr("rlm__code.models.llm_connector.subprocess.run", fake_run)
+    monkeypatch.setattr("rlm_code.models.llm_connector.subprocess.run", fake_run)
 
     models = connector.list_provider_example_models("opencode", limit=2)
     assert models == ["my-free-model", "my-free-model-2"]
@@ -235,7 +235,7 @@ def test_connector_filters_opencode_paid_models_without_api_key(tmp_path: Path, 
         return _Proc()
 
     monkeypatch.delenv("OPENCODE_API_KEY", raising=False)
-    monkeypatch.setattr("rlm__code.models.llm_connector.subprocess.run", fake_run)
+    monkeypatch.setattr("rlm_code.models.llm_connector.subprocess.run", fake_run)
 
     models = connector.list_provider_example_models("opencode", limit=8)
     assert "pro-paid-model" not in models

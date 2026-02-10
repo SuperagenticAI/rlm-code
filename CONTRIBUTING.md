@@ -117,7 +117,7 @@ Follow our coding standards (see below).
 Write tests for new features and bug fixes.
 
 ```bash
-pytest tests/ -v --cov=rlm__code
+pytest tests/ -v --cov=rlm_code
 ```
 
 ### 4. Format and Lint
@@ -132,7 +132,7 @@ ruff format .
 We use [mypy](https://mypy.readthedocs.io/) for static type checking:
 
 ```bash
-mypy rlm__code
+mypy rlm_code
 ```
 
 Note: Some third-party libraries (dspy, mcp, etc.) may not have complete type stubs, so some `ignore_missing_imports` exceptions are configured in `pyproject.toml`.
@@ -247,7 +247,7 @@ Organize imports in three groups (Ruff does this automatically):
 pytest
 
 # Run with coverage
-pytest --cov=rlm__code --cov-report=html
+pytest --cov=rlm_code --cov-report=html
 
 # Run specific test
 pytest tests/test_specific_file.py
@@ -281,7 +281,7 @@ When making changes:
 
 ```
 rlm-code/
-├── rlm__code/          # Main package
+├── rlm_code/          # Main package
 │   ├── commands/       # CLI commands
 │   ├── core/          # Core functionality
 │   ├── models/        # LLM integration
@@ -310,8 +310,8 @@ twine check dist/*
 ```
 
 The built packages will be in the `dist/` directory:
-* `rlm__code-X.Y.Z-py3-none-any.whl` - Wheel distribution
-* `rlm__code-X.Y.Z.tar.gz` - Source distribution
+* `rlm_code-X.Y.Z-py3-none-any.whl` - Wheel distribution
+* `rlm_code-X.Y.Z.tar.gz` - Source distribution
 
 ### Testing Package Installation
 
@@ -319,10 +319,10 @@ Test installing the built package:
 
 ```bash
 # Install from wheel
-uv pip install dist/rlm__code-*.whl
+uv pip install dist/rlm_code-*.whl
 
 # Or install from source
-uv pip install dist/rlm__code-*.tar.gz
+uv pip install dist/rlm_code-*.tar.gz
 
 # Verify installation
 rlm-code --version
@@ -334,7 +334,7 @@ The package uses modern Python packaging standards:
 * **`pyproject.toml`** - PEP 517/518 compliant build configuration
 * **`hatchling`** - Modern build backend (no setup.py needed)
 * **`MANIFEST.in`** - Controls which files are included in source distributions (README, LICENSE, CHANGELOG, etc.)
-* **Entry point** - `rlm-code` command defined in `[project.scripts]` mapping to `rlm__code.main:main`
+* **Entry point** - `rlm-code` command defined in `[project.scripts]` mapping to `rlm_code.main:main`
 
 When adding files that should be included in distributions:
 * Update `MANIFEST.in` for source distributions

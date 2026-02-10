@@ -6,8 +6,8 @@ from types import SimpleNamespace
 
 import requests
 
-from rlm__code.models.providers.acp_discovery import ACPDiscovery
-from rlm__code.models.providers.local_discovery import LocalProviderDiscovery
+from rlm_code.models.providers.acp_discovery import ACPDiscovery
+from rlm_code.models.providers.local_discovery import LocalProviderDiscovery
 
 
 class _FakeResponse:
@@ -31,7 +31,7 @@ def test_local_discovery_detects_healthy_endpoints(monkeypatch):
             return _FakeResponse({"data": [{"id": "meta-llama/Llama-3.1-8B-Instruct"}]})
         raise requests.ConnectionError("offline")
 
-    monkeypatch.setattr("rlm__code.models.providers.local_discovery.requests.get", fake_get)
+    monkeypatch.setattr("rlm_code.models.providers.local_discovery.requests.get", fake_get)
 
     discovery = LocalProviderDiscovery(timeout=0.2)
     results = discovery.discover()
@@ -52,8 +52,8 @@ def test_acp_discovery_reports_install_and_config(monkeypatch):
     def fake_run(cmd, capture_output, text, timeout, check):  # noqa: ARG001
         return SimpleNamespace(stdout="codex 1.2.3\n", stderr="")
 
-    monkeypatch.setattr("rlm__code.models.providers.acp_discovery.shutil.which", fake_which)
-    monkeypatch.setattr("rlm__code.models.providers.acp_discovery.subprocess.run", fake_run)
+    monkeypatch.setattr("rlm_code.models.providers.acp_discovery.shutil.which", fake_which)
+    monkeypatch.setattr("rlm_code.models.providers.acp_discovery.subprocess.run", fake_run)
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
     discovery = ACPDiscovery(version_timeout=0.5)

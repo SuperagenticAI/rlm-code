@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from rlm__code.core.exceptions import InsufficientDataError
-from rlm__code.optimization import (
+from rlm_code.core.exceptions import InsufficientDataError
+from rlm_code.optimization import (
     DataCollector,
     Example,
     OptimizationWorkflowManager,

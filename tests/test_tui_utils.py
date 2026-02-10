@@ -1,6 +1,6 @@
 """Tests for TUI utility helpers."""
 
-from rlm__code.ui.tui_utils import filter_commands, generate_unified_diff, suggest_command
+from rlm_code.ui.tui_utils import filter_commands, generate_unified_diff, suggest_command
 
 
 def test_filter_commands_prioritizes_prefix_matches():

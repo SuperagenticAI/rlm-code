@@ -15,8 +15,8 @@ import pytest
 from hypothesis import assume, given
 from hypothesis import strategies as st
 
-from rlm__code.validation.models import IssueSeverity
-from rlm__code.validation.validator import DSPyValidator
+from rlm_code.validation.models import IssueSeverity
+from rlm_code.validation.validator import DSPyValidator
 
 PYTHON_KEYWORDS = set(keyword.kwlist)
 
@@ -192,8 +192,8 @@ class TestCodeGeneratorProperties:
         
         **Validates: Requirements 2.3**
         """
-        from rlm__code.models.code_generator import CodeGenerator
-        from rlm__code.models.task_collector import (
+        from rlm_code.models.code_generator import CodeGenerator
+        from rlm_code.models.task_collector import (
             FieldDefinition,
             ReasoningPattern,
             TaskDefinition,
@@ -279,7 +279,7 @@ class TestConfigurationProperties:
         import tempfile
         from pathlib import Path
 
-        from rlm__code.core.config import GepaConfig, ModelConfig, ProjectConfig
+        from rlm_code.core.config import GepaConfig, ModelConfig, ProjectConfig
         
         # Create a configuration
         config = ProjectConfig(
@@ -316,32 +316,32 @@ class TestDocumentationProperties:
     # **Feature: rlm-code-improvements, Property 14: Public Method Documentation**
     @given(st.sampled_from([
         # Core modules
-        "rlm__code.core.config",
-        "rlm__code.core.debug_logger",
+        "rlm_code.core.config",
+        "rlm_code.core.debug_logger",
         # MCP modules
-        "rlm__code.mcp.utils",
-        "rlm__code.mcp.retry",
-        "rlm__code.mcp.client_manager",
+        "rlm_code.mcp.utils",
+        "rlm_code.mcp.retry",
+        "rlm_code.mcp.client_manager",
         # Model modules
-        "rlm__code.models.cache",
-        "rlm__code.models.streaming",
-        "rlm__code.models.code_generator",
-        "rlm__code.models.model_manager",
+        "rlm_code.models.cache",
+        "rlm_code.models.streaming",
+        "rlm_code.models.code_generator",
+        "rlm_code.models.model_manager",
         # Validation modules
-        "rlm__code.validation.validator",
-        "rlm__code.validation.security",
-        "rlm__code.validation.signature_validator",
-        "rlm__code.validation.module_validator",
+        "rlm_code.validation.validator",
+        "rlm_code.validation.security",
+        "rlm_code.validation.signature_validator",
+        "rlm_code.validation.module_validator",
         # Execution modules
-        "rlm__code.execution.engine",
+        "rlm_code.execution.engine",
         # Runtime modules
-        "rlm__code.rlm.runner",
+        "rlm_code.rlm.runner",
     ]))
     def test_public_methods_have_docstrings(self, module_name: str):
         """
         Property 14: Public Method Documentation
         
-        For any public method in the rlm__code package, the method SHALL have
+        For any public method in the rlm_code package, the method SHALL have
         a non-empty docstring.
         
         **Validates: Requirements 9.2**

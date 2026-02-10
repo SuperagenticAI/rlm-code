@@ -2,8 +2,8 @@
 
 from dataclasses import dataclass, field
 
-from rlm__code.commands.slash_commands import SlashCommandHandler
-from rlm__code.sandbox.runtimes.registry import RuntimeDoctorCheck, RuntimeHealth
+from rlm_code.commands.slash_commands import SlashCommandHandler
+from rlm_code.sandbox.runtimes.registry import RuntimeDoctorCheck, RuntimeHealth
 
 
 @dataclass
@@ -52,7 +52,7 @@ def test_sandbox_use_updates_config_and_engine(monkeypatch):
         "apple-container": RuntimeHealth(runtime="apple-container", available=False, detail="missing"),
     }
     monkeypatch.setattr(
-        "rlm__code.commands.slash_commands.detect_runtime_health", lambda: health
+        "rlm_code.commands.slash_commands.detect_runtime_health", lambda: health
     )
 
     handler.cmd_sandbox(["use", "docker"])
@@ -71,7 +71,7 @@ def test_sandbox_status_runs_without_error(monkeypatch):
         "apple-container": RuntimeHealth(runtime="apple-container", available=False, detail="missing"),
     }
     monkeypatch.setattr(
-        "rlm__code.commands.slash_commands.detect_runtime_health", lambda: health
+        "rlm_code.commands.slash_commands.detect_runtime_health", lambda: health
     )
 
     handler.cmd_sandbox(["status"])
@@ -80,7 +80,7 @@ def test_sandbox_status_runs_without_error(monkeypatch):
 def test_sandbox_doctor_runs_without_error(monkeypatch):
     handler = _build_handler()
     monkeypatch.setattr(
-        "rlm__code.commands.slash_commands.run_runtime_doctor",
+        "rlm_code.commands.slash_commands.run_runtime_doctor",
         lambda sandbox_config, project_root: [
             RuntimeDoctorCheck(
                 name="configured_runtime",

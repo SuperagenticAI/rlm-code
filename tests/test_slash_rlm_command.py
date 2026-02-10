@@ -7,8 +7,8 @@ from types import SimpleNamespace
 
 from rich.console import Console
 
-from rlm__code.commands.slash_commands import SlashCommandHandler
-from rlm__code.rlm import EnvironmentDoctorCheck
+from rlm_code.commands.slash_commands import SlashCommandHandler
+from rlm_code.rlm import EnvironmentDoctorCheck
 
 
 class _FakeRunner:
@@ -389,7 +389,7 @@ def test_rlm_viz_json_output(monkeypatch):
     handler = _build_handler()
     output = io.StringIO()
     test_console = Console(file=output, force_terminal=False, color_system=None, width=120)
-    monkeypatch.setattr("rlm__code.commands.slash_commands.console", test_console)
+    monkeypatch.setattr("rlm_code.commands.slash_commands.console", test_console)
 
     handler.cmd_rlm(["viz", "--json"])
 
@@ -408,7 +408,7 @@ def test_rlm_doctor_json_output(monkeypatch):
     handler = _build_handler()
     output = io.StringIO()
     test_console = Console(file=output, force_terminal=False, color_system=None, width=120)
-    monkeypatch.setattr("rlm__code.commands.slash_commands.console", test_console)
+    monkeypatch.setattr("rlm_code.commands.slash_commands.console", test_console)
 
     handler.cmd_rlm(["doctor", "env=dspy", "--json"])
 
@@ -602,7 +602,7 @@ def test_rlm_bench_validate_json_output(monkeypatch):
     handler = _build_handler()
     output = io.StringIO()
     test_console = Console(file=output, force_terminal=False, color_system=None, width=120)
-    monkeypatch.setattr("rlm__code.commands.slash_commands.console", test_console)
+    monkeypatch.setattr("rlm_code.commands.slash_commands.console", test_console)
 
     handler.cmd_rlm(["bench", "validate", "--json"])
 

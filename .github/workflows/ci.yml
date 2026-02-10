@@ -36,12 +36,12 @@ jobs:
       - name: Run ruff linter
         run: |
           source .venv/bin/activate
-          ruff check rlm__code tests
+          ruff check rlm_code tests
 
       - name: Run ruff formatter check
         run: |
           source .venv/bin/activate
-          ruff format --check rlm__code tests
+          ruff format --check rlm_code tests
 
   typecheck:
     name: Type Check
@@ -67,7 +67,7 @@ jobs:
       - name: Run mypy on core modules
         run: |
           source .venv/bin/activate
-          mypy rlm__code/core/config.py rlm__code/core/debug_logger.py rlm__code/mcp/utils.py rlm__code/mcp/retry.py rlm__code/models/cache.py rlm__code/models/streaming.py rlm__code/validation/security.py --ignore-missing-imports
+          mypy rlm_code/core/config.py rlm_code/core/debug_logger.py rlm_code/mcp/utils.py rlm_code/mcp/retry.py rlm_code/models/cache.py rlm_code/models/streaming.py rlm_code/validation/security.py --ignore-missing-imports
 
   test:
     name: Test - Python ${{ matrix.python-version }} on ${{ matrix.os }}
@@ -99,7 +99,7 @@ jobs:
       - name: Run tests
         run: |
           source .venv/bin/activate || .venv\Scripts\activate
-          pytest tests/ -v --cov=rlm__code --cov-report=xml --cov-report=term-missing
+          pytest tests/ -v --cov=rlm_code --cov-report=xml --cov-report=term-missing
 
       - name: Upload coverage
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
