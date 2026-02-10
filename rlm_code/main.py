@@ -213,17 +213,12 @@ def get_version():
     help="Show version information and exit",
 )
 @click.option(
-    "--research",
-    is_flag=True,
-    help="Launch Research TUI with dark theme and animations",
-)
-@click.option(
     "--skip-safety-check",
     is_flag=True,
     hidden=True,
     help="Skip directory safety check (not recommended)",
 )
-def cli(verbose: bool, debug: bool, version: bool, research: bool, skip_safety_check: bool):
+def cli(verbose: bool, debug: bool, version: bool, skip_safety_check: bool):
     """
     RLM Code - TUI Development Environment
 
@@ -265,19 +260,13 @@ def cli(verbose: bool, debug: bool, version: bool, research: bool, skip_safety_c
     # Setup logging
     setup_logging(verbose=verbose, debug=debug)
 
-    # Launch TUI mode
+    # Launch TUI mode (Research tab is available via Ctrl+5)
     try:
-        if research:
-            # Launch Research TUI with dark theme and animations
-            from .rlm.research_tui import run_tui
-            run_tui()
-        else:
-            # Launch standard TUI
-            from .core.config import ConfigManager
-            from .ui.tui_app import run_textual_tui
+        from .core.config import ConfigManager
+        from .ui.tui_app import run_textual_tui
 
-            config_manager = ConfigManager()
-            run_textual_tui(config_manager)
+        config_manager = ConfigManager()
+        run_textual_tui(config_manager)
     except DSPyCLIError as e:
         console.print(f"[red]Error:[/red] {e}")
         sys.exit(1)

@@ -1,401 +1,321 @@
 # Installation
 
-Get RLM Code up and running in just a few minutes!
+This guide covers how to install RLM Code, its optional dependencies, and how to verify your installation.
 
-## Requirements
+---
 
-Before installing RLM Code, make sure you have:
+## System Requirements
 
-- **Python 3.10 or higher** - Check your version with `python --version`
-- **pip** - Python's package installer (comes with Python)
+| Requirement | Minimum | Recommended |
+|-------------|---------|-------------|
+| **Python** | 3.10 | 3.12+ |
+| **OS** | Linux, macOS, Windows | macOS (Apple Silicon) or Linux |
+| **Memory** | 2 GB | 8 GB+ |
+| **Disk** | 200 MB | 1 GB+ (for traces and benchmark artifacts) |
 
-## Installation Steps
+!!! warning "Python Version"
+    RLM Code requires **Python 3.10 or later**. Python 3.9 and earlier are not supported. You can verify your Python version with:
 
-!!! warning "CRITICAL: Create Virtual Environment IN Your Project"
-    **For security and isolation, ALWAYS create your virtual environment INSIDE your project directory!**
+    ```bash
+    python --version
+    ```
 
-    This ensures:
+---
 
-    - 🔒 All file scanning stays within your project
-    - 📦 Complete project isolation
-    - 🚀 Easy sharing and deployment
-    - 🧹 Clean removal (just delete the project folder)
+## Standard Installation
 
-### Step 1: Create Your Project Directory
+Install RLM Code from PyPI:
 
 ```bash
-# Create a dedicated directory for your DSPy project
-mkdir my-dspy-project
-cd my-dspy-project
+pip install rlm-code
 ```
 
-### Step 2: Create Virtual Environment IN This Directory
+This installs the core package with all required dependencies:
 
-=== "uv (Recommended)"
+| Dependency | Purpose |
+|-----------|---------|
+| `click` >= 8.0 | CLI framework |
+| `dspy` >= 3.0.4 | DSPy integration |
+| `rich` >= 13.7.0 | Terminal formatting and panels |
+| `requests` >= 2.28.0 | HTTP client |
+| `pyyaml` >= 6.0 | YAML configuration parsing |
+| `mcp` >= 1.2.1 | Model Context Protocol support |
+| `anyio` >= 4.5 | Async I/O |
+| `httpx` >= 0.27.1 | HTTP/2 client |
+| `pydantic` >= 2.11.0 | Data validation |
+| `jsonschema` >= 4.20.0 | Schema validation |
+| `packaging` >= 23.0 | Version parsing |
 
-    ```bash
-    # Create .venv INSIDE your project directory (not elsewhere!)
-    uv venv
+---
 
-    # Activate it
-    # For bash/zsh (macOS/Linux):
-    source .venv/bin/activate
-    # For fish shell:
-    source .venv/bin/activate.fish
-    # On Windows:
-    .venv\Scripts\activate
-    ```
+## Development Installation
 
-=== "python -m venv"
-
-    ```bash
-    # Create .venv INSIDE your project directory (not elsewhere!)
-    python -m venv .venv
-
-    # Activate it
-    # For bash/zsh (macOS/Linux):
-    source .venv/bin/activate
-    # For fish shell:
-    source .venv/bin/activate.fish
-    # On Windows:
-    .venv\Scripts\activate
-    ```
-
-!!! tip "Why uv?"
-    `uv` is a fast Python package manager written in Rust. It's 10-100x faster than pip and provides better dependency resolution. [Learn more about uv](https://docs.astral.sh/uv/)
-
-!!! success "Why .venv in the Project?"
-    When you create the virtual environment inside your project:
-
-    - All packages install to `my-dspy-project/.venv/`
-    - All rlm-code data goes to `my-dspy-project/.dspy_code/`
-    - Everything stays in one place!
-
-    **Result**: One directory = one complete project
-
-### Step 3: Install RLM Code
-
-=== "uv (Recommended)"
-
-    ```bash
-    # This installs into .venv/ in your project
-    uv pip install --upgrade rlm-code
-
-    # Or add it to your project dependencies (pyproject.toml) in one step
-    uv add rlm-code
-    ```
-
-=== "pip"
-
-    ```bash
-    # This installs into .venv/ in your project
-    pip install --upgrade rlm-code
-    ```
-
-That's it! RLM Code is now installed in your project.
-
-### Step 4: Install DSPy (Optional)
-
-RLM Code will install DSPy automatically if needed, but you can install/upgrade it explicitly:
-
-!!! tip "Use the same tool you used for venv"
-    If you created your venv with `uv venv`, use `uv pip install` for consistency. If you used `python -m venv`, use `pip install`.
-
-=== "uv (Recommended)"
-
-    ```bash
-    uv pip install --upgrade dspy
-    ```
-
-=== "pip"
-
-    ```bash
-    pip install --upgrade dspy
-    ```
-
-!!! info "DSPy Version"
-    RLM Code adapts to YOUR installed DSPy version and indexes it for accurate code generation and Q&A.
-
-## Verify Installation
-
-Check that everything is installed correctly:
+For contributors or those who want to run from source:
 
 ```bash
-# Make sure you're in your project directory
-cd my-dspy-project
+# Clone the repository
+git clone https://github.com/SuperagenticAI/rlm-code.git
+cd rlm-code
 
-# Activate your virtual environment if not already active
-source .venv/bin/activate  # For fish: source .venv/bin/activate.fish
-
-# Check RLM Code
-rlm-code --help
-
-# You should see:
-# Usage: rlm-code [OPTIONS]
-# RLM Code - Interactive DSPy Development Environment
+# Install in editable mode with dev dependencies
+pip install -e ".[dev]"
 ```
 
-If you see the help text, you're all set! 🎉
+The `dev` extra installs:
 
-## Your Project Structure
+| Dependency | Purpose |
+|-----------|---------|
+| `pytest` >= 8.0 | Test framework |
+| `pytest-cov` >= 4.1 | Coverage reporting |
+| `pytest-asyncio` >= 0.23 | Async test support |
+| `pytest-xdist` >= 3.5 | Parallel test execution |
+| `hypothesis` >= 6.100 | Property-based testing |
+| `ruff` >= 0.8.0 | Linting and formatting |
+| `mypy` >= 1.13 | Static type checking |
+| `pre-commit` >= 4.0 | Git hooks |
 
-After installation, your project looks like this:
-
-```
-my-dspy-project/          # Your project root
-├── .venv/                # Virtual environment (packages here!)
-│   ├── bin/
-│   ├── lib/
-│   │   └── python3.x/
-│   │       └── site-packages/
-│   │           ├── dspy/          # DSPy package
-│   │           └── dspy_code/     # rlm-code package
-│   └── ...
-└── (your files will be created by rlm-code)
-```
-
-**When you run `/init`, rlm-code will create:**
-
-```
-my-dspy-project/
-├── .venv/                # Your packages (already created)
-├── .dspy_cache/          # DSPy's LLM response cache
-├── .dspy_code/           # rlm-code's internal data
-│   ├── cache/            # RAG index cache
-│   ├── sessions/         # Session state
-│   ├── optimization/     # GEPA workflows
-│   └── exports/          # Export history
-├── generated/            # Your generated code
-├── modules/              # Your modules
-├── signatures/           # Your signatures
-└── dspy_config.yaml      # Your configuration
-```
-
-**Everything in one place!** 📦
+---
 
 ## Optional Dependencies
 
-RLM Code has optional dependencies for different features. Install only what you need.
+RLM Code supports a range of optional extras for LLM providers, TUI features, observability, and more. Install them individually or in groups.
 
-### Cloud Model Providers (via rlm-code extras)
+### TUI Framework
 
-Use extras so versions stay aligned with rlm-code's tested matrix.
+The multi-pane terminal interface requires Textual:
 
-!!! tip "Use the same tool you used for venv"
-    If you created your venv with `uv venv`, use `uv pip install` for consistency. If you used `python -m venv`, use `pip install`.
+```bash
+pip install rlm-code[tui]
+```
 
-=== "uv (Recommended)"
+!!! note "TUI Required for Interactive Mode"
+    The `textual` package (>= 0.86.0) is required for both the Standard TUI and the Research TUI. Without it, only headless/scripting usage is available.
+
+### LLM Providers
+
+=== "All Providers"
 
     ```bash
-    # OpenAI support
-    uv pip install "rlm-code[openai]"
-
-    # Google Gemini support
-    uv pip install "rlm-code[gemini]"
-
-    # Anthropic (paid key required)
-    uv pip install "rlm-code[anthropic]"
-
-    # Or install all cloud providers at once
-    uv pip install "rlm-code[llm-all]"
+    pip install rlm-code[llm-all]
     ```
 
-=== "pip"
+=== "OpenAI"
 
     ```bash
-    # OpenAI support
-    pip install "rlm-code[openai]"
-
-    # Google Gemini support
-    pip install "rlm-code[gemini]"
-
-    # Anthropic (paid key required)
-    pip install "rlm-code[anthropic]"
-
-    # Or install all cloud providers at once
-    pip install "rlm-code[llm-all]"
+    pip install rlm-code[openai]
     ```
 
-> **Note:** Anthropic has discontinued free API keys. RLM Code fully supports Claude **if you already have a paid API key**, but Anthropic integration will simply not work without one.
+=== "Anthropic"
 
-### Semantic Similarity Metrics
+    ```bash
+    pip install rlm-code[anthropic]
+    ```
+
+=== "Gemini"
+
+    ```bash
+    pip install rlm-code[gemini]
+    ```
+
+| Extra | Package | Version |
+|-------|---------|---------|
+| `openai` | `openai` | >= 2.8.1, < 3.0 |
+| `anthropic` | `anthropic` | >= 0.39.0, < 1.0 |
+| `gemini` | `google-genai` | >= 1.52.0, < 2.0 |
+| `llm-all` | All of the above | -- |
+
+### Observability Integrations
+
+=== "MLflow"
+
+    ```bash
+    pip install rlm-code[mlflow]
+    ```
+
+=== "OpenTelemetry"
+
+    ```bash
+    pip install opentelemetry-api opentelemetry-sdk \
+        opentelemetry-exporter-otlp-proto-grpc
+    ```
+
+=== "LangSmith"
+
+    ```bash
+    pip install langsmith
+    ```
+
+=== "LangFuse"
+
+    ```bash
+    pip install langfuse
+    ```
+
+=== "Logfire"
+
+    ```bash
+    pip install logfire
+    ```
+
+| Integration | Package | Environment Variable |
+|-------------|---------|---------------------|
+| MLflow | `mlflow` >= 2.17.0 | `MLFLOW_TRACKING_URI` |
+| OpenTelemetry | `opentelemetry-sdk` | `OTEL_EXPORTER_OTLP_ENDPOINT` |
+| LangSmith | `langsmith` | `LANGCHAIN_API_KEY` |
+| LangFuse | `langfuse` | `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` |
+| Logfire | `logfire` | `LOGFIRE_TOKEN` |
+
+### Framework Adapters
 
 ```bash
-pip install sentence-transformers scikit-learn
+pip install rlm-code[frameworks]
 ```
 
-!!! tip "Install as Needed"
-    Don't worry about installing these now. RLM Code will tell you if you need something and show you exactly how to install it!
+| Extra | Package | Purpose |
+|-------|---------|---------|
+| `pydantic` | `pydantic-ai` >= 0.4.0 | Pydantic AI framework adapter |
+| `adk` | `google-adk` >= 1.12.0 | Google Agent Development Kit adapter |
+| `frameworks` | Both of the above | All framework adapters |
 
-## Troubleshooting
-
-### "command not found: rlm-code"
-
-If you see this error:
+### MCP WebSocket Transport
 
 ```bash
-# Make sure your virtual environment is activated
-source .venv/bin/activate  # For fish: source .venv/bin/activate.fish
-
-# Verify installation
-pip list | grep rlm-code
-
-# If not installed, install it
-pip install rlm-code
+pip install rlm-code[mcp-ws]
 ```
 
-### Running from Wrong Directory
+Adds `websockets` >= 15.0.1 for WebSocket-based MCP server transport.
 
-If you see security warnings when starting rlm-code:
+### Docker Runtime
 
-```
-🚨 SECURITY WARNING
-You are running rlm-code from your home directory!
-```
-
-**Solution**: Always run from your project directory:
+Docker is used as a sandbox runtime for isolated code execution. No pip install is needed, but Docker must be available on the system:
 
 ```bash
-cd my-dspy-project
-source .venv/bin/activate  # For fish: source .venv/bin/activate.fish
+# macOS
+brew install --cask docker
+
+# Linux (Ubuntu/Debian)
+sudo apt-get install docker.io
+
+# Verify Docker is running
+docker info
+```
+
+### Documentation
+
+```bash
+pip install rlm-code[docs]
+```
+
+Installs `mkdocs`, `mkdocs-material`, `mkdocstrings`, and `mkdocs-minify-plugin` for building these docs locally.
+
+---
+
+## Full Installation (Everything)
+
+To install all optional dependencies at once:
+
+```bash
+pip install rlm-code[tui,llm-all,mlflow,frameworks,mcp-ws,dev,docs]
+```
+
+---
+
+## Verification
+
+After installation, verify that everything works:
+
+### Check the version
+
+```bash
+rlm-code --version
+```
+
+Expected output:
+
+```
+RLM Code version: 0.1.5
+DSPy version: 3.0.4
+```
+
+### Check sandbox runtimes
+
+Launch the TUI and run the sandbox doctor:
+
+```bash
 rlm-code
 ```
 
-### Python Version Too Old
+Then in the TUI:
 
-If you see an error about Python version:
+```
+/sandbox doctor
+```
+
+This runs diagnostics on all available sandbox runtimes (local, Docker, Apple Container, Modal, E2B, Daytona) and reports their health status.
+
+### Check observability sinks
+
+```
+/rlm observability
+```
+
+This displays the status of all configured observability sinks (Local JSONL, MLflow, OpenTelemetry, LangSmith, LangFuse, Logfire).
+
+### Verify Python environment
 
 ```bash
-# Check your Python version
-python --version
-
-# If it's less than 3.10, upgrade Python:
-# - On macOS: brew install python@3.11
-# - On Ubuntu: sudo apt install python3.11
-# - On Windows: Download from python.org
+python -c "import rlm_code; print(rlm_code.__version__)"
 ```
 
-### Virtual Environment Outside Project
+!!! tip "Using uv"
+    RLM Code works well with [uv](https://docs.astral.sh/uv/) for fast dependency resolution:
 
-If you created the venv outside your project:
+    ```bash
+    uv pip install rlm-code[tui,llm-all]
+    ```
 
-```bash
-# Wrong way:
-cd ~/
-python -m venv my_venv  # ❌ Don't do this!
-
-# Right way:
-cd ~/my-dspy-project
-python -m venv .venv     # ✅ Do this!
-```
-
-### Permission Denied
-
-If you get permission errors, **don't use --user or sudo**. Use a virtual environment:
-
-```bash
-cd my-dspy-project
-python -m venv .venv
-source .venv/bin/activate  # For fish: source .venv/bin/activate.fish
-pip install rlm-code
-```
-
-## Next Steps
-
-Now that you have RLM Code installed, let's run it!
-
-[Quick Start Guide →](quick-start.md){ .md-button .md-button--primary }
-
-## System-Specific Notes
-
-### macOS
-
-RLM Code works great on macOS. If you use Homebrew:
-
-```bash
-# Install Python (if needed)
-brew install python@3.11
-
-# Install RLM Code
-pip3 install rlm-code
-```
-
-### Linux
-
-On Ubuntu/Debian:
-
-```bash
-# Install Python (if needed)
-sudo apt update
-sudo apt install python3.11 python3-pip
-
-# Install RLM Code
-pip3 install rlm-code
-```
-
-### Windows
-
-On Windows, use PowerShell or Command Prompt:
-
-```powershell
-# Install RLM Code
-pip install rlm-code
-
-# Run it
-rlm-code
-```
-
-!!! tip "Windows Terminal"
-    For the best experience on Windows, use Windows Terminal with PowerShell. The colors and formatting will look much better!
-
-## Docker
-
-Want to run RLM Code in Docker?
-
-```dockerfile
-FROM python:3.11-slim
-
-# Set working directory
-WORKDIR /project
-
-# Create virtual environment in the project
-RUN python -m venv .venv
-
-# Activate venv and install
-RUN . .venv/bin/activate && \
-    pip install rlm-code dspy
-
-# Run with venv activated
-CMD [".venv/bin/rlm-code"]
-```
-
-Build and run:
-
-```bash
-docker build -t rlm-code .
-docker run -it -v $(pwd):/project rlm-code
-```
-
-This mounts your current directory as `/project` in the container!
+---
 
 ## Upgrading
-
-To upgrade to the latest version:
 
 ```bash
 pip install --upgrade rlm-code
 ```
 
-## Uninstalling
-
-If you need to uninstall:
+To upgrade with all extras:
 
 ```bash
-pip uninstall rlm-code
+pip install --upgrade rlm-code[tui,llm-all,mlflow,frameworks]
 ```
 
 ---
 
-**Installation complete!** Let's start using RLM Code.
+## Troubleshooting
 
-[Quick Start Guide →](quick-start.md){ .md-button .md-button--primary }
+!!! failure "ModuleNotFoundError: textual"
+    The TUI requires the `textual` package. Install it with:
+
+    ```bash
+    pip install rlm-code[tui]
+    ```
+
+!!! failure "Docker daemon not running"
+    If `/sandbox doctor` reports Docker as unavailable, ensure the Docker daemon is running:
+
+    ```bash
+    # macOS
+    open -a Docker
+
+    # Linux
+    sudo systemctl start docker
+    ```
+
+!!! failure "Permission denied on /tmp"
+    Some sandbox operations write to temporary directories. Ensure your user has write access to `/tmp` or set the `TMPDIR` environment variable to a writable path.
+
+!!! failure "DSPy not found"
+    RLM Code requires DSPy >= 3.0.4. If you see import errors, upgrade DSPy:
+
+    ```bash
+    pip install --upgrade dspy
+    ```

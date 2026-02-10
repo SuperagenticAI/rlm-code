@@ -34,6 +34,10 @@ from .animations import SIMPLE_UI, get_random_llm_message
 from .persistent_shell import PersistentShell, ShellResult
 from .tui_utils import filter_commands, generate_unified_diff, suggest_command
 
+# Research tab widgets (lazy-safe: imported at module level for compose())
+from ..rlm.research_tui.widgets.animated import SparklineChart
+from ..rlm.research_tui.widgets.panels import MetricsPanel
+
 PURPLE_BAR_COLORS = [
     "#2a133f",
     "#3b1e59",
@@ -81,7 +85,7 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
         from textual import events, work
         from textual.app import App, ComposeResult
         from textual.binding import Binding
-        from textual.containers import Horizontal, Vertical
+        from textual.containers import Horizontal, ScrollableContainer, Vertical
         from textual.screen import ModalScreen
         from textual.widgets import Button, DirectoryTree, Footer, Header, Input, RichLog, Static
     except ImportError as exc:  # pragma: no cover - depends on local environment
@@ -339,6 +343,17 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
           height: 1fr;
           margin: 0 1;
         }
+        App.-single-view.-view-research #main_row {
+          display: none;
+        }
+        App.-single-view.-view-research #bottom_pane {
+          display: none;
+        }
+        App.-single-view.-view-research #research_pane {
+          display: block;
+          height: 1fr;
+          margin: 0 1;
+        }
         #left_pane {
           width: 30;
           min-width: 24;
@@ -437,6 +452,68 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
           background: #000000;
           color: #dce7f3;
         }
+        #research_pane {
+          display: none;
+          height: 1fr;
+          layout: vertical;
+          border: round #2f6188;
+          background: #040507;
+          padding: 0 1;
+          margin: 0 1;
+        }
+        App.-view-research #research_pane {
+          display: block;
+        }
+        App.-single-view #research_pane {
+          display: none;
+        }
+        #research_subtab_bar {
+          height: auto;
+          padding: 0;
+          margin: 0 0 1 0;
+        }
+        .research_sub_btn {
+          margin: 0 1 0 0;
+          min-width: 12;
+        }
+        .replay_btn {
+          min-width: 4;
+          margin: 0 1 0 0;
+        }
+        #replay_position {
+          padding: 0 1;
+          content-align: center middle;
+        }
+        #research_content {
+          height: 1fr;
+        }
+        #rsub_dashboard,
+        #rsub_trajectory,
+        #rsub_benchmarks,
+        #rsub_replay,
+        #rsub_events {
+          display: none;
+        }
+        App.-rsub-dashboard #rsub_dashboard {
+          display: block;
+        }
+        App.-rsub-trajectory #rsub_trajectory {
+          display: block;
+        }
+        App.-rsub-benchmarks #rsub_benchmarks {
+          display: block;
+        }
+        App.-rsub-replay #rsub_replay {
+          display: block;
+        }
+        App.-rsub-events #rsub_events {
+          display: block;
+        }
+        #research_event_log {
+          height: 1fr;
+          background: #000000;
+          color: #dce7f3;
+        }
         Input {
           border: round #4c85b5;
           background: #000000;
@@ -503,13 +580,15 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             Binding("ctrl+2", "view_files", "Files"),
             Binding("ctrl+3", "view_details", "Details"),
             Binding("ctrl+4", "view_shell", "Shell"),
+            Binding("ctrl+5", "view_research", "Research"),
             Binding("tab", "next_view", "Next View", show=False),
             Binding("shift+tab", "prev_view", "Prev View", show=False),
             Binding("f2", "view_chat", "Chat"),
             Binding("f3", "view_files", "Files"),
             Binding("f4", "view_details", "Details"),
             Binding("f5", "view_shell", "Shell"),
-            Binding("f6", "copy_last_response", "Copy Last"),
+            Binding("f6", "view_research", "Research"),
+            Binding("f7", "copy_last_response", "Copy Last"),
             Binding("ctrl+y", "copy_last_response", "Copy Last"),
             Binding("ctrl+o", "toggle_single_view", "One Screen"),
             Binding("escape", "back_to_chat", "Back Chat"),
@@ -536,6 +615,10 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             self._slash_context: dict[str, Any] = {}
             self._slash_init_error: str | None = None
             self._acp_profile: dict[str, str] | None = None
+            self._research_sub_view = "dashboard"
+            self._session_replayer: Any | None = None
+            self._last_run_result: Any | None = None
+            self._event_bus_subscribed = False
 
             def _env_int(name: str, default: int, minimum: int) -> int:
                 raw = os.getenv(name)
@@ -618,6 +701,7 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 yield Button("🗂 Files", id="view_files_btn", classes="focus_btn")
                 yield Button("📊 Details", id="view_details_btn", classes="focus_btn")
                 yield Button("🧰 Shell", id="view_shell_btn", classes="focus_btn")
+                yield Button("🔬 Research", id="view_research_btn", classes="focus_btn")
                 yield Button("📋 Copy", id="copy_last_btn", classes="focus_btn")
                 yield Button("One Screen: ON", id="single_mode_btn", classes="focus_btn")
                 yield Button("↩ Back to Chat", id="back_chat_btn", classes="focus_btn")
@@ -648,17 +732,61 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 yield Static("🧰 Tools & Shell", classes="pane_title")
                 yield RichLog(id="tool_log", wrap=True, highlight=True, markup=True)
                 yield Input(placeholder="Shell command (persistent)", id="shell_input")
+            with Vertical(id="research_pane"):
+                yield Static("🔬 Research", classes="pane_title")
+                with Horizontal(id="research_subtab_bar"):
+                    yield Button("Dashboard", id="rsub_dashboard_btn", classes="research_sub_btn")
+                    yield Button("Trajectory", id="rsub_trajectory_btn", classes="research_sub_btn")
+                    yield Button("Benchmarks", id="rsub_benchmarks_btn", classes="research_sub_btn")
+                    yield Button("Replay", id="rsub_replay_btn", classes="research_sub_btn")
+                    yield Button("Events", id="rsub_events_btn", classes="research_sub_btn")
+                with ScrollableContainer(id="research_content"):
+                    with Vertical(id="rsub_dashboard"):
+                        yield MetricsPanel(id="research_metrics")
+                        yield SparklineChart(label="Reward", id="research_sparkline")
+                        yield Static(
+                            "[dim]No runs yet. Use /rlm run to start an experiment.[/dim]",
+                            id="research_summary",
+                        )
+                    with Vertical(id="rsub_trajectory"):
+                        yield Static(
+                            "[dim]Run an experiment to see its trajectory.[/dim]",
+                            id="research_trajectory_detail",
+                        )
+                    with Vertical(id="rsub_benchmarks"):
+                        yield Static(
+                            "[dim]Run /rlm bench to see benchmark results.[/dim]",
+                            id="research_leaderboard_table",
+                        )
+                        yield Static(id="research_comparison_table")
+                    with Vertical(id="rsub_replay"):
+                        with Horizontal(id="replay_controls"):
+                            yield Button("|<", id="replay_start_btn", classes="replay_btn")
+                            yield Button("<", id="replay_back_btn", classes="replay_btn")
+                            yield Button(">", id="replay_fwd_btn", classes="replay_btn")
+                            yield Button(">|", id="replay_end_btn", classes="replay_btn")
+                            yield Static("Step -/-", id="replay_position")
+                        yield Static(id="replay_step_detail")
+                        yield SparklineChart(label="Rewards", id="replay_reward_curve")
+                    with Vertical(id="rsub_events"):
+                        yield RichLog(
+                            id="research_event_log",
+                            wrap=True,
+                            highlight=True,
+                            markup=True,
+                        )
             yield Footer()
 
         def on_mount(self) -> None:
             self._apply_view_mode()
+            self._apply_research_sub_view()
             self._update_focus_buttons()
             self._update_status_panel()
             self._set_preview_text("Select a file from the left pane to preview.")
             self._set_diff_text("Use /snapshot then /diff to inspect changes.")
             self._chat_log().write(
                 "[bold #8fd2ff]🚀 RLM Code TUI[/bold #8fd2ff]  "
-                "[dim]Ctrl+1..4 views | Ctrl+O one-screen | Ctrl+K palette | Ctrl+Q quit[/dim]"
+                "[dim]Ctrl+1..5 views | Ctrl+O one-screen | Ctrl+K palette | Ctrl+Q quit[/dim]"
             )
             if self._slash_init_error:
                 self._chat_log().write(
@@ -855,11 +983,16 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 self.exit()
 
             self._update_status_panel()
+
+            # Route /rlm results to Research tab
+            if command.strip().lower().startswith("/rlm"):
+                self._route_rlm_results_to_research(command)
+
             return handled
 
         def _apply_view_mode(self) -> None:
             self.set_class(self.single_view_mode, "-single-view")
-            for view_name in ("chat", "files", "details", "shell"):
+            for view_name in ("chat", "files", "details", "shell", "research"):
                 self.set_class(self.active_view == view_name, f"-view-{view_name}")
 
         def _update_focus_buttons(self) -> None:
@@ -868,12 +1001,14 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 "files": "view_files_btn",
                 "details": "view_details_btn",
                 "shell": "view_shell_btn",
+                "research": "view_research_btn",
             }
             labels = {
                 "chat": "💬 Chat",
                 "files": "🗂 Files",
                 "details": "📊 Details",
                 "shell": "🧰 Shell",
+                "research": "🔬 Research",
             }
             for view_name, button_id in button_ids.items():
                 button = self.query_one(f"#{button_id}", Button)
@@ -1112,8 +1247,256 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             self._update_status_panel()
             self.query_one("#shell_input", Input).focus()
 
+        def action_view_research(self) -> None:
+            self.active_view = "research"
+            self._apply_view_mode()
+            self._update_focus_buttons()
+            self._update_status_panel()
+            self._ensure_event_bus_subscription()
+            self._apply_research_sub_view()
+
+        def _set_research_sub_view(self, sub: str) -> None:
+            self._research_sub_view = sub
+            self._apply_research_sub_view()
+
+        def _apply_research_sub_view(self) -> None:
+            for name in ("dashboard", "trajectory", "benchmarks", "replay", "events"):
+                self.set_class(self._research_sub_view == name, f"-rsub-{name}")
+            for name in ("dashboard", "trajectory", "benchmarks", "replay", "events"):
+                try:
+                    btn = self.query_one(f"#rsub_{name}_btn", Button)
+                    btn.variant = "primary" if self._research_sub_view == name else "default"
+                except Exception:
+                    pass
+
+        def _ensure_event_bus_subscription(self) -> None:
+            """Subscribe to the RLM event bus for live updates in the Research tab."""
+            if self._event_bus_subscribed:
+                return
+            if self._slash_handler is None:
+                return
+            runner = getattr(self._slash_handler, "rlm_runner", None)
+            if runner is None:
+                return
+            event_bus = getattr(runner, "event_bus", None)
+            if event_bus is None:
+                return
+            event_bus.subscribe(self._on_raw_rlm_event)
+            self._event_bus_subscribed = True
+
+        def _on_raw_rlm_event(self, event: Any) -> None:
+            """Called from worker thread. Route to main thread."""
+            try:
+                self.call_from_thread(self._on_rlm_event, event)
+            except Exception:
+                pass
+
+        def _on_rlm_event(self, event: Any) -> None:
+            """Process RLM event on main thread - write to event log."""
+            try:
+                ts = getattr(event, "timestamp", "")
+                if len(ts) > 19:
+                    ts = ts[11:19]
+                name = getattr(event, "name", str(event))
+                msg = ""
+                event_data = getattr(event, "event_data", None)
+                if event_data:
+                    msg = getattr(event_data, "message", "") or ""
+
+                color = "#8fd2ff"
+                name_lower = name.lower() if isinstance(name, str) else ""
+                if "error" in name_lower:
+                    color = "#f27d7d"
+                elif "end" in name_lower or "final" in name_lower:
+                    color = "#6fd897"
+                elif "start" in name_lower:
+                    color = "#f0ce74"
+
+                log = self.query_one("#research_event_log", RichLog)
+                log.write(f"[dim]{ts}[/dim] [{color}]{name}[/{color}] {msg}")
+            except Exception:
+                pass
+
+        def _handle_replay_button(self, button_id: str) -> None:
+            """Handle replay control button presses."""
+            if self._session_replayer is None:
+                return
+            try:
+                if button_id == "replay_start_btn":
+                    self._session_replayer.goto_start()
+                elif button_id == "replay_back_btn":
+                    self._session_replayer.step_backward()
+                elif button_id == "replay_fwd_btn":
+                    self._session_replayer.step_forward()
+                elif button_id == "replay_end_btn":
+                    self._session_replayer.goto_end()
+                # Update position display
+                cur = self._session_replayer.current_step
+                total = self._session_replayer.total_steps
+                self.query_one("#replay_position", Static).update(f"Step {cur}/{total}")
+            except Exception:
+                pass
+
+        def _refresh_research_dashboard(self, run_path: Path) -> None:
+            """Populate the Research dashboard from a completed run trace."""
+            try:
+                from ..rlm.visualizer import build_run_visualization
+
+                viz = build_run_visualization(
+                    run_path=run_path, run_dir=run_path.parent
+                )
+
+                metrics = self.query_one("#research_metrics", MetricsPanel)
+                metrics.run_id = viz.get("run_id", "")
+                metrics.status = "complete" if viz.get("completed") else "failed"
+                metrics.reward = viz.get("total_reward", 0.0)
+                metrics.steps = viz.get("step_count", 0)
+                metrics.max_steps = viz.get("step_count", 0)
+
+                reward_curve = viz.get("reward_curve", [])
+                if reward_curve:
+                    sparkline = self.query_one("#research_sparkline", SparklineChart)
+                    sparkline.values = [
+                        pt.get("cumulative_reward", 0.0) for pt in reward_curve
+                    ]
+
+                completed = viz.get("completed", False)
+                total_reward = viz.get("total_reward", 0.0)
+                step_count = viz.get("step_count", 0)
+                summary = self.query_one("#research_summary", Static)
+                status_text = "[green]Completed[/green]" if completed else "[red]Failed[/red]"
+                summary.update(
+                    f"{status_text} | Reward: [bold]{total_reward:.3f}[/bold] | "
+                    f"Steps: {step_count} | Run: [dim]{viz.get('run_id', 'N/A')}[/dim]"
+                )
+            except Exception as exc:
+                try:
+                    self.query_one("#research_summary", Static).update(
+                        f"[yellow]Could not load run: {exc}[/yellow]"
+                    )
+                except Exception:
+                    pass
+
+        def _refresh_research_trajectory(self, run_path: Path) -> None:
+            """Populate the Trajectory sub-view from a run trace."""
+            try:
+                from ..rlm.visualizer import build_run_visualization
+
+                viz = build_run_visualization(
+                    run_path=run_path, run_dir=run_path.parent
+                )
+                timeline = viz.get("timeline", [])
+                if not timeline:
+                    self.query_one("#research_trajectory_detail", Static).update(
+                        "[dim]No steps recorded in this run.[/dim]"
+                    )
+                    return
+
+                lines = ["[bold cyan]Step  Action          Reward   Success[/bold cyan]"]
+                for entry in timeline:
+                    step = entry.get("step", "?")
+                    action = str(entry.get("action", "?"))[:14].ljust(14)
+                    reward = entry.get("reward", 0.0)
+                    cum = entry.get("cumulative_reward", 0.0)
+                    ok = "[green]Y[/green]" if entry.get("success") else "[red]N[/red]"
+                    lines.append(
+                        f"  {step:<4} {action}  {reward:+.3f} ({cum:.3f})  {ok}"
+                    )
+
+                self.query_one("#research_trajectory_detail", Static).update(
+                    "\n".join(lines)
+                )
+            except Exception as exc:
+                try:
+                    self.query_one("#research_trajectory_detail", Static).update(
+                        f"[yellow]Could not load trajectory: {exc}[/yellow]"
+                    )
+                except Exception:
+                    pass
+
+        def _refresh_research_leaderboard(self) -> None:
+            """Populate the Benchmarks sub-view with the leaderboard table."""
+            try:
+                from ..rlm.leaderboard import Leaderboard
+
+                lb = Leaderboard(workdir=Path.cwd() / ".rlm_code", auto_load=True)
+                if not lb.entries:
+                    self.query_one("#research_leaderboard_table", Static).update(
+                        "[dim]No benchmark results yet. Run /rlm bench to generate data.[/dim]"
+                    )
+                    return
+
+                table = lb.format_rich_table(limit=15)
+                buf = io.StringIO()
+                temp_console = Console(file=buf, force_terminal=False, color_system=None, width=120)
+                temp_console.print(table)
+                self.query_one("#research_leaderboard_table", Static).update(
+                    buf.getvalue().strip()
+                )
+            except Exception as exc:
+                try:
+                    self.query_one("#research_leaderboard_table", Static).update(
+                        f"[yellow]Could not load leaderboard: {exc}[/yellow]"
+                    )
+                except Exception:
+                    pass
+
+        def _load_replay(self, run_path: Path) -> None:
+            """Load a run for step-by-step replay."""
+            try:
+                from ..rlm.session_replay import SessionReplayer
+
+                self._session_replayer = SessionReplayer.from_jsonl(run_path)
+                total = self._session_replayer.total_steps
+                self.query_one("#replay_position", Static).update(f"Step 0/{total}")
+
+                reward_curve = self._session_replayer.snapshot.get_reward_curve()
+                if reward_curve:
+                    chart = self.query_one("#replay_reward_curve", SparklineChart)
+                    chart.values = [pt.get("cumulative_reward", 0.0) for pt in reward_curve]
+
+                self.query_one("#replay_step_detail", Static).update(
+                    "[dim]Use < > buttons to step through the run.[/dim]"
+                )
+                self._set_research_sub_view("replay")
+            except Exception as exc:
+                try:
+                    self.query_one("#replay_step_detail", Static).update(
+                        f"[yellow]Could not load replay: {exc}[/yellow]"
+                    )
+                except Exception:
+                    pass
+
+        def _route_rlm_results_to_research(self, command: str) -> None:
+            """After an /rlm command, update the Research tab with results."""
+            if self._slash_handler is None:
+                return
+            ctx = getattr(self._slash_handler, "current_context", {})
+            cmd_lower = command.strip().lower()
+
+            # After /rlm run - update dashboard and trajectory
+            run_path = ctx.get("rlm_last_run_path")
+            if run_path and cmd_lower.startswith("/rlm run"):
+                path = Path(str(run_path))
+                if path.exists():
+                    self._refresh_research_dashboard(path)
+                    self._refresh_research_trajectory(path)
+
+            # After /rlm bench - update leaderboard
+            if cmd_lower.startswith("/rlm bench"):
+                self._refresh_research_leaderboard()
+
+            # After /rlm replay - load replay
+            if cmd_lower.startswith("/rlm replay"):
+                replay_path = ctx.get("rlm_last_run_path")
+                if replay_path:
+                    path = Path(str(replay_path))
+                    if path.exists():
+                        self.action_view_research()
+                        self._load_replay(path)
+
         def _cycle_view(self, step: int) -> None:
-            views = ["chat", "files", "details", "shell"]
+            views = ["chat", "files", "details", "shell", "research"]
             try:
                 current = views.index(self.active_view)
             except ValueError:
@@ -1125,8 +1508,10 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 self.action_view_files()
             elif target == "details":
                 self.action_view_details()
-            else:
+            elif target == "shell":
                 self.action_view_shell()
+            elif target == "research":
+                self.action_view_research()
 
         def action_next_view(self) -> None:
             self._cycle_view(step=1)
@@ -1236,6 +1621,18 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 self.action_view_details()
             elif button_id == "view_shell_btn":
                 self.action_view_shell()
+            elif button_id == "view_research_btn":
+                self.action_view_research()
+            elif button_id.startswith("rsub_") and button_id.endswith("_btn"):
+                sub = button_id[5:-4]  # "rsub_dashboard_btn" -> "dashboard"
+                self._set_research_sub_view(sub)
+            elif button_id in (
+                "replay_start_btn",
+                "replay_back_btn",
+                "replay_fwd_btn",
+                "replay_end_btn",
+            ):
+                self._handle_replay_button(button_id)
             elif button_id == "copy_last_btn":
                 self.action_copy_last_response()
             elif button_id == "single_mode_btn":
@@ -1327,7 +1724,7 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 "/clear",
                 "/snapshot [file]",
                 "/diff [file]",
-                "/view <chat|files|details|shell|next|prev>",
+                "/view <chat|files|details|shell|research|next|prev>",
                 "/layout <single|multi>",
                 "/focus <chat|default>",
                 "/pane <files|details|shell> [show|hide|toggle]",
@@ -1336,9 +1733,9 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 "/exit",
                 "",
                 "[bold cyan]Shortcuts[/bold cyan]",
-                "Ctrl+1 chat  Ctrl+2 files  Ctrl+3 details  Ctrl+4 shell",
+                "Ctrl+1 chat  Ctrl+2 files  Ctrl+3 details  Ctrl+4 shell  Ctrl+5 research",
                 "Tab/Shift+Tab cycle views",
-                "F2/F3/F4/F5 switch panes  F6 or Ctrl+Y copy last response",
+                "F2-F5 switch panes  F6 research  F7 or Ctrl+Y copy last response",
                 "Esc back to chat",
                 "Ctrl+O one-screen on/off  Ctrl+K palette",
                 "Ctrl+L clear logs  Ctrl+R refresh preview  Ctrl+Q quit",
@@ -1348,7 +1745,7 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
         def _view_command(self, args: list[str]) -> None:
             if len(args) != 1:
                 self._chat_log().write(
-                    "[yellow]Usage: /view <chat|files|details|shell|next|prev>[/yellow]"
+                    "[yellow]Usage: /view <chat|files|details|shell|research|next|prev>[/yellow]"
                 )
                 return
 
@@ -1365,9 +1762,11 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 self.action_view_details()
             elif target == "shell":
                 self.action_view_shell()
+            elif target == "research":
+                self.action_view_research()
             else:
                 self._chat_log().write(
-                    "[yellow]Usage: /view <chat|files|details|shell|next|prev>[/yellow]"
+                    "[yellow]Usage: /view <chat|files|details|shell|research|next|prev>[/yellow]"
                 )
 
         def _layout_command(self, args: list[str]) -> None:

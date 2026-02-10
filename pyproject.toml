@@ -121,7 +121,6 @@ Changelog = "https://github.com/SuperagenticAI/rlm-code/blob/main/CHANGELOG.md"
 
 [project.scripts]
 rlm-code = "rlm_code.main:main"
-rlm-research = "rlm_code.rlm.research_tui:run_tui"
 
 [tool.hatch.build.targets.wheel]
 packages = ["rlm_code"]
