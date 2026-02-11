@@ -1,6 +1,7 @@
 # Project-specific
 .benchmarks/
 .kiro/
+Reference/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

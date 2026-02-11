@@ -31,21 +31,24 @@ from ..core.config import ConfigManager
 from ..core.exceptions import DSPyCLIError, ModelError
 from ..models.llm_connector import LLMConnector
 from .animations import SIMPLE_UI, get_random_llm_message
+from .design_system import (
+    PALETTE, PURPLE_GRADIENT, FILE_ICONS, ICONS, SPINNER_FRAMES,
+    get_reward_color, render_gradient_text, render_message_header,
+    render_status_indicator,
+)
+from .diff_viewer import format_diff_for_chat
+from .notifications import notify_run_complete, notify_benchmark_complete
 from .persistent_shell import PersistentShell, ShellResult
-from .tui_utils import filter_commands, generate_unified_diff, suggest_command
+from .prompt_widget import PromptHelper
+from .pty_terminal import is_pty_available
+from .thinking_display import format_thinking_for_chat
+from .tui_utils import filter_commands, suggest_command
 
 # Research tab widgets (lazy-safe: imported at module level for compose())
 from ..rlm.research_tui.widgets.animated import SparklineChart
 from ..rlm.research_tui.widgets.panels import MetricsPanel
 
-PURPLE_BAR_COLORS = [
-    "#2a133f",
-    "#3b1e59",
-    "#5a2d88",
-    "#7b3fc1",
-    "#9d5cff",
-    "#c084fc",
-]
+PURPLE_BAR_COLORS = PURPLE_GRADIENT
 
 
 def _guess_language(path: Path) -> str:
@@ -87,7 +90,8 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
         from textual.binding import Binding
         from textual.containers import Horizontal, ScrollableContainer, Vertical, VerticalScroll
         from textual.screen import ModalScreen
-        from textual.widgets import Button, DirectoryTree, Footer, Header, Input, RichLog, Static
+        from textual.widgets import Button, DirectoryTree, Footer, Header, Input, OptionList, RichLog, Static
+        from textual.widgets.option_list import Option
     except ImportError as exc:  # pragma: no cover - depends on local environment
         raise DSPyCLIError(
             "Textual TUI requires the 'textual' package.\n"
@@ -95,161 +99,125 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
         ) from exc
 
     class CommandPaletteModal(ModalScreen[str | None]):
-        """Minimal command palette modal."""
+        """Minimal command palette modal using OptionList for instant navigation."""
 
         BINDINGS = [
             Binding("escape", "dismiss(None)", "Close"),
-            Binding("up", "select_prev", "Prev", show=False),
-            Binding("down", "select_next", "Next", show=False),
-            Binding("enter", "choose", "Choose", show=False),
         ]
 
         def __init__(self, commands: list[str]):
             super().__init__()
             self.commands = sorted(commands)
             self.filtered = list(self.commands)
-            self.selected_index = 0
+            self._ol: OptionList | None = None
 
         def compose(self) -> ComposeResult:
             with Vertical(id="palette_modal"):
                 yield Static("Command Palette", id="palette_title")
                 yield Input(placeholder="Type a command...", id="palette_query")
-                yield Static("", id="palette_results")
+                yield OptionList(*self.commands, id="palette_list")
 
         def on_mount(self) -> None:
+            self._ol = self.query_one("#palette_list", OptionList)
             self.query_one("#palette_query", Input).focus()
-            self._render_results()
 
-        def _render_results(self) -> None:
-            results = self.query_one("#palette_results", Static)
-            if not self.filtered:
-                results.update("[dim]No matching commands[/dim]")
+        def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+            self.dismiss(str(event.option.prompt))
+
+        def on_key(self, event: events.Key) -> None:
+            ol = self._ol
+            if ol is None:
                 return
-
-            lines: list[str] = []
-            for i, command in enumerate(self.filtered):
-                prefix = "▶ " if i == self.selected_index else "  "
-                style = "[bold cyan]" if i == self.selected_index else "[white]"
-                lines.append(f"{style}{prefix}{command}[/]")
-            results.update("\n".join(lines))
-
-        def action_select_prev(self) -> None:
-            if not self.filtered:
-                return
-            self.selected_index = max(0, self.selected_index - 1)
-            self._render_results()
-
-        def action_select_next(self) -> None:
-            if not self.filtered:
-                return
-            self.selected_index = min(len(self.filtered) - 1, self.selected_index + 1)
-            self._render_results()
-
-        def action_choose(self) -> None:
-            if not self.filtered:
-                self.dismiss(None)
-                return
-            self.dismiss(self.filtered[self.selected_index])
+            if event.key == "enter" and ol.highlighted is not None:
+                opt = ol.get_option_at_index(ol.highlighted)
+                self.dismiss(str(opt.prompt))
+                event.stop()
+                event.prevent_default()
+            elif event.key == "down":
+                ol.action_cursor_down()
+                event.stop()
+                event.prevent_default()
+            elif event.key == "up":
+                ol.action_cursor_up()
+                event.stop()
+                event.prevent_default()
 
         def on_input_changed(self, event: Input.Changed) -> None:
             if event.input.id != "palette_query":
                 return
+            ol = self._ol
+            if ol is None:
+                return
             self.filtered = filter_commands(self.commands, event.value, limit=16)
-            self.selected_index = 0
-            self._render_results()
+            ol.clear_options()
+            ol.add_options(self.filtered)
 
     class ConnectPickerModal(ModalScreen[str | None]):
-        """Keyboard-first picker modal for connect wizard steps."""
+        """Keyboard-first picker for connect wizard steps.
+
+        Uses Textual's native OptionList for instant keyboard navigation —
+        only the two changed rows re-render on each keystroke, not the
+        entire list.  Press 1-9 to jump-select.
+        """
 
         BINDINGS = [
             Binding("escape", "dismiss(None)", "Close"),
-            Binding("up", "select_prev", "Prev", show=False),
-            Binding("down", "select_next", "Next", show=False),
-            Binding("enter", "choose", "Choose", show=False),
-            Binding("k", "select_prev", "Prev", show=False),
-            Binding("j", "select_next", "Next", show=False),
         ]
 
         def __init__(self, title: str, subtitle: str, options: list[tuple[str, str]]):
             super().__init__()
-            self.title = title
+            self.picker_title = title
             self.subtitle = subtitle
             self.options = options
-            self.selected_index = 0
+            self._ol: OptionList | None = None
+            # Build display labels with number badges.
+            self._display: list[str] = []
+            for idx, (_, label) in enumerate(options):
+                badge = f"[{idx + 1}] " if idx < 9 else "    "
+                self._display.append(f"{badge}{label}")
 
         def compose(self) -> ComposeResult:
             with Vertical(id="connect_modal"):
-                yield Static(self.title, id="connect_title")
+                yield Static(self.picker_title, id="connect_title")
                 yield Static(self.subtitle, id="connect_subtitle")
-                yield Static("", id="connect_results")
-                yield Static("↑/↓ move  Enter select  Esc close", id="connect_hint")
+                yield OptionList(*self._display, id="connect_list")
+                yield Static(
+                    "[bold #a78bfa]1-9[/] quick select  "
+                    "[bold #a78bfa]↑↓/jk[/] move  "
+                    "[bold #a78bfa]Enter[/] select  "
+                    "[bold #a78bfa]Esc[/] close",
+                    id="connect_hint",
+                )
 
         def on_mount(self) -> None:
-            self._render_results()
+            self._ol = self.query_one("#connect_list", OptionList)
+            self._ol.focus()
 
-        def _render_results(self) -> None:
-            results = self.query_one("#connect_results", Static)
-            if not self.options:
-                results.update("[dim]No options[/dim]")
-                return
-
-            window_size = 12
-            if len(self.options) <= window_size:
-                start = 0
-                end = len(self.options)
-            else:
-                half = window_size // 2
-                start = max(0, self.selected_index - half)
-                end = min(len(self.options), start + window_size)
-                if end - start < window_size:
-                    start = max(0, end - window_size)
-
-            table_text = Text()
-            if start > 0:
-                table_text.append(f"  … {start} more above\n", style="#7f95ac")
-
-            for idx in range(start, end):
-                _, label = self.options[idx]
-                is_active = idx == self.selected_index
-                prefix = "▶ " if is_active else "  "
-                style = "bold #86e1ff" if is_active else "#d4e7ff"
-                table_text.append(f"{prefix}{label}\n", style=style)
-
-            if end < len(self.options):
-                table_text.append(
-                    f"  … {len(self.options) - end} more below\n",
-                    style="#7f95ac",
-                )
-            results.update(table_text)
-
-        def action_select_prev(self) -> None:
-            if not self.options:
-                return
-            self.selected_index = max(0, self.selected_index - 1)
-            self._render_results()
-
-        def action_select_next(self) -> None:
-            if not self.options:
-                return
-            self.selected_index = min(len(self.options) - 1, self.selected_index + 1)
-            self._render_results()
-
-        def action_choose(self) -> None:
-            if not self.options:
-                self.dismiss(None)
-                return
-            value, _ = self.options[self.selected_index]
-            self.dismiss(value)
+        def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+            idx = event.option_index
+            if 0 <= idx < len(self.options):
+                self.dismiss(self.options[idx][0])
 
         def on_key(self, event: events.Key) -> None:
             if not self.options:
                 return
-            if event.key.isdigit():
+            ol = self._ol
+            if ol is None:
+                return
+            if event.key == "j":
+                ol.action_cursor_down()
+                event.stop()
+                event.prevent_default()
+            elif event.key == "k":
+                ol.action_cursor_up()
+                event.stop()
+                event.prevent_default()
+            elif event.key.isdigit():
                 index = int(event.key) - 1
                 if 0 <= index < len(self.options):
-                    self.selected_index = index
-                    self._render_results()
-                    self.action_choose()
+                    self.dismiss(self.options[index][0])
+                    event.stop()
+                    event.prevent_default()
 
     class RLMCodeTUIApp(App):
         """Textual application for RLM Code."""
@@ -406,6 +374,20 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
           margin-top: 0;
           margin-bottom: 1;
         }
+        #suggestion_panel {
+          display: none;
+          height: auto;
+          max-height: 12;
+          background: #0a0514;
+          color: #dce7f3;
+          border: round #7c3aed;
+          padding: 0 1;
+          margin: 0 0 1 0;
+          layer: overlay;
+        }
+        #suggestion_panel.-visible {
+          display: block;
+        }
         #details_preview_row {
           height: 1fr;
           layout: horizontal;
@@ -458,10 +440,16 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
           margin: 1 1 0 1;
         }
         #tool_log {
-          height: 1fr;
-          margin-bottom: 1;
+          height: 5;
+          min-height: 3;
           background: #000000;
           color: #dce7f3;
+        }
+        #terminal_pane {
+          height: 1fr;
+          min-height: 4;
+          background: #000000;
+          border-top: solid #3b1d6e;
         }
         #research_pane {
           display: none;
@@ -559,14 +547,24 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
           margin-bottom: 1;
           color: #9ed6ff;
         }
-        #palette_results {
+        #palette_list {
           height: 1fr;
           margin-top: 1;
+          background: #000000;
+          border: none;
+        }
+        #palette_list > .option-list--option-highlighted {
+          background: #1a1a3a;
+          color: #86e1ff;
+          text-style: bold;
+        }
+        #palette_list > .option-list--option {
           color: #dce7f3;
         }
         #connect_modal {
           width: 96;
-          height: 28;
+          height: auto;
+          max-height: 32;
           border: round #3f7cb0;
           background: #000000;
           padding: 1 2;
@@ -575,18 +573,33 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
         #connect_title {
           text-style: bold;
           color: #90edff;
+          height: auto;
           margin-bottom: 1;
         }
         #connect_subtitle {
           color: #9db8d4;
+          height: auto;
           margin-bottom: 1;
         }
-        #connect_results {
-          height: 1fr;
-          color: #dce7f3;
+        #connect_list {
+          height: auto;
+          max-height: 16;
+          min-height: 3;
+          background: #000000;
+          border: none;
+          scrollbar-size: 1 1;
+        }
+        #connect_list > .option-list--option-highlighted {
+          background: #0d1a2e;
+          color: #86e1ff;
+          text-style: bold;
+        }
+        #connect_list > .option-list--option {
+          color: #d4e7ff;
         }
         #connect_hint {
           color: #89a0b8;
+          height: auto;
           margin-top: 1;
         }
         """
@@ -708,6 +721,15 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 "/focus",
                 "/exit",
             ]
+            self._prompt_helper = PromptHelper(
+                commands=self.palette_commands,
+                root=Path.cwd(),
+            )
+            # Suppress suggestion re-population after Tab completion.
+            self._suppress_suggestions = False
+            # Cached widget refs (set in on_mount to avoid query overhead per keystroke).
+            self._cached_chat_input: Any = None
+            self._cached_suggestion_panel: Any = None
             self._init_full_slash_handler()
             self._auto_connect_default_model()
 
@@ -735,8 +757,9 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                         id="chat_hint",
                     )
                     yield Static("[dim]Ready[/dim]", id="thinking_status")
+                    yield Static("", id="suggestion_panel")
                     yield Input(
-                        placeholder="Ask RLM Code or type a slash command...",
+                        placeholder="Ask, /command, !shell, or >shell...",
                         id="chat_input",
                     )
                 with Vertical(id="right_pane"):
@@ -750,7 +773,11 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             with Vertical(id="bottom_pane"):
                 yield Static("🧰 Tools & Shell", classes="pane_title")
                 yield RichLog(id="tool_log", wrap=True, highlight=True, markup=True)
-                yield Input(placeholder="Shell command (persistent)", id="shell_input")
+                if is_pty_available():
+                    from .pty_terminal import TerminalPane
+                    yield TerminalPane(id="terminal_pane")
+                else:
+                    yield Input(placeholder="Shell command (persistent)", id="shell_input")
             with Vertical(id="research_pane"):
                 yield Static("🔬 RLM Research Lab", classes="pane_title")
                 with Horizontal(id="research_subtab_bar"):
@@ -811,17 +838,47 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             yield Footer()
 
         def on_mount(self) -> None:
+            # Cache frequently-accessed widgets to avoid DOM queries on every keystroke.
+            self._cached_chat_input = self.query_one("#chat_input", Input)
+            self._cached_suggestion_panel = self.query_one("#suggestion_panel", Static)
+
             self._apply_view_mode()
             self._apply_research_sub_view()
             self._update_focus_buttons()
             self._update_status_panel()
             self._set_preview_text("Select a file from the left pane to preview.")
             self._set_diff_text("Use /snapshot then /diff to inspect changes.")
-            self._chat_log().write(
-                "[bold #a78bfa]🔬 RLM Research Lab[/bold #a78bfa]  "
-                "[dim]Recursive Language Model · Evaluation OS[/dim]\n"
-                "[dim]Ctrl+1..5 views | Ctrl+5 research | Ctrl+O one-screen | Ctrl+K palette | Ctrl+Q quit[/dim]"
+
+            # Rich welcome message using design system helpers.
+            welcome = render_gradient_text("RLM Research Lab", PURPLE_GRADIENT)
+            welcome.append("  ", style="")
+            welcome.append("Recursive Language Model \u00b7 Evaluation OS", style="dim")
+            self._chat_log().write(welcome)
+
+            # Mode indicator line.
+            mode_line = Text()
+            mode_line.append(f"{ICONS['connected']} ", style=PALETTE.success if self.connector.current_model else PALETTE.error)
+            mode_line.append(
+                self.connector.current_model or "No model connected",
+                style=PALETTE.text_primary if self.connector.current_model else PALETTE.text_muted,
             )
+            mode_line.append("  ", style="")
+            mode_line.append(f"{self._prompt_helper.mode.prompt_symbol} ", style=PALETTE.info)
+            mode_line.append(self._prompt_helper.mode.mode.title(), style=PALETTE.info)
+            self._chat_log().write(mode_line)
+
+            shortcuts_line = Text()
+            shortcuts_line.append("Ctrl+1..5 views", style="dim")
+            shortcuts_line.append("  ", style="")
+            shortcuts_line.append("Ctrl+O one-screen", style="dim")
+            shortcuts_line.append("  ", style="")
+            shortcuts_line.append("Ctrl+K palette", style="dim")
+            shortcuts_line.append("  ", style="")
+            shortcuts_line.append("/ commands", style=f"dim {PALETTE.info}")
+            shortcuts_line.append("  ", style="")
+            shortcuts_line.append("\u2191\u2193 history", style=f"dim {PALETTE.info}")
+            self._chat_log().write(shortcuts_line)
+
             if self._slash_init_error:
                 self._chat_log().write(
                     f"[yellow]Full slash command bridge unavailable:[/yellow] {self._slash_init_error}"
@@ -835,7 +892,7 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 )
             except Exception:
                 pass
-            self.query_one("#chat_input", Input).focus()
+            self._cached_chat_input.focus()
 
         def on_unmount(self) -> None:
             self.shell.close()
@@ -883,11 +940,14 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             }
 
         def _render_user_prompt(self, user_text: str) -> None:
+            turn = len([h for h in self.command_history if h.get("role") == "user"]) + 1
+            header = render_message_header("user", turn)
+            self._chat_log().write(header)
             self._chat_log().write(
                 Panel(
-                    Text(user_text, style="#f2f6fb"),
-                    title="You",
-                    border_style="#59b9ff",
+                    Text(user_text, style=PALETTE.text_chat),
+                    title=f"{ICONS['diamond']} You",
+                    border_style=PALETTE.bubble_user_border,
                     padding=(0, 1),
                 )
             )
@@ -919,25 +979,64 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             runner_position = position % max(1, bar_width - head_width + 1)
 
             status = Text()
-            status.append(f"{spinner} ", style="#f6d37a")
+            status.append(f"{ICONS['thinking']} ", style=PALETTE.warning)
+            status.append(f"{spinner} ", style=PALETTE.primary_light)
             status.append(clipped, style="dim")
             status.append("\n")
             status.append_text(self._build_purple_bar(runner_position, bar_width, head=head_width))
             self._thinking_status().update(status)
 
         def _set_thinking_idle(self) -> None:
-            self._thinking_status().update("[dim]Ready[/dim]")
+            idle = Text()
+            idle.append(f"{ICONS['idle']} ", style=PALETTE.text_disabled)
+            idle.append("Ready", style="dim")
+            self._thinking_status().update(idle)
 
         def _render_assistant_response_panel(self, response: str, elapsed_seconds: float) -> None:
             model_label = self.connector.current_model_id or self.connector.current_model or "assistant"
-            markdown_body = Markdown(response.strip() or "_No content returned by model._")
+            stripped = response.strip()
+            if not stripped:
+                stripped = "_No content returned by model._"
+
+            # Detect thinking/reasoning blocks (e.g. <thinking>...</thinking>)
+            import re as _re
+            thinking_match = _re.search(
+                r"<thinking>(.*?)</thinking>",
+                stripped,
+                _re.DOTALL,
+            )
+            if thinking_match:
+                thinking_text = thinking_match.group(1).strip()
+                visible_response = stripped[: thinking_match.start()] + stripped[thinking_match.end() :]
+                visible_response = visible_response.strip()
+
+                # Render collapsed thinking section with thought type badges.
+                thinking_renderable = format_thinking_for_chat(
+                    thinking_text, collapsed=True, title="Agent Thinking"
+                )
+                self._chat_log().write(thinking_renderable)
+
+                if visible_response:
+                    markdown_body = Markdown(visible_response)
+                else:
+                    markdown_body = Markdown("_Model returned only reasoning content._")
+            else:
+                markdown_body = Markdown(stripped)
+
+            # Turn-aware header.
+            turn = len([h for h in self.command_history if h.get("role") == "assistant"])
+            header = render_message_header("assistant", turn)
+            self._chat_log().write(header)
+
+            # Timing badge.
+            time_style = PALETTE.success if elapsed_seconds < 10 else PALETTE.warning
             self._chat_log().write(
                 Panel(
                     markdown_body,
-                    title=f"Assistant · {model_label}",
-                    subtitle=f"{elapsed_seconds:.1f}s",
+                    title=f"{ICONS['agent']} {model_label}",
+                    subtitle=f"[{time_style}]{elapsed_seconds:.1f}s[/]",
                     subtitle_align="right",
-                    border_style="#6fd897",
+                    border_style=PALETTE.bubble_assistant_border,
                     padding=(0, 1),
                 )
             )
@@ -1122,24 +1221,28 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             )
 
             strip_line = Text()
-            strip_line.append("● ", style="#6fd897" if self.connector.current_model else "#f27d7d")
-            strip_line.append(model_value, style="#d9ecff")
-            strip_line.append("  |  ", style="#5e7389")
-            strip_line.append(provider_value, style="#8fd2ff")
-            strip_line.append("  |  ", style="#5e7389")
-            strip_line.append(layout_value, style="#f0ce74")
-            strip_line.append("  |  ", style="#5e7389")
-            strip_line.append("MODE:direct", style="#9feeb8")
+            conn_icon = ICONS["connected"] if self.connector.current_model else ICONS["disconnected"]
+            strip_line.append(f"{conn_icon} ", style=PALETTE.success if self.connector.current_model else PALETTE.error)
+            strip_line.append(model_value, style=PALETTE.text_primary)
+            strip_line.append(f" {ICONS['separator']} ", style=PALETTE.text_dim)
+            strip_line.append(provider_value, style=PALETTE.info)
+            strip_line.append(f" {ICONS['separator']} ", style=PALETTE.text_dim)
+            strip_line.append(layout_value, style=PALETTE.warning)
+            strip_line.append(f" {ICONS['separator']} ", style=PALETTE.text_dim)
+            # Show current prompt mode.
+            mode_sym = self._prompt_helper.mode.prompt_symbol
+            mode_name = self._prompt_helper.mode.mode.title()
+            strip_line.append(f"{mode_sym} {mode_name}", style=PALETTE.info)
             strip.update(strip_line)
 
         def _set_preview_text(self, message: str) -> None:
             self.query_one("#preview_panel", Static).update(
-                Panel(Text(message, style="#9cb1c4"), title="Preview", border_style="#f1b760")
+                Panel(Text(message, style=PALETTE.text_secondary), title="Preview", border_style=PALETTE.warning)
             )
 
         def _set_diff_text(self, message: str) -> None:
             self.query_one("#diff_panel", Static).update(
-                Panel(Text(message, style="#9cb1c4"), title="Diff", border_style="#e085ca")
+                Panel(Text(message, style=PALETTE.text_secondary), title="Diff", border_style=PALETTE.accent_light)
             )
 
         def _set_preview_file(self, path: Path) -> None:
@@ -1165,7 +1268,7 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                     title=f"Preview: {path.name}",
                     subtitle=_display_path(path),
                     subtitle_align="right",
-                    border_style="#f1b760",
+                    border_style=PALETTE.warning,
                 )
             )
             self.current_file = path
@@ -1183,28 +1286,14 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 self._set_diff_text(f"Unable to read {path}: {exc}")
                 return
 
-            diff = generate_unified_diff(baseline, current, filename=str(path))
-            if not diff:
+            if baseline == current:
                 self._set_diff_text("No changes since snapshot.")
                 return
 
-            syntax = Syntax(
-                diff,
-                "diff",
-                line_numbers=False,
-                word_wrap=False,
-                theme="monokai",
-                background_color="#000000",
+            diff_renderable = format_diff_for_chat(
+                baseline, current, file_path=str(path)
             )
-            self.query_one("#diff_panel", Static).update(
-                Panel(
-                    syntax,
-                    title=f"Diff: {path.name}",
-                    subtitle=_display_path(path),
-                    subtitle_align="right",
-                    border_style="#e085ca",
-                )
-            )
+            self.query_one("#diff_panel", Static).update(diff_renderable)
 
         def _auto_connect_default_model(self) -> None:
             default_model = self.config_manager.config.default_model
@@ -1290,7 +1379,15 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             self._apply_view_mode()
             self._update_focus_buttons()
             self._update_status_panel()
-            self.query_one("#shell_input", Input).focus()
+            # Focus the PTY terminal if available, else the shell input.
+            try:
+                from .pty_terminal import TerminalPane
+                self.query_one("#terminal_pane", TerminalPane).focus()
+            except Exception:
+                try:
+                    self.query_one("#shell_input", Input).focus()
+                except Exception:
+                    pass
 
         def action_view_research(self) -> None:
             self.active_view = "research"
@@ -1526,10 +1623,22 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 if path.exists():
                     self._refresh_research_dashboard(path)
                     self._refresh_research_trajectory(path)
+                    # Notify on run completion
+                    try:
+                        reward = ctx.get("rlm_last_reward", 0.0)
+                        notify_run_complete(str(path.stem), float(reward))
+                    except Exception:
+                        pass
 
             # After /rlm bench - update leaderboard
             if cmd_lower.startswith("/rlm bench"):
                 self._refresh_research_leaderboard()
+                # Notify on bench completion
+                try:
+                    preset = cmd_lower.split("preset=")[-1].split()[0] if "preset=" in cmd_lower else "benchmark"
+                    notify_benchmark_complete(preset, cases=0, avg_reward=0.0)
+                except Exception:
+                    pass
 
             # After /rlm replay - load replay
             if cmd_lower.startswith("/rlm replay"):
@@ -1685,20 +1794,157 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             elif button_id == "back_chat_btn":
                 self.action_back_to_chat()
 
+        def on_input_changed(self, event: Input.Changed) -> None:
+            if event.input.id == "palette_query":
+                return  # Handled by CommandPaletteModal
+            if event.input.id != "chat_input":
+                return
+
+            # After Tab completion, suppress the re-trigger from the value change.
+            if self._suppress_suggestions:
+                self._suppress_suggestions = False
+                return
+
+            text = event.value
+            self._prompt_helper.on_input_changed(text)
+
+            # Update mode indicator in input placeholder.
+            mode = self._prompt_helper.mode
+            chat_input = self._cached_chat_input or self.query_one("#chat_input", Input)
+            if mode.is_command:
+                chat_input.placeholder = "/ Slash command..."
+            elif mode.is_shell:
+                chat_input.placeholder = "$ Shell command..."
+            else:
+                chat_input.placeholder = "Ask, /command, !shell, or >shell..."
+
+            panel = self._cached_suggestion_panel or self.query_one("#suggestion_panel", Static)
+            if self._prompt_helper.suggestions.visible:
+                panel.update(self._prompt_helper.suggestions.render_text())
+                panel.add_class("-visible")
+            else:
+                panel.remove_class("-visible")
+
+        def on_key(self, event: events.Key) -> None:
+            # Use cached refs to avoid costly DOM queries on every keystroke.
+            chat_input = self._cached_chat_input
+            if chat_input is None:
+                return
+            if not chat_input.has_focus:
+                return
+
+            panel = self._cached_suggestion_panel
+
+            # Handle suggestion navigation when the panel is visible.
+            if self._prompt_helper.suggestions.visible:
+                if event.key == "down":
+                    self._prompt_helper.on_arrow_down()
+                    if panel:
+                        panel.update(self._prompt_helper.suggestions.render_text())
+                    event.prevent_default()
+                    event.stop()
+                elif event.key == "up":
+                    self._prompt_helper.on_arrow_up()
+                    if panel:
+                        panel.update(self._prompt_helper.suggestions.render_text())
+                    event.prevent_default()
+                    event.stop()
+                elif event.key == "tab":
+                    completed = self._prompt_helper.on_tab()
+                    if completed:
+                        # Suppress the on_input_changed re-trigger from this value change.
+                        self._suppress_suggestions = True
+                        chat_input.value = completed + " "
+                        chat_input.cursor_position = len(chat_input.value)
+                    if panel:
+                        panel.remove_class("-visible")
+                    event.prevent_default()
+                    event.stop()
+                elif event.key == "enter":
+                    # Accept the selected suggestion and submit it immediately.
+                    completed = self._prompt_helper.on_tab()
+                    if panel:
+                        panel.remove_class("-visible")
+                    if completed:
+                        self._suppress_suggestions = True
+                        chat_input.value = completed
+                        # Let on_input_submitted handle the rest via normal Enter flow.
+                        # We need to manually trigger submit since we're preventing default.
+                        event.prevent_default()
+                        event.stop()
+                        # Simulate submission with the completed value.
+                        self._prompt_helper.add_to_history(completed)
+                        self._prompt_helper.on_escape()
+                        chat_input.value = ""
+                        if completed.startswith("/"):
+                            self._handle_slash_command(completed)
+                        elif completed.startswith("!"):
+                            self._run_shell_command(completed[1:].strip())
+                        else:
+                            self._render_user_prompt(completed)
+                            self._generate_assistant_response(completed)
+                    else:
+                        event.prevent_default()
+                        event.stop()
+                elif event.key == "escape":
+                    self._prompt_helper.on_escape()
+                    if panel:
+                        panel.remove_class("-visible")
+                    event.prevent_default()
+                    event.stop()
+                return
+
+            # History navigation (from Toad/SuperQode) when suggestions are hidden.
+            if event.key == "up":
+                prev = self._prompt_helper.on_history_up(chat_input.value)
+                if prev is not None:
+                    chat_input.value = prev
+                    chat_input.cursor_position = len(prev)
+                    event.prevent_default()
+                    event.stop()
+            elif event.key == "down":
+                nxt = self._prompt_helper.on_history_down()
+                if nxt is not None:
+                    chat_input.value = nxt
+                    chat_input.cursor_position = len(nxt)
+                    event.prevent_default()
+                    event.stop()
+
         def on_input_submitted(self, event: Input.Submitted) -> None:
             value = event.value.strip()
             if not value:
                 return
 
             event.input.value = ""
+            # Record in history for up/down navigation.
+            self._prompt_helper.add_to_history(value)
+            # Clear suggestion panel on submit.
+            self._suppress_suggestions = True
+            self._prompt_helper.on_escape()
+            panel = self._cached_suggestion_panel
+            if panel:
+                panel.remove_class("-visible")
+            # Reset placeholder to default after submit.
+            chat_input = self._cached_chat_input
+            if chat_input:
+                chat_input.placeholder = "Ask, /command, !shell, or >shell..."
 
             if event.input.id == "shell_input":
                 self._run_shell_command(value)
                 return
 
             # Chat input path.
+            # Shell shortcuts: !cmd (Toad-style) and >cmd (SuperQode-style)
+            # run in chat area so researchers see output inline.
             if value.startswith("!"):
-                self._run_shell_command(value[1:].strip())
+                cmd = value[1:].strip()
+                if cmd:
+                    self._run_inline_shell(cmd)
+                return
+            if value.startswith(">"):
+                cmd = value[1:].strip()
+                if cmd:
+                    self._run_inline_shell(cmd)
                 return
 
             if value.startswith("/"):
@@ -1709,7 +1955,11 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             self._generate_assistant_response(value)
 
         def _handle_slash_command(self, command: str) -> None:
-            self._chat_log().write(f"[bold yellow]Command:[/bold yellow] {command}")
+            cmd_line = Text()
+            cmd_line.append(f"{ICONS['shell']} ", style=PALETTE.warning)
+            cmd_line.append("Command: ", style=f"bold {PALETTE.warning}")
+            cmd_line.append(command, style=PALETTE.text_body)
+            self._chat_log().write(cmd_line)
             parts = command.split()
             cmd = parts[0].lower()
             args = parts[1:]
@@ -1743,9 +1993,18 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 self.exit()
             elif cmd == "/shell":
                 if args:
-                    self._run_shell_command(" ".join(args))
+                    cmd_str = " ".join(args)
+                    # Send to PTY terminal if available, otherwise run via PersistentShell.
+                    try:
+                        from .pty_terminal import TerminalPane
+                        tp = self.query_one("#terminal_pane", TerminalPane)
+                        tp.send_command(cmd_str)
+                        self.action_view_shell()
+                    except Exception:
+                        self._run_shell_command(cmd_str)
                 else:
-                    self._tool_log().write("[yellow]Usage: /shell <command>[/yellow]")
+                    # No args — just switch to Shell view.
+                    self.action_view_shell()
             else:
                 if self._delegate_to_full_slash_handler(command):
                     return
@@ -1758,34 +2017,40 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                     self._chat_log().write(f"[yellow]Unknown command {cmd}. Use /help[/yellow]")
 
         def _show_help(self) -> None:
+            title = render_gradient_text("Commands", PURPLE_GRADIENT)
+            self._chat_log().write(title)
             help_lines = [
-                "[bold cyan]Commands[/bold cyan]",
-                "/connect (interactive keyboard picker)",
-                "/connect <provider> <model> [api-key] [base-url]",
-                "/models",
-                "/status",
-                "/sandbox [status|doctor|use <runtime>]",
-                "/rlm <run|bench|status|replay|doctor|chat|observability> (bench supports list/preset/compare + pack=path[,path2]; run/chat support branch=N and sub=provider/model; doctor supports --json)",
-                "/clear",
-                "/snapshot [file]",
-                "/diff [file]",
-                "/view <chat|files|details|shell|research|next|prev>",
-                "/layout <single|multi>",
-                "/focus <chat|default>",
-                "/pane <files|details|shell> [show|hide|toggle]",
-                "/copy",
-                "/shell <cmd>",
-                "/exit",
+                f"  {ICONS['shell']} /connect          Interactive keyboard picker",
+                f"  {ICONS['shell']} /connect <p> <m>  Direct connection",
+                f"  {ICONS['search']} /models           List providers & models",
+                f"  {ICONS['agent']} /status           Refresh status panel",
+                f"  {ICONS['shell']} /sandbox          Sandbox management",
+                f"  {ICONS['agent']} /rlm              Run experiments & benchmarks",
+                f"  {ICONS['edit']} /clear            Clear logs",
+                f"  {ICONS['read']} /snapshot [file]  Save file baseline",
+                f"  {ICONS['edit']} /diff [file]      Show diff since snapshot",
+                f"  {ICONS['diamond']} /view <target>    Switch view",
+                f"  {ICONS['diamond']} /layout <mode>    Single/multi layout",
+                f"  {ICONS['diamond']} /pane <p> [mode]  Toggle panes",
+                f"  {ICONS['arrow_right']} /copy             Copy last response",
+                f"  {ICONS['shell']} /shell            Open Shell tab (PTY terminal)",
+                f"  {ICONS['shell']} /shell <cmd>      Run command in Shell tab",
+                f"  {ICONS['shell']} !<cmd>            Run inline in chat (Toad-style)",
+                f"  {ICONS['shell']} ><cmd>            Run inline in chat (SuperQode-style)",
+                f"  {ICONS['error']} /exit             Quit",
                 "",
-                "[bold cyan]Shortcuts[/bold cyan]",
-                "Ctrl+1 chat  Ctrl+2 files  Ctrl+3 details  Ctrl+4 shell  Ctrl+5 research",
-                "Tab/Shift+Tab cycle views",
-                "F2-F5 switch panes  F6 research  F7 or Ctrl+Y copy last response",
-                "Esc back to chat",
-                "Ctrl+O one-screen on/off  Ctrl+K palette",
-                "Ctrl+L clear logs  Ctrl+R refresh preview  Ctrl+Q quit",
             ]
             self._chat_log().write("\n".join(help_lines))
+            shortcuts_title = render_gradient_text("Shortcuts", PURPLE_GRADIENT)
+            self._chat_log().write(shortcuts_title)
+            shortcut_lines = [
+                "  Ctrl+1..5 switch views    Tab/Shift+Tab cycle",
+                "  Ctrl+O one-screen toggle  Ctrl+K command palette",
+                f"  \u2191/\u2193 input history         Esc back to chat",
+                "  Ctrl+L clear logs         Ctrl+R refresh preview",
+                "  F7/Ctrl+Y copy last       Ctrl+Q quit",
+            ]
+            self._chat_log().write("\n".join(shortcut_lines))
 
         def _view_command(self, args: list[str]) -> None:
             if len(args) != 1:
@@ -2344,11 +2609,74 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
 
         @work(thread=True)
         def _run_shell_command(self, command: str) -> None:
-            self.call_from_thread(self._write_tool_log, f"[bold yellow]$[/bold yellow] {command}")
+            shell_line = Text()
+            shell_line.append(f"{ICONS['shell']} $ ", style=f"bold {PALETTE.warning}")
+            shell_line.append(command, style=PALETTE.text_body)
+            self.call_from_thread(self._write_tool_log, shell_line)
             result = self.shell.run(command)
             self.call_from_thread(self._render_shell_result, result)
 
-        def _write_tool_log(self, text: str) -> None:
+        def _write_chat_log(self, content: Any) -> None:
+            """Thread-safe helper: write to chat_log on the main thread."""
+            self._chat_log().write(content)
+
+        @work(thread=True)
+        def _run_inline_shell(self, command: str) -> None:
+            """Run a shell command and display output inline in the chat log.
+
+            Triggered by ! (Toad-style) or > (SuperQode-style) prefixes.
+            Shows the command, live output, and exit status directly in chat.
+            """
+            # Show command header in chat.
+            cmd_header = Text()
+            cmd_header.append(f" {ICONS['shell']} ", style=f"bold on {PALETTE.bg_elevated}")
+            cmd_header.append(" $ ", style=f"bold {PALETTE.warning}")
+            cmd_header.append(command, style=f"bold {PALETTE.text_body}")
+            self.call_from_thread(self._write_chat_log, cmd_header)
+
+            result = self.shell.run(command)
+
+            # Format and display output.
+            output = result.output.rstrip("\n")
+            if output:
+                # Use syntax highlighting for clean output; pass ANSI through as-is.
+                if "\x1b[" in output:
+                    content: Any = Text(output)
+                else:
+                    content = Syntax(output, "bash", theme="monokai", line_numbers=False)
+                out_panel = Panel(
+                    content,
+                    border_style=PALETTE.border_default,
+                    padding=(0, 1),
+                    expand=True,
+                )
+                self.call_from_thread(self._write_chat_log, out_panel)
+
+            # Status line.
+            status = Text()
+            if result.timed_out:
+                status.append(f" {ICONS['error']} ", style=f"bold {PALETTE.error}")
+                status.append("Timed out", style=PALETTE.error)
+            elif result.exit_code == 0:
+                status.append(f" {ICONS['complete']} ", style=f"bold {PALETTE.success}")
+                status.append(f"exit {result.exit_code}", style=PALETTE.success)
+            else:
+                status.append(f" {ICONS['error']} ", style=f"bold {PALETTE.error}")
+                status.append(f"exit {result.exit_code}", style=PALETTE.error)
+            if hasattr(result, "elapsed") and result.elapsed:
+                status.append(f"  {result.elapsed:.1f}s", style=PALETTE.text_dim)
+            self.call_from_thread(self._write_chat_log, status)
+
+            # Also mirror to tool log for history.
+            self.call_from_thread(self._render_shell_result, result)
+
+            # Refresh preview if a tracked file may have been affected.
+            if self.current_file and self.current_file.exists():
+                self.call_from_thread(self._set_preview_file, self.current_file)
+                if self.current_file in self.file_snapshots:
+                    self.call_from_thread(self._render_diff, self.current_file)
+
+        def _write_tool_log(self, text: Any) -> None:
             """Thread-safe helper: write to tool_log on the main thread."""
             self._tool_log().write(text)
 
@@ -2357,11 +2685,11 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 self._tool_log().write(result.output.rstrip("\n"))
 
             if result.timed_out:
-                self._tool_log().write("[red]Command timed out[/red]")
+                self._tool_log().write(f"[{PALETTE.error}]{ICONS['error']} Command timed out[/]")
             elif result.exit_code == 0:
-                self._tool_log().write(f"[green]exit {result.exit_code}[/green]")
+                self._tool_log().write(f"[{PALETTE.success}]{ICONS['complete']} exit {result.exit_code}[/]")
             else:
-                self._tool_log().write(f"[red]exit {result.exit_code}[/red]")
+                self._tool_log().write(f"[{PALETTE.error}]{ICONS['error']} exit {result.exit_code}[/]")
 
             # If current file exists, refresh preview/diff quickly to reflect command side effects.
             if self.current_file and self.current_file.exists():
@@ -2408,7 +2736,7 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             stop_thinking = Event()
 
             def _thinking_feed() -> None:
-                spinner_frames = ["◐", "◓", "◑", "◒"]
+                spinner_frames = SPINNER_FRAMES
                 if SIMPLE_UI:
                     spinner_frames = [".", "..", "..."]
                 index = 0
@@ -2460,5 +2788,17 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             self.command_history.append({"role": "assistant", "content": response})
             self.call_from_thread(self._set_thinking_idle)
             self.call_from_thread(self._render_assistant_response_panel, response, elapsed)
+
+            # Desktop notification for long-running responses (>30s).
+            if elapsed > 30:
+                try:
+                    from .notifications import notify, NotificationLevel
+                    notify(
+                        "RLM Code",
+                        f"Response ready ({elapsed:.0f}s)",
+                        level=NotificationLevel.INFO,
+                    )
+                except Exception:
+                    pass
 
     RLMCodeTUIApp(config_manager).run()
