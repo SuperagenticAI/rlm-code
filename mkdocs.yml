@@ -1,5 +1,5 @@
-site_name: RLM Code
-site_description: Research Playground & Evaluation OS for Recursive Language Model Agentic Systems
+site_name: "RLM Code \U0001F9EA"
+site_description: "\U0001F680 Research Playground & Evaluation OS for Recursive Language Model Agentic Systems"
 site_author: Shashi Jagtap
 site_url: https://superagenticai.github.io/rlm-code/
 
@@ -14,13 +14,13 @@ theme:
       accent: purple
       toggle:
         icon: material/brightness-4
-        name: Switch to light mode
+        name: "\u2600\uFE0F Switch to light mode"
     - scheme: default
       primary: deep purple
       accent: purple
       toggle:
         icon: material/brightness-7
-        name: Switch to dark mode
+        name: "\U0001F319 Switch to dark mode"
   font:
     text: Inter
     code: Fira Code
@@ -28,7 +28,6 @@ theme:
     - navigation.tabs
     - navigation.tabs.sticky
     - navigation.sections
-    - navigation.expand
     - navigation.path
     - navigation.top
     - navigation.indexes
@@ -40,8 +39,8 @@ theme:
     - toc.follow
   icon:
     repo: fontawesome/brands/github
-  logo: https://raw.githubusercontent.com/SuperagenticAI/rlm-code/main/assets/logo.png
-  favicon: https://raw.githubusercontent.com/SuperagenticAI/rlm-code/main/assets/favicon.ico
+  logo: assets/logo.png
+  favicon: assets/favicon.png
 
 markdown_extensions:
   - admonition
@@ -88,69 +87,72 @@ extra:
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/SuperagenticAI/rlm-code
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/rlm-code/
   generator: false
 
 extra_css:
   - stylesheets/extra.css
 
 nav:
-  - Home: index.md
-  - Getting Started:
+  - "\U0001F3E0 Home": index.md
+  - "\U0001F680 Getting Started":
     - getting-started/index.md
-    - Installation: getting-started/installation.md
-    - Quick Start: getting-started/quickstart.md
-    - CLI Reference: getting-started/cli.md
-    - Configuration: getting-started/configuration.md
-  - Core Engine:
+    - "\U0001F4E6 Installation": getting-started/installation.md
+    - "\u26A1 Quick Start": getting-started/quickstart.md
+    - "\U0001F4BB CLI Reference": getting-started/cli.md
+    - "\u2699\uFE0F Configuration": getting-started/configuration.md
+  - "\U0001F9E0 Core Engine":
     - core/index.md
-    - RLM Runner: core/runner.md
-    - Environments: core/environments.md
-    - Event System: core/events.md
-    - Termination Patterns: core/termination.md
-    - Memory Compaction: core/memory-compaction.md
-    - REPL Types: core/repl-types.md
-    - Trajectory Logging: core/trajectory.md
-    - Paradigm Comparison: core/comparison.md
-  - Policy Lab:
+    - "\U0001F504 RLM Runner": core/runner.md
+    - "\U0001F30D Environments": core/environments.md
+    - "\U0001F4E1 Event System": core/events.md
+    - "\U0001F6D1 Termination": core/termination.md
+    - "\U0001F9F9 Memory Compaction": core/memory-compaction.md
+    - "\U0001F4DF REPL Types": core/repl-types.md
+    - "\U0001F4C8 Trajectory": core/trajectory.md
+    - "\U0001F504 Paradigm Comparison": core/comparison.md
+  - "\U0001F3AF Policies & Safety":
     - policies/index.md
-    - Reward Policies: policies/reward.md
-    - Action Selection: policies/action-selection.md
-    - Compaction Policies: policies/compaction.md
-    - Termination Policies: policies/termination.md
-    - Policy Registry: policies/registry.md
-  - HITL & Approval:
-    - security/index.md
-    - Approval Gates: security/approval-gates.md
-    - Risk Assessment: security/risk-assessment.md
-    - Audit Logging: security/audit.md
-  - Observability:
-    - observability/index.md
-    - Sink Architecture: observability/sinks.md
-    - MLflow: observability/mlflow.md
-    - OpenTelemetry: observability/otel.md
-    - LangSmith: observability/langsmith.md
-    - LangFuse: observability/langfuse.md
-    - Logfire: observability/logfire.md
-  - Benchmarks & Leaderboard:
-    - benchmarks/index.md
-    - Preset Benchmarks: benchmarks/presets.md
-    - Leaderboard: benchmarks/leaderboard.md
-    - Session Replay: benchmarks/session-replay.md
-  - Sandbox Runtimes:
-    - sandbox/index.md
-    - Local Runtime: sandbox/local.md
-    - Docker Runtime: sandbox/docker.md
-    - Cloud Runtimes: sandbox/cloud.md
-  - Research TUI:
+    - "\U0001F3C6 Reward Policies": policies/reward.md
+    - "\U0001F3AF Action Selection": policies/action-selection.md
+    - "\U0001F9F9 Compaction": policies/compaction.md
+    - "\U0001F6D1 Termination": policies/termination.md
+    - "\U0001F4DA Registry": policies/registry.md
+    - "\U0001F512 HITL & Approval":
+      - security/index.md
+      - "\U0001F512 Approval Gates": security/approval-gates.md
+      - "\u26A0\uFE0F Risk Assessment": security/risk-assessment.md
+      - "\U0001F4DD Audit Logging": security/audit.md
+  - "\U0001F5A5\uFE0F Terminal UI":
     - tui/index.md
-    - Standard TUI: tui/standard.md
-    - Research TUI: tui/research.md
-    - Widgets: tui/widgets.md
-    - Theme System: tui/theme.md
-  - Integrations:
-    - integrations/index.md
-    - LLM Providers: integrations/llm-providers.md
-    - MCP Server: integrations/mcp.md
-    - Framework Adapters: integrations/frameworks.md
-  - API Reference:
+    - "\U0001F4CB Tab Reference": tui/tabs.md
+    - "\U0001F52C Research Tab": tui/research.md
+    - "\U0001F9E9 Widgets": tui/widgets.md
+    - "\U0001F3A8 Theme System": tui/theme.md
+  - "\U0001F4CA Benchmarks & Replay":
+    - benchmarks/index.md
+    - "\U0001F3C1 Presets": benchmarks/presets.md
+    - "\U0001F3C6 Leaderboard": benchmarks/leaderboard.md
+    - "\u23EA Session Replay": benchmarks/session-replay.md
+  - "\U0001F50D Observability":
+    - observability/index.md
+    - "\U0001F4E5 Sink Architecture": observability/sinks.md
+    - "\U0001F4CA MLflow": observability/mlflow.md
+    - "\U0001F4E1 OpenTelemetry": observability/otel.md
+    - "\U0001F517 LangSmith": observability/langsmith.md
+    - "\U0001F517 LangFuse": observability/langfuse.md
+    - "\U0001F525 Logfire": observability/logfire.md
+  - "\U0001F4E6 Platform":
+    - "\U0001F4E6 Sandbox Runtimes":
+      - sandbox/index.md
+      - "\U0001F4BB Local": sandbox/local.md
+      - "\U0001F433 Docker": sandbox/docker.md
+      - "\u2601\uFE0F Cloud": sandbox/cloud.md
+    - "\U0001F517 Integrations":
+      - integrations/index.md
+      - "\U0001F916 LLM Providers": integrations/llm-providers.md
+      - "\U0001F50C MCP Server": integrations/mcp.md
+      - "\U0001F9E9 Frameworks": integrations/frameworks.md
+  - "\U0001F4D6 Reference":
     - reference/index.md

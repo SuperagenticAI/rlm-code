@@ -1,106 +1,103 @@
-# RLM Code
+<div class="rlm-hero" markdown>
 
-## Research Playground & Evaluation OS for Recursive Language Model Agentic Systems
+<img src="assets/logo.png" alt="RLM Code" class="rlm-hero-logo">
 
-RLM Code is the definitive research operating system for building, running, evaluating, comparing, and optimizing LLM-based coding agents. It supports multiple agent paradigms — **Pure RLM**, **CodeAct**, and **Traditional** — in a single unified platform with built-in safety, observability, and reproducibility.
+# 🧪 RLM Code
 
----
+<p class="rlm-tagline">Research Playground & Evaluation OS for Recursive Language Model Agentic Systems</p>
 
-## What is RLM Code?
+<span class="rlm-badge rlm-badge--purple">v0.1.5</span>
+<span class="rlm-badge rlm-badge--green">Python 3.10+</span>
+<span class="rlm-badge rlm-badge--blue">MIT License</span>
 
-RLM Code provides researchers and developers with everything needed to work with agentic AI systems:
+</div>
 
-- **Multi-paradigm RLM engine** — Run Pure RLM (paper-compliant with context-as-variable), CodeAct (context-in-tokens), or Traditional agent orchestration
-- **Hot-swappable Policy Lab** — Swap reward, action selection, compaction, and termination policies at runtime
-- **HITL approval gates** — Risk assessment with 40+ rules, 6 approval modes, and full audit logging
-- **Pluggable observability** — 7 sinks including JSONL, MLflow, OpenTelemetry, LangSmith, LangFuse, and Logfire
-- **10 benchmark presets** with 33+ test cases and a multi-metric leaderboard
-- **Session replay** with time-travel debugging and checkpoint/restore
-- **6 sandbox runtimes** — Local, Docker, Apple Container, Modal, E2B, Daytona
-- **12+ LLM providers** — OpenAI, Anthropic, Gemini, Ollama, Groq, DeepSeek, and more
-- **Two purpose-built TUIs** — A standard development TUI and a dark-themed Research TUI
-- **MCP server** — Expose all capabilities via Model Context Protocol
-- **50+ slash commands** covering the full feature set
+**RLM Code** is the definitive research operating system for building, running, evaluating, comparing, and optimizing LLM-based coding agents. It supports multiple agent paradigms including **Pure RLM**, **CodeAct**, and **Traditional** in a single unified platform with built-in safety, observability, and reproducibility.
 
 ---
 
-## Architecture Overview
+## ✨ Highlights
 
-```mermaid
-graph TB
-    CLI["rlm-code / rlm-research CLI"]
-    CLI --> TUI["Standard TUI"]
-    CLI --> RTUI["Research TUI"]
-    CLI --> CMD["50+ Slash Commands"]
+<div class="rlm-features" markdown>
 
-    CMD --> RUNNER["RLM Runner"]
-    RUNNER --> EVENTS["Event Bus (27+ types)"]
-    RUNNER --> OBS["Observability (7 sinks)"]
-    RUNNER --> TRAJ["Trajectory Logger"]
-    RUNNER --> MEM["Memory Compaction"]
-    RUNNER --> TERM["Termination Detection"]
-    RUNNER --> POL["Policy Lab"]
-    RUNNER --> HITL["HITL Approval Gates"]
+<div class="rlm-feature-card" markdown>
 
-    RUNNER --> ENV["Environments"]
-    ENV --> PURE["Pure RLM"]
-    ENV --> DSPY["DSPy Coding"]
-    ENV --> GEN["Generic"]
+### 🧠 Multi-Paradigm Engine
+Run **Pure RLM** (paper-compliant with context-as-variable), **CodeAct** (context-in-tokens), or **Traditional** agent orchestration, all from one TUI.
 
-    RUNNER --> SAND["Sandbox Runtimes"]
-    SAND --> LOCAL["Local"]
-    SAND --> DOCKER["Docker"]
-    SAND --> MODAL["Modal"]
-    SAND --> E2B["E2B"]
-    SAND --> DAYTONA["Daytona"]
+</div>
 
-    RUNNER --> LLM["LLM Providers"]
-    LLM --> OAI["OpenAI"]
-    LLM --> ANT["Anthropic"]
-    LLM --> GEM["Gemini"]
-    LLM --> OLL["Ollama"]
+<div class="rlm-feature-card" markdown>
 
-    CMD --> BENCH["Benchmarks (10 presets)"]
-    CMD --> LB["Leaderboard"]
-    CMD --> SR["Session Replay"]
-    CMD --> COMP["Paradigm Comparison"]
-```
+### 🔬 Built-in Research Tab
+A dedicated Research tab inside the TUI with **Dashboard**, **Trajectory**, **Benchmarks**, **Replay**, and **Live Events** sub-tabs for real-time experiment tracking.
+
+</div>
+
+<div class="rlm-feature-card" markdown>
+
+### 🏆 Benchmarks & Leaderboard
+**10 preset benchmarks** with 33+ test cases, a multi-metric leaderboard, and side-by-side paradigm comparison.
+
+</div>
+
+<div class="rlm-feature-card" markdown>
+
+### 🔁 Session Replay
+Time-travel through any RLM run step-by-step with **forward/backward navigation**, reward curve visualization, and checkpoint/restore.
+
+</div>
+
+<div class="rlm-feature-card" markdown>
+
+### 🎯 Hot-Swappable Policies
+Swap **reward**, **action selection**, **compaction**, and **termination** policies at runtime via the Policy Lab.
+
+</div>
+
+<div class="rlm-feature-card" markdown>
+
+### 🔒 HITL Approval Gates
+Risk assessment with **40+ rules**, 6 approval modes, and full audit logging to keep humans in the loop for every critical action.
+
+</div>
+
+<div class="rlm-feature-card" markdown>
+
+### 📊 Pluggable Observability
+**7 sinks** including JSONL, MLflow, OpenTelemetry, LangSmith, LangFuse, and Logfire to trace every step of every run.
+
+</div>
+
+<div class="rlm-feature-card" markdown>
+
+### 📦 Sandbox Runtimes
+**6 runtimes** including Local, Docker, Apple Container, Modal, E2B, and Daytona for safe, isolated code execution.
+
+</div>
+
+</div>
 
 ---
 
-## Quick Start
+## 🚀 Quick Start
 
-### Install
+<div class="rlm-quickstart" markdown>
+
+### Install & Launch
 
 ```bash
 pip install rlm-code
-```
-
-### Launch the TUI
-
-```bash
-# Standard TUI
 rlm-code
-
-# Research TUI (dark theme, animations)
-rlm-research
 ```
 
 ### Connect to a model
-
-Inside the TUI, type:
-
-```
-/connect
-```
-
-This opens the interactive keyboard picker. Or connect directly:
 
 ```
 /connect anthropic claude-sonnet-4-20250514
 ```
 
-### Run a benchmark
+### Run your first benchmark
 
 ```
 /rlm bench preset=dspy_quick
@@ -112,29 +109,112 @@ This opens the interactive keyboard picker. Or connect directly:
 /leaderboard
 ```
 
+### Switch to the Research tab
+
+Press `Ctrl+5` or `F6` to open the **Research** tab to see your run's dashboard, trajectory, reward curves, and live events.
+
+</div>
+
 ---
 
-## Feature Matrix
+## 🏗️ Architecture
+
+```mermaid
+graph TB
+    CLI["🚀 rlm-code CLI"]
+    CLI --> TUI["🖥️ Unified TUI"]
+    TUI --> CHAT["💬 Chat"]
+    TUI --> FILES["📁 Files"]
+    TUI --> DETAILS["📋 Details"]
+    TUI --> SHELL["⚡ Shell"]
+    TUI --> RESEARCH["🔬 Research"]
+
+    CLI --> CMD["⌨️ 50+ Slash Commands"]
+
+    CMD --> RUNNER["🧠 RLM Runner"]
+    RUNNER --> EVENTS["📡 Event Bus (27+ types)"]
+    RUNNER --> OBS["📊 Observability (7 sinks)"]
+    RUNNER --> TRAJ["📈 Trajectory Logger"]
+    RUNNER --> POL["🎯 Policy Lab"]
+    RUNNER --> HITL["🔒 HITL Approval Gates"]
+
+    RUNNER --> ENV["🌍 Environments"]
+    ENV --> PURE["Pure RLM"]
+    ENV --> DSPY["DSPy Coding"]
+    ENV --> GEN["Generic"]
+
+    RUNNER --> SAND["📦 Sandbox Runtimes"]
+    SAND --> LOCAL["Local"]
+    SAND --> DOCKER["Docker"]
+    SAND --> CLOUD["Modal · E2B · Daytona"]
+
+    CMD --> BENCH["🏆 Benchmarks (10 presets)"]
+    CMD --> LB["📊 Leaderboard"]
+    CMD --> SR["⏪ Session Replay"]
+```
+
+---
+
+## 📋 Feature Matrix
 
 | Feature | Status | Module |
 |---------|--------|--------|
-| RLM Runner (multi-paradigm) | :white_check_mark: | `rlm_code.rlm.runner` |
-| Pure RLM Environment | :white_check_mark: | `rlm_code.rlm.pure_rlm_environment` |
-| Event System (27+ types) | :white_check_mark: | `rlm_code.rlm.events` |
-| Policy Lab (16 policies) | :white_check_mark: | `rlm_code.rlm.policies` |
-| HITL Approval Gates | :white_check_mark: | `rlm_code.rlm.approval` |
-| Observability (7 sinks) | :white_check_mark: | `rlm_code.rlm.observability` |
-| Benchmarks (10 presets) | :white_check_mark: | `rlm_code.rlm.benchmarks` |
-| Leaderboard | :white_check_mark: | `rlm_code.rlm.leaderboard` |
-| Session Replay | :white_check_mark: | `rlm_code.rlm.session_replay` |
-| Paradigm Comparison | :white_check_mark: | `rlm_code.rlm.comparison` |
-| Trajectory Logging | :white_check_mark: | `rlm_code.rlm.trajectory` |
-| Memory Compaction | :white_check_mark: | `rlm_code.rlm.memory_compaction` |
-| 6 Sandbox Runtimes | :white_check_mark: | `rlm_code.sandbox.runtimes` |
-| 12+ LLM Providers | :white_check_mark: | `rlm_code.models` |
-| MCP Server | :white_check_mark: | `rlm_code.mcp` |
-| Standard TUI | :white_check_mark: | `rlm_code.ui.tui_app` |
-| Research TUI | :white_check_mark: | `rlm_code.rlm.research_tui` |
-| 50+ Slash Commands | :white_check_mark: | `rlm_code.commands` |
-| Code Validation | :white_check_mark: | `rlm_code.validation` |
-| Framework Adapters | :white_check_mark: | `rlm_code.rlm.frameworks` |
+| 🧠 RLM Runner (multi-paradigm) | ✅ | `rlm_code.rlm.runner` |
+| 🧪 Pure RLM Environment | ✅ | `rlm_code.rlm.pure_rlm_environment` |
+| 📡 Event System (27+ types) | ✅ | `rlm_code.rlm.events` |
+| 🎯 Policy Lab (16 policies) | ✅ | `rlm_code.rlm.policies` |
+| 🔒 HITL Approval Gates | ✅ | `rlm_code.rlm.approval` |
+| 📊 Observability (7 sinks) | ✅ | `rlm_code.rlm.observability` |
+| 🏆 Benchmarks (10 presets) | ✅ | `rlm_code.rlm.benchmarks` |
+| 📊 Leaderboard | ✅ | `rlm_code.rlm.leaderboard` |
+| ⏪ Session Replay | ✅ | `rlm_code.rlm.session_replay` |
+| 🔁 Paradigm Comparison | ✅ | `rlm_code.rlm.comparison` |
+| 📈 Trajectory Logging | ✅ | `rlm_code.rlm.trajectory` |
+| 🧹 Memory Compaction | ✅ | `rlm_code.rlm.memory_compaction` |
+| 📦 6 Sandbox Runtimes | ✅ | `rlm_code.sandbox.runtimes` |
+| 🤖 12+ LLM Providers | ✅ | `rlm_code.models` |
+| 🔌 MCP Server | ✅ | `rlm_code.mcp` |
+| 🖥️ Unified TUI (5 tabs) | ✅ | `rlm_code.ui.tui_app` |
+| ⌨️ 50+ Slash Commands | ✅ | `rlm_code.commands` |
+| ✅ Code Validation | ✅ | `rlm_code.validation` |
+| 🧩 Framework Adapters | ✅ | `rlm_code.rlm.frameworks` |
+
+---
+
+## 🖥️ The TUI at a Glance
+
+RLM Code ships a **single unified TUI** with **5 tabs**:
+
+| Tab | Shortcut | Purpose |
+|-----|----------|---------|
+| 💬 **Chat** | `Ctrl+1` / `F2` | Converse with LLMs, run slash commands |
+| 📁 **Files** | `Ctrl+2` / `F3` | Browse project files with syntax preview |
+| 📋 **Details** | `Ctrl+3` / `F4` | Status panel, diff viewer |
+| ⚡ **Shell** | `Ctrl+4` / `F5` | Persistent stateful shell |
+| 🔬 **Research** | `Ctrl+5` / `F6` | Dashboard, trajectory, benchmarks, replay, live events |
+
+The **Research tab** has 5 internal sub-tabs for organizing experiment data:
+
+- **Dashboard**: Run metrics, reward sparkline, summary
+- **Trajectory**: Step-by-step timeline of actions and rewards
+- **Benchmarks**: Leaderboard table from `/rlm bench` runs
+- **Replay**: Step-through controls for time-travel debugging
+- **Events**: Live event stream from the RLM event bus
+
+!!! tip "🔬 Research Tab"
+    Press `Ctrl+5` after running `/rlm bench preset=dspy_quick` to see real experiment data populate the Research tab dashboards.
+
+---
+
+## 📚 Documentation Guide
+
+| Section | What You'll Find |
+|---------|-----------------|
+| [🚀 Getting Started](getting-started/index.md) | Installation, quick start, CLI reference, configuration |
+| [🧠 Core Engine](core/index.md) | RLM Runner, environments, events, termination, trajectory |
+| [🎯 Policies & Safety](policies/index.md) | Reward, action, compaction, termination policies + HITL gates |
+| [🖥️ Terminal UI](tui/index.md) | Tab reference, Research tab, widgets, theme system |
+| [📊 Benchmarks & Replay](benchmarks/index.md) | Presets, leaderboard, session replay |
+| [🔍 Observability](observability/index.md) | Sink architecture, MLflow, OTel, LangSmith, LangFuse, Logfire |
+| [📦 Platform](sandbox/index.md) | Sandbox runtimes, LLM providers, MCP, framework adapters |
+| [📖 Reference](reference/index.md) | Full API reference |

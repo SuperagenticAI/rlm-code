@@ -38,14 +38,33 @@ class PersistentShell:
         self._closed = False
         self._write_lock = threading.Lock()
 
+        env = os.environ.copy()
+        # Prevent interactive prompts and decoration from contaminating output.
+        env["PS1"] = ""
+        env["PS2"] = ""
+        env["PROMPT_COMMAND"] = ""
+        # Disable zsh auto-title and right-prompt
+        env["DISABLE_AUTO_TITLE"] = "true"
+        env["RPROMPT"] = ""
+
+        # Use correct no-rc flags depending on the shell.
+        shell_base = Path(self.shell).name
+        if shell_base == "zsh":
+            rc_flags = ["--no-rcs", "--no-globalrcs"]
+        elif shell_base in ("bash", "sh"):
+            rc_flags = ["--norc", "--noprofile"]
+        else:
+            rc_flags = []
+
         self._proc = subprocess.Popen(
-            [self.shell],
+            [self.shell, *rc_flags],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
             cwd=str(self.cwd),
+            env=env,
         )
 
         self._reader_thread = threading.Thread(target=self._reader_loop, daemon=True)
@@ -66,6 +85,13 @@ class PersistentShell:
         if not command.strip():
             return ShellResult(command=command, output="", exit_code=0)
 
+        # Drain any leftover output from previous commands before sending.
+        while True:
+            try:
+                self._output_queue.get_nowait()
+            except queue.Empty:
+                break
+
         marker = f"__DSPY_SHELL_DONE_{uuid.uuid4().hex}__"
         wrapped = f"{command}\nprintf \"{marker}:%s\\n\" $?\n"
 
@@ -78,6 +104,7 @@ class PersistentShell:
         lines: list[str] = []
         exit_code = 1
         deadline = time.monotonic() + timeout
+        cmd_stripped = command.strip()
 
         while time.monotonic() < deadline:
             try:
@@ -86,12 +113,18 @@ class PersistentShell:
                 continue
 
             stripped = line.strip()
+            # Detect our end-of-command marker.
             if stripped.startswith(marker + ":"):
                 try:
                     exit_code = int(stripped.split(":", 1)[1])
                 except Exception:
                     exit_code = 1
                 return ShellResult(command=command, output="".join(lines), exit_code=exit_code)
+            # Skip echoed command line and our printf marker if the shell echoes.
+            if stripped == cmd_stripped:
+                continue
+            if "printf" in stripped and marker in stripped:
+                continue
             lines.append(line)
 
         return ShellResult(command=command, output="".join(lines), exit_code=124, timed_out=True)

@@ -1,361 +1,252 @@
-# Research TUI
+# 🔬 Research Tab
 
-The Research TUI is a purpose-built interface for RLM experiment tracking,
-session replay, and benchmark analysis. It is launched with `rlm-research` or
-`rlm-code --research`.
+The **Research tab** is the 5th tab in the RLM Code TUI, accessible via
+`Ctrl+5` / `F6`. It provides a dedicated space for experiment tracking,
+trajectory viewing, benchmarks, session replay, and live event streaming,
+all wired to real data from the RLM runner.
 
 ---
 
-## Module
+## 📍 How to Access
+
+| Method | Action |
+|--------|--------|
+| ⌨️ Keyboard | `Ctrl+5` or `F6` |
+| 🖱️ Click | Click **🔬 Research** in the focus bar |
+| 💬 Command | `/view research` |
+
+---
+
+## 🗂️ Sub-Tabs
+
+The Research tab organizes data across **5 sub-tabs**, each shown as a button
+bar at the top of the pane. Click a sub-tab to switch views.
 
 ```
-rlm_code.rlm.research_tui
+┌─────────────────────────────────────────────────────┐
+│ 🔬 Research                                         │
+│ [Dashboard] [Trajectory] [Benchmarks] [Replay] [Events] │
+│                                                     │
+│  ┌─ Content area (changes per sub-tab) ──────────┐  │
+│  │                                                │  │
+│  │                                                │  │
+│  └────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────┘
 ```
 
-### Entry Point
+---
+
+## 📊 Dashboard
+
+The default sub-tab. Shows a high-level summary of the most recent RLM run.
+
+### Widgets
+
+| Widget | What It Shows |
+|--------|---------------|
+| 🏷️ **MetricsPanel** | Run ID, status (color-coded), cumulative reward, step count, tokens, cost, duration |
+| 📈 **SparklineChart** | ASCII reward curve using Unicode block characters (`▁▂▃▄▅▆▇█`) |
+| 📝 **Summary** | One-line result summary of the run |
+
+### How It Populates
+
+1. Run `/rlm run "your task"` or `/rlm bench preset=dspy_quick` in the Chat tab
+2. When the run completes, the Dashboard auto-populates via `build_run_visualization()`
+3. The MetricsPanel updates its reactive properties (run_id, status, reward, steps, etc.)
+4. The SparklineChart fills with cumulative reward values from the trajectory
+
+!!! tip "📊 Live Updates"
+    During an active run, the SparklineChart updates in real-time as each
+    iteration completes and emits an `ITERATION_END` event.
+
+### Data Source
 
 ```python
-from rlm_code.rlm.research_tui.app import run_tui
+from rlm_code.rlm.visualizer import build_run_visualization
 
-run_tui(root_path=Path.cwd())
+viz = build_run_visualization(run_path=run_path, run_dir=run_path.parent)
+# viz["run_id"], viz["status"], viz["total_reward"],
+# viz["step_count"], viz["reward_curve"], viz["timeline"]
 ```
 
-### Main Class
+---
+
+## 📈 Trajectory
+
+Step-by-step timeline of the RLM run, showing what the agent did at each step.
+
+### Table Columns
+
+| Column | Description |
+|--------|-------------|
+| 🔢 **Step** | Step number |
+| ⚡ **Action** | Action type (e.g., `code_generation`, `validation`) |
+| 🏆 **Reward** | Step reward (color-coded: 🟢 positive, 🔴 negative) |
+| 🔤 **Tokens** | Tokens consumed in this step |
+| ✅ **Success** | Whether the step succeeded |
+
+### How It Populates
+
+After any `/rlm run` or `/rlm bench` command, the trajectory is extracted from
+`build_run_visualization()["timeline"]` and rendered as a Rich table.
+
+---
+
+## 🏆 Benchmarks
+
+Displays the **leaderboard** table from benchmark runs.
+
+### What You See
+
+A Rich table ranked by reward, showing:
+
+| Column | Description |
+|--------|-------------|
+| 🏅 **Rank** | Position on the leaderboard |
+| 🏷️ **ID** | Run identifier |
+| 🌍 **Environment** | pure_rlm, codeact, or generic |
+| 🤖 **Model** | Model used |
+| 🏆 **Reward** | Average reward (color-coded) |
+| 📊 **Completion** | Completion rate |
+| 🔢 **Steps** | Step count |
+| 🔤 **Tokens** | Total tokens |
+
+### How It Populates
+
+Run `/rlm bench preset=<name>` then switch to Research → Benchmarks.
+The data comes from:
 
 ```python
-class ResearchTUIApp(App):
-    """RLM Research TUI - Clean and functional."""
+from rlm_code.rlm.leaderboard import Leaderboard
 
-    TITLE = "RLM Research Lab"
+lb = Leaderboard(workdir=Path.cwd() / ".rlm_code", auto_load=True)
+table = lb.format_rich_table(limit=15)
 ```
-
-!!! info "Standalone Launch"
-    The Research TUI can also be launched directly as a Python module:
-    ```bash
-    python -m rlm_code.rlm.research_tui.app
-    ```
 
 ---
 
-## Visual Design
+## ⏪ Replay
 
-The Research TUI uses a **pure black background** (`#000000`) with a design
-language inspired by Dracula, Tokyo Night, and modern terminal aesthetics.
+Step-through controls for **time-travel debugging** of any RLM run.
 
-| Element               | Color                  | Hex         |
-|-----------------------|------------------------|-------------|
-| Background            | Pure black             | `#000000`   |
-| Panel surfaces        | Dark gray              | `#0d1117`   |
-| Elevated surfaces     | Slightly lighter       | `#161b22`   |
-| Selection/Hover       | Highlight gray         | `#21262d`   |
-| Borders               | Subtle gray            | `#30363d`   |
-| Focus border          | Blue                   | `#58a6ff`   |
-| Primary accent        | Purple                 | `#a855f7`   |
-| Success               | Green                  | `#22c55e`   |
-| Text primary          | Near-white             | `#f8f8f2`   |
-| Text secondary        | Medium gray            | `#8b949e`   |
-| Text muted            | Dark gray              | `#6e7681`   |
+### Controls
 
----
+| Button | Action |
+|--------|--------|
+| `\|<` | ⏮️ Jump to first step |
+| `<` | ◀️ Step backward |
+| `>` | ▶️ Step forward |
+| `>\|` | ⏭️ Jump to last step |
 
-## Layout
+### What You See
 
-The interface is divided into two main regions -- a fixed-width sidebar and a
-flexible content area:
+- **Step position**: `Step 3/8` indicator
+- **Step detail**: Action code with syntax highlighting, output, reward, cumulative reward
+- **Reward curve**: SparklineChart showing the full reward trajectory with current position
 
-```
-+---------+---------------------------------------------------+
-| Sidebar | Metrics Bar                                       |
-| (28col) +-------------------------+-------------------------+
-|         | File Browser (35%)      | Code Preview (65%)      |
-|         |                         |                         |
-|         +---------------------------------------------------+
-|         | Response Log (30% height, min 8 rows)             |
-|         |                                                   |
-|         +---------------------------------------------------+
-|         | Prompt Input                                      |
-+---------+---------------------------------------------------+
-```
+### How It Populates
 
-### Sidebar (28 columns)
-
-Fixed-width left panel containing three sections:
-
-**Navigation** -- Numbered items for quick access:
-
-| Key | Destination   |
-|-----|---------------|
-| `1` | Dashboard     |
-| `2` | Replay        |
-| `3` | Leaderboard   |
-| `4` | Compare       |
-
-**Quick Actions**:
-
-| Key | Action          |
-|-----|-----------------|
-| `r` | Run benchmark   |
-| `l` | Load session    |
-
-**Status Indicators** -- Color-coded dots showing observability sink
-availability:
-
-| Indicator | Meaning                          |
-|-----------|----------------------------------|
-| Green dot | Active (e.g., Local JSONL, MLflow) |
-| Gray dot  | Inactive (e.g., LangSmith not configured) |
-
-### Metrics Bar
-
-A single-row horizontal bar displaying key run metrics:
-
-| Metric     | Example   | Color         |
-|------------|-----------|---------------|
-| **Run**    | `abc123`  | White         |
-| **Status** | `READY`   | Green (bold)  |
-| **Reward** | `0.72`    | Green (bold)  |
-| **Steps**  | `4/8`     | White         |
-| **Tokens** | `3,200`   | White         |
-
-Metrics are separated by styled vertical bars (`#30363d`).
+Run `/rlm replay` or `/rlm replay <run_id>` and the TUI automatically switches
+to Research → Replay and loads the session:
 
 ```python
-def _update_metrics(self) -> None:
-    text = Text()
-    text.append("Run: ", style="#6e7681")
-    text.append("abc123", style="#f8f8f2")
-    text.append(" | ", style="#30363d")
-    text.append("Status: ", style="#6e7681")
-    text.append("READY", style="#22c55e bold")
-    # ...
+from rlm_code.rlm.session_replay import SessionReplayer
+
+replayer = SessionReplayer.from_jsonl(run_path)
+replayer.step_forward()    # advance one step
+replayer.step_backward()   # go back one step
+replayer.goto_step(n)      # jump to step n
 ```
 
-### File Browser
+### Reward Color Coding
 
-A Textual `DirectoryTree` rooted at the current working directory, styled
-with the dark panel theme. Clicking a file loads it into the Code Preview.
+| Reward | Color |
+|--------|-------|
+| >= 0.8 | 🟢 Bright green |
+| >= 0.5 | 🟢 Green |
+| >= 0.3 | 🟡 Yellow |
+| >= 0.0 | 🟠 Orange |
+| < 0.0 | 🔴 Red |
 
-### Code Preview
+---
 
-Displays selected files with **Dracula-theme** syntax highlighting via
-Rich `Syntax`. Features:
+## 📡 Events
 
-- Line numbers enabled
-- Background color: `#161b22`
-- 16+ language support
+Live event stream from the RLM event bus, showing real-time progress during
+active runs.
 
-The language is auto-detected from the file extension:
+### What You See
+
+A `RichLog` widget that streams formatted events with timestamps:
+
+```
+[14:23:01] 🟢 RUN_START - Starting run abc123 (pure_rlm)
+[14:23:02] 🔵 ITERATION_START - Step 1/8
+[14:23:04] 🟡 LLM_CALL - Calling claude-sonnet-4-20250514 (450 tokens)
+[14:23:06] 🟢 ITERATION_END - Step 1 complete (reward: +0.15)
+[14:23:08] 🟢 RUN_END - Run complete (total reward: 0.72)
+```
+
+### Event Types
+
+The event bus supports **27+ event types** including:
+
+| Event | Description |
+|-------|-------------|
+| `RUN_START` / `RUN_END` | 🏁 Run lifecycle |
+| `ITERATION_START` / `ITERATION_END` | 🔄 Step lifecycle |
+| `LLM_CALL` / `LLM_RESPONSE` | 🤖 Model interactions |
+| `SANDBOX_EXEC` | 📦 Code execution |
+| `REWARD_COMPUTED` | 🏆 Reward calculation |
+| `MEMORY_COMPACTED` | 🧹 Memory compaction |
+| `APPROVAL_REQUESTED` | 🔒 HITL gates |
+
+### Thread Safety
+
+Events flow from the RLM runner (which runs in a worker thread) to the UI
+via `call_from_thread()` for thread-safe rendering:
 
 ```python
-lang_map = {
-    ".py": "python", ".js": "javascript", ".ts": "typescript",
-    ".json": "json", ".yaml": "yaml", ".yml": "yaml",
-    ".md": "markdown", ".sh": "bash", ".html": "html",
-    ".css": "css", ".sql": "sql", ".rs": "rust", ".go": "go",
-}
-```
-
-When no code is loaded, a placeholder message is shown in italicized muted
-text inside a purple-titled panel.
-
-### Response Log
-
-A Rich-enabled `RichLog` widget with:
-
-- Full Rich markup support
-- Syntax highlighting for embedded code blocks
-- Auto-scrolling
-- Wrap and highlight enabled
-- Minimum height of 8 rows, occupying 30% of the content area
-
-### Prompt Input
-
-A styled input field at the bottom of the interface:
-
-- Placeholder: "Enter command or message... (type /help for commands)"
-- Border changes from `#30363d` to `#a855f7` (purple) on focus
-- Supports both slash commands and free-text messages
-
----
-
-## Slash Commands
-
-| Command    | Description                                |
-|------------|--------------------------------------------|
-| `/help`    | Show available commands and shortcuts      |
-| `/clear`   | Clear the response log                     |
-| `/status`  | Show current model, provider, and workspace|
-| `/run`     | Run a benchmark (demo mode)                |
-| `/load`    | Load a session (dialog placeholder)        |
-| `/quit`    | Exit the TUI                               |
-| `/exit`    | Exit the TUI (alias)                       |
-
-!!! tip "Unknown Commands"
-    Unknown slash commands display a yellow warning message with a prompt
-    to type `/help` for the full command list.
-
----
-
-## Keyboard Shortcuts
-
-| Key         | Action              |
-|-------------|---------------------|
-| `q`         | Quit the application|
-| `Ctrl+L`    | Clear the log       |
-| `F1`        | Show help           |
-| `Escape`    | Focus the input     |
-
----
-
-## File Selection Flow
-
-1. Click a file in the `DirectoryTree` (file browser panel).
-2. The `on_directory_tree_file_selected` handler reads the file content.
-3. Language is detected from the file extension.
-4. The Code Preview panel updates with Dracula-highlighted syntax.
-5. A "Loaded: filename" message appears in the response log.
-
-```python
-def on_directory_tree_file_selected(self, event: DirectoryTree.FileSelected):
-    path = event.path
-    self.current_file = path
-    content = path.read_text(encoding="utf-8", errors="replace")
-    lang = lang_map.get(path.suffix.lower(), "text")
-    self._update_code_panel(content, lang, path.name)
-    self._log(f"[dim]Loaded: {path.name}[/]")
+def _on_raw_rlm_event(self, event):
+    self.call_from_thread(self._on_rlm_event, event)
 ```
 
 ---
 
-## Message Handling
+## 🔗 Integration with Slash Commands
 
-Free-text messages (not starting with `/`) are displayed as a user/assistant
-conversation:
+The Research tab auto-updates when you run RLM commands in the Chat tab:
 
-```
-You: What does this function do?
-Assistant: Processing your request...
-```
-
-The Research TUI is designed as a frontend for experiment interaction -- the
-actual model integration routes through the RLM runner and LLM connector.
+| Command | What Updates |
+|---------|-------------|
+| `/rlm run "..."` | 📊 Dashboard + 📈 Trajectory + 📡 Events |
+| `/rlm bench preset=...` | 📊 Dashboard + 📈 Trajectory + 🏆 Benchmarks + 📡 Events |
+| `/rlm replay` | ⏪ Replay (auto-switches to Replay sub-tab) |
+| `/leaderboard` | 🏆 Benchmarks |
 
 ---
 
-## CSS Architecture
+## 🎨 Visual Design
 
-The Research TUI uses **two layers of CSS**:
+The Research tab inherits the TUI's purple-accented dark theme with
+additional styling for research-specific elements:
 
-1. **Inline CSS** -- Defined directly in the `ResearchTUIApp.CSS` class
-   variable, containing all layout rules, widget styles, and state classes.
-
-2. **Shared CSS** -- The `RESEARCH_TUI_CSS` string from the
-   [Theme System](theme.md) module, providing reusable panel, button,
-   scrollbar, tab, and collapsible styles.
-
-### Key Inline CSS Rules
-
-```css
-Screen { background: #000000; }
-
-#sidebar {
-    width: 28;
-    background: #0d1117;
-    border-right: solid #30363d;
-}
-
-#file-panel {
-    width: 35%;
-    background: #0d1117;
-    border: solid #30363d;
-}
-
-#code-panel {
-    width: 65%;
-    background: #161b22;
-    border: solid #30363d;
-}
-
-#response-log {
-    height: 30%;
-    min-height: 8;
-    background: #0d1117;
-}
-
-#prompt-input:focus {
-    border: solid #a855f7;
-}
-```
-
-### Sidebar Navigation Styles
-
-```css
-#sidebar .nav-item {
-    color: #8b949e;
-    padding: 0 1;
-}
-
-#sidebar .nav-item:hover {
-    background: #21262d;
-}
-```
-
-!!! info "Theme Integration"
-    The Research TUI imports `COLORS` and `RESEARCH_TUI_CSS` from
-    `rlm_code.rlm.research_tui.theme`. See [Theme System](theme.md) for the
-    full color palette and CSS reference.
+| Element | Style |
+|---------|-------|
+| Sub-tab buttons | Active = `primary` variant, Inactive = `default` |
+| Metrics panel | Titled Rich Panel with color-coded status |
+| Sparkline | Unicode block chars with reward-based colors |
+| Event log | Black background, light text, markup-enabled |
+| Replay controls | Compact button row with step position indicator |
 
 ---
 
-## Comparison with Standard TUI
+## 📊 Widgets Used
 
-| Feature              | Standard TUI                 | Research TUI                  |
-|----------------------|------------------------------|-------------------------------|
-| **Purpose**          | Development & interaction    | Experiment tracking & analysis|
-| **Entry command**    | `rlm-code`                   | `rlm-research`                |
-| **Layout**           | 6 panes, one-screen mode     | Sidebar + 4 panels            |
-| **LLM Integration**  | Direct model calls          | Routes through RLM runner     |
-| **Connect wizard**   | Full keyboard picker         | Not included (use config)     |
-| **Command palette**  | Ctrl+K fuzzy search          | Not included                  |
-| **Shell pane**       | Persistent shell             | Not included                  |
-| **Diff viewer**      | Snapshot/diff workflow        | Not included                  |
-| **Metrics bar**      | Status strip (1 line)        | Dedicated metrics bar         |
-| **Theme**            | Blue/cyan dark theme         | Dracula-inspired purple/green |
-| **Keyboard shortcuts** | 20+ bindings               | 4 bindings                    |
-
----
-
-## Class Reference
-
-### ResearchTUIApp
-
-| Method / Property                    | Description                                  |
-|--------------------------------------|----------------------------------------------|
-| `TITLE`                              | Application title: "RLM Research Lab"        |
-| `CSS`                                | Inline Textual CSS for layout and styling    |
-| `BINDINGS`                           | List of keyboard bindings                    |
-| `current_file`                       | Currently selected file path                 |
-| `compose()`                          | Build the full widget tree                   |
-| `on_mount()`                         | Initialize metrics, code panel, welcome message |
-| `_log(message)`                      | Write Rich markup to the response log        |
-| `_update_metrics()`                  | Refresh the metrics bar with current values  |
-| `_update_code_panel(content, lang, title)` | Update code preview with syntax highlighting |
-| `on_directory_tree_file_selected()`  | Handle file selection from tree              |
-| `on_input_submitted()`               | Route input to command handler or chat       |
-| `_handle_command(cmd)`               | Dispatch slash commands                      |
-| `action_clear_log()`                 | Clear the response log                       |
-| `action_help()`                      | Show help via `/help`                        |
-| `action_focus_input()`               | Focus the prompt input                       |
-
-### run_tui()
-
-```python
-def run_tui(root_path: Path | None = None) -> None:
-    """Run the Research TUI application."""
-```
-
-| Parameter    | Type          | Default     | Description                |
-|-------------|---------------|-------------|----------------------------|
-| `root_path` | `Path | None` | `None`      | Root directory for the TUI |
-
-When `root_path` is `None`, the TUI uses the current working directory.
+| Widget | Module | Purpose |
+|--------|--------|---------|
+| `MetricsPanel` | `rlm_code.rlm.research_tui.widgets.panels` | Run dashboard metrics |
+| `SparklineChart` | `rlm_code.rlm.research_tui.widgets.animated` | Reward curve visualization |
+| `RichLog` | `textual.widgets` | Event stream display |
+| `Static` | `textual.widgets` | Trajectory table, summary, replay detail |
+| `Button` | `textual.widgets` | Sub-tab buttons, replay controls |

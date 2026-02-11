@@ -1,4 +1,4 @@
-# Installation
+# 📦 Installation
 
 This guide covers how to install RLM Code, its optional dependencies, and how to verify your installation.
 
@@ -88,8 +88,8 @@ The multi-pane terminal interface requires Textual:
 pip install rlm-code[tui]
 ```
 
-!!! note "TUI Required for Interactive Mode"
-    The `textual` package (>= 0.86.0) is required for both the Standard TUI and the Research TUI. Without it, only headless/scripting usage is available.
+!!! note "🖥️ TUI Required for Interactive Mode"
+    The `textual` package (>= 0.86.0) is required for the TUI with all 5 tabs (Chat, Files, Details, Shell, Research). Without it, only headless/scripting usage is available.
 
 ### LLM Providers
 

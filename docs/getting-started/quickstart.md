@@ -1,18 +1,18 @@
-# Quick Start
+# ⚡ Quick Start
 
-This guide walks you through launching RLM Code, connecting to an LLM, running your first benchmark, viewing the leaderboard, and exploring session replay -- all in under 10 minutes.
+This guide walks you through launching RLM Code, connecting to an LLM, running your first benchmark, viewing the leaderboard, and exploring the Research tab, all in under 10 minutes.
 
 ---
 
-## Prerequisites
+## ✅ Prerequisites
 
 Before you begin, make sure you have:
 
-- [x] Python 3.10+ installed
-- [x] RLM Code installed (`pip install rlm-code[tui,llm-all]`)
-- [x] At least one LLM API key (OpenAI, Anthropic, or Gemini) or a local Ollama instance
+- [x] 🐍 Python 3.10+ installed
+- [x] 📦 RLM Code installed (`pip install rlm-code[tui,llm-all]`)
+- [x] 🔑 At least one LLM API key (OpenAI, Anthropic, or Gemini) or a local Ollama instance
 
-!!! tip "Local Models"
+!!! tip "🏠 Local Models"
     You can use RLM Code entirely with local models via [Ollama](https://ollama.com/). No API keys needed:
 
     ```bash
@@ -21,7 +21,7 @@ Before you begin, make sure you have:
 
 ---
 
-## Step 1: Launch the TUI
+## Step 1: 🚀 Launch the TUI
 
 Navigate to a project directory (not your home directory) and launch:
 
@@ -30,28 +30,14 @@ mkdir -p ~/projects/rlm-demo && cd ~/projects/rlm-demo
 rlm-code
 ```
 
-!!! warning "Directory Safety Check"
+!!! warning "⚠️ Directory Safety Check"
     RLM Code performs a safety check on startup. It will warn you if you are running from your home directory, Desktop, Documents, or a system directory. Always run from a dedicated project directory.
 
-You should see the RLM Code TUI with a multi-pane layout: a chat panel, file browser, details panel, and shell.
-
-### Alternative: Research TUI
-
-For a dark-themed research lab interface with file browser, code viewer, and metrics bar:
-
-```bash
-rlm-research
-```
-
-Or use the flag:
-
-```bash
-rlm-code --research
-```
+You should see the **RLM Research Lab** TUI with 5 tabs: 💬 Chat, 📁 Files, 📋 Details, ⚡ Shell, and 🔬 Research. The Chat tab is active by default.
 
 ---
 
-## Step 2: Initialize Your Project
+## Step 2: 📁 Initialize Your Project
 
 Initialize a project configuration file:
 
@@ -63,7 +49,7 @@ This creates an `rlm_config.yaml` in your current directory with default setting
 
 ---
 
-## Step 3: Connect to a Model
+## Step 3: 🔗 Connect to a Model
 
 Use the `/connect` command to connect to an LLM provider:
 
@@ -125,7 +111,7 @@ This shows the current model, provider, connection status, sandbox runtime, and 
 
 ---
 
-## Step 4: Run a Benchmark
+## Step 4: 🏆 Run a Benchmark
 
 RLM Code ships with 10+ built-in benchmark presets. Start with the quick DSPy smoke test:
 
@@ -178,7 +164,7 @@ Supported formats include explicit preset mappings, Pydantic-style dataset cases
 
 ---
 
-## Step 5: View the Leaderboard
+## Step 5: 📊 View the Leaderboard
 
 After running benchmarks, view aggregated results on the leaderboard:
 
@@ -209,7 +195,7 @@ Available ranking metrics: `reward`, `completion_rate`, `steps`, `tokens`, `cost
 
 ---
 
-## Step 6: Compare Paradigms
+## Step 6: 🔀 Compare Paradigms
 
 Run the same task through multiple paradigms and compare:
 
@@ -227,7 +213,7 @@ Use the comparison command for direct A/B analysis:
 
 ---
 
-## Step 7: Session Replay
+## Step 7: ⏪ Session Replay
 
 Every RLM run generates a trajectory that can be replayed step by step.
 
@@ -255,7 +241,7 @@ Session replay supports both JSONL trajectory files and JSON snapshot files.
 
 ---
 
-## Step 8: Explore Slash Commands
+## Step 8: ⌨️ Explore Slash Commands
 
 RLM Code has 50+ slash commands. Here are the most useful ones to explore next:
 
@@ -310,7 +296,22 @@ RLM Code has 50+ slash commands. Here are the most useful ones to explore next:
 
 ---
 
-## Full Workflow Example
+## 🔬 Step 9: Explore the Research Tab
+
+After running a benchmark, press `Ctrl+5` to switch to the **🔬 Research** tab:
+
+- **📊 Dashboard**: See run metrics, reward sparkline, and summary
+- **📈 Trajectory**: Step-by-step breakdown of agent actions and rewards
+- **🏆 Benchmarks**: Leaderboard table from all your runs
+- **⏪ Replay**: Step-through controls for time-travel debugging
+- **📡 Events**: Live event stream from the RLM event bus
+
+!!! tip "🔬 Research Tab"
+    The Research tab updates automatically when you run `/rlm bench` or `/rlm run` commands. No manual refresh needed!
+
+---
+
+## 🎯 Full Workflow Example
 
 Here is a complete workflow from start to finish:
 
@@ -363,10 +364,11 @@ rlm-code
 
 ---
 
-## What's Next?
+## 📚 What's Next?
 
-- **[CLI Reference](cli.md)**: Complete documentation for all commands and flags
-- **[Configuration](configuration.md)**: Customize every aspect of RLM Code via `rlm_config.yaml`
-- Explore the [Core Engine](../core/index.md) documentation for the RLM Runner, Environments, and Event System
-- Set up [Observability](../observability/index.md) with MLflow, OpenTelemetry, or your preferred platform
-- Learn about [Sandbox Runtimes](../sandbox/index.md) for isolated code execution with Docker, Modal, or E2B
+- 💻 **[CLI Reference](cli.md)**: Complete documentation for all commands and flags
+- ⚙️ **[Configuration](configuration.md)**: Customize every aspect of RLM Code via `rlm_config.yaml`
+- 🧠 **[Core Engine](../core/index.md)**: RLM Runner, Environments, and Event System
+- 🔬 **[Research Tab](../tui/research.md)**: Deep dive into the experiment tracking interface
+- 📊 **[Observability](../observability/index.md)**: MLflow, OpenTelemetry, LangSmith, LangFuse, Logfire
+- 📦 **[Sandbox Runtimes](../sandbox/index.md)**: Docker, Modal, E2B for isolated code execution

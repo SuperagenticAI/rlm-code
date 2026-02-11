@@ -1,114 +1,145 @@
-# Terminal User Interfaces
+# 🖥️ Terminal User Interface
 
-RLM Code ships with **two distinct TUI applications**, both built on the
-[Textual](https://textual.textualize.io/) framework with
-[Rich](https://rich.readthedocs.io/) rendering. Each serves a different
-workflow while sharing the same dark-theme design language.
-
----
-
-## The Two TUIs
-
-| TUI                  | Entry Point          | Module                              | Purpose                                |
-|----------------------|----------------------|-------------------------------------|----------------------------------------|
-| **Standard TUI**     | `rlm-code`           | `rlm_code.ui.tui_app`              | Day-to-day development and interaction |
-| **Research TUI**     | `rlm-research` or `rlm-code --research` | `rlm_code.rlm.research_tui` | Experiment tracking and analysis       |
+RLM Code ships with a **single unified TUI** built on
+[Textual](https://textual.textualize.io/) and [Rich](https://rich.readthedocs.io/).
+It provides a complete research-grade development environment with **5 tabs**
+including a dedicated **🔬 Research** tab for experiment tracking, trajectory
+viewing, benchmarks, session replay, and live event streaming.
 
 ---
 
-## Shared Technology Stack
+## 🚀 Launch
 
-Both TUIs are built on the same foundation:
+```bash
+rlm-code
+```
 
-- **[Textual](https://textual.textualize.io/)** -- Async TUI framework with
-  CSS-like styling, reactive widgets, and a composable layout system.
-- **[Rich](https://rich.readthedocs.io/)** -- Terminal rendering library
-  providing syntax highlighting, tables, markdown, panels, and styled text.
-- **Dark themes** -- Both use a dark background (`#000000` or near-black) with
-  high-contrast accent colors for readability in any terminal.
+That's it. One command, one TUI, everything in one place.
 
-!!! info "Installation"
-    Textual is a required dependency of RLM Code. It is installed
-    automatically with `pip install rlm-code`.
+!!! info "📦 Dependency"
+    Textual is a required dependency of RLM Code and is installed automatically
+    with `pip install rlm-code`.
 
 ---
 
-## Standard TUI at a Glance
+## 🗂️ The Five Tabs
 
-The Standard TUI is a multi-pane development environment with:
+| Tab | Shortcut | F-Key | Purpose |
+|-----|----------|-------|---------|
+| 💬 **Chat** | `Ctrl+1` | `F2` | Converse with LLMs, run slash commands |
+| 📁 **Files** | `Ctrl+2` | `F3` | Browse project tree, syntax-highlighted preview |
+| 📋 **Details** | `Ctrl+3` | `F4` | Status panel, snapshot diff viewer |
+| ⚡ **Shell** | `Ctrl+4` | `F5` | Persistent stateful shell (env preserved) |
+| 🔬 **Research** | `Ctrl+5` | `F6` | Dashboard, trajectory, benchmarks, replay, events |
 
-- **6 panes**: Chat, Files, Status, Preview, Diff, Shell
-- **One-screen mode** (toggle with `Ctrl+O`)
-- **Command palette** (`Ctrl+K`)
-- **Connect wizard** for LLM providers
-- **Persistent shell** with environment preservation
-
-See [Standard TUI](standard.md) for full details.
-
----
-
-## Research TUI at a Glance
-
-The Research TUI is an experiment-focused interface with:
-
-- **Sidebar** with navigation, quick actions, and status indicators
-- **Metrics bar** showing run ID, status, reward, steps, and tokens
-- **File browser** + **code preview** side-by-side
-- **Response log** with Rich formatting and embedded code highlighting
-- **Slash commands**: `/help`, `/clear`, `/status`, `/run`, `/quit`
-
-See [Research TUI](research.md) for full details.
+Switch tabs with keyboard shortcuts, `Tab` / `Shift+Tab` to cycle, or click the
+**focus bar** buttons below the header.
 
 ---
 
-## Widget Library
+## 📐 Layout Modes
 
-Both TUIs draw from a shared widget library organized into two categories:
+### One-Screen Mode (default)
 
-- **Animated widgets** -- ThinkingSpinner, ProgressPulse, SparklineChart,
-  TypewriterText, RewardFlash, StatusIndicator
-- **Panel widgets** -- FileBrowser, CodePreview, ResponseArea, PromptBox,
-  MetricsPanel, TimelinePanel, LeaderboardPanel
+Only the active tab is visible, maximizing screen real estate.
+Toggle with **`Ctrl+O`** or `/layout single`.
 
-See [Widgets](widgets.md) for the full API reference.
+### Multi-Pane Mode
 
----
-
-## Theme System
-
-All visual styling is centralized in a theme module that provides:
-
-- A `ColorPalette` dataclass with 20+ named color constants
-- Icon and box-drawing character dictionaries
-- Animation constants (spinner frames, sparkline characters, gradients)
-- Helper functions: `sparkline()`, `progress_bar()`, `get_status_color()`, `get_reward_color()`
-- A complete Textual CSS string (`RESEARCH_TUI_CSS`)
-
-See [Theme System](theme.md) for the full reference.
+All panes visible simultaneously. Toggle with **`Ctrl+O`** or `/layout multi`.
+Individual panes can be shown/hidden with `/pane`.
 
 ---
 
-## Quick Start
+## 🔬 Research Tab
 
-=== "Standard TUI"
+The Research tab is where experiment data lives. It has **5 internal sub-tabs**:
 
-    ```bash
-    rlm-code
-    ```
+| Sub-Tab | What It Shows |
+|---------|---------------|
+| 📊 **Dashboard** | Run ID, status, reward, steps, tokens, cost, reward sparkline |
+| 📈 **Trajectory** | Step-by-step timeline showing action, reward, tokens, success |
+| 🏆 **Benchmarks** | Leaderboard table from `/rlm bench` runs |
+| ⏪ **Replay** | Step-through controls for time-travel debugging |
+| 📡 **Events** | Live event stream from the RLM event bus |
 
-=== "Research TUI"
+!!! tip "🔬 See It in Action"
+    1. Run `/rlm bench preset=dspy_quick` in the Chat tab
+    2. Press `Ctrl+5` to switch to Research
+    3. Dashboard populates with real run metrics and sparkline
+    4. Click **Trajectory** to see the step-by-step breakdown
 
-    ```bash
-    rlm-research
-    # or
-    rlm-code --research
-    ```
+See [🔬 Research Tab](research.md) for full details.
 
 ---
 
-## Next Steps
+## ⌨️ Keyboard Shortcuts
 
-- [Standard TUI](standard.md) -- Pane layout, keyboard shortcuts, connect wizard
-- [Research TUI](research.md) -- Experiment interface, metrics, commands
-- [Widgets](widgets.md) -- Full widget API reference
-- [Theme System](theme.md) -- Colors, icons, animation constants
+### 🗂️ Tab Switching
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+1` / `F2` | 💬 Chat |
+| `Ctrl+2` / `F3` | 📁 Files |
+| `Ctrl+3` / `F4` | 📋 Details |
+| `Ctrl+4` / `F5` | ⚡ Shell |
+| `Ctrl+5` / `F6` | 🔬 Research |
+| `Tab` | Cycle to next tab |
+| `Shift+Tab` | Cycle to previous tab |
+| `Escape` | Back to Chat |
+
+### ⚡ Actions
+
+| Shortcut | Action |
+|----------|--------|
+| `F7` / `Ctrl+Y` | 📋 Copy last response |
+| `Ctrl+O` | 🔀 Toggle one-screen mode |
+| `Ctrl+K` | 🔍 Open command palette |
+| `Ctrl+G` | 💬 Focus chat input |
+| `Ctrl+L` | 🧹 Clear logs |
+| `Ctrl+R` | 🔄 Refresh preview |
+| `Ctrl+Q` | 🚪 Quit |
+
+### 📌 Pane Toggles (Multi-Pane Mode)
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+B` | Toggle Files pane |
+| `Ctrl+J` | Toggle Details pane |
+| `Ctrl+T` | Toggle Shell pane |
+
+---
+
+## 🎨 Theme
+
+The TUI uses a **true-black background** (`#010101`) with a purple accent palette
+inspired by the research aesthetic:
+
+| Element | Color | Hex |
+|---------|-------|-----|
+| Background | Near-black | `#010101` |
+| Pane borders | Purple-blue | `#2f6188` |
+| Accent | Purple | `#7c3aed` |
+| Active accent | Bright purple | `#a78bfa` |
+| Title text | Cyan | `#8de7ff` |
+| Chat text | Light blue-white | `#dce7f3` |
+
+---
+
+## 🧩 Widget Library
+
+Both standard panes and the Research tab draw from a shared widget library:
+
+- **🎭 Animated**: ThinkingSpinner, ProgressPulse, SparklineChart, TypewriterText, RewardFlash, StatusIndicator
+- **📊 Panels**: FileBrowser, CodePreview, ResponseArea, PromptBox, MetricsPanel, TimelinePanel, LeaderboardPanel
+
+See [🧩 Widgets](widgets.md) for the full API reference.
+
+---
+
+## 📚 Next Steps
+
+- [📋 Tab Reference](tabs.md): Detailed docs for each tab (Chat, Files, Details, Shell)
+- [🔬 Research Tab](research.md): Dashboard, trajectory, replay, events
+- [🧩 Widgets](widgets.md): Full widget API reference
+- [🎨 Theme System](theme.md): Colors, icons, animation constants

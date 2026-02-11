@@ -85,7 +85,7 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
         from textual import events, work
         from textual.app import App, ComposeResult
         from textual.binding import Binding
-        from textual.containers import Horizontal, ScrollableContainer, Vertical
+        from textual.containers import Horizontal, ScrollableContainer, Vertical, VerticalScroll
         from textual.screen import ModalScreen
         from textual.widgets import Button, DirectoryTree, Footer, Header, Input, RichLog, Static
     except ImportError as exc:  # pragma: no cover - depends on local environment
@@ -254,6 +254,9 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
     class RLMCodeTUIApp(App):
         """Textual application for RLM Code."""
 
+        TITLE = "RLM Research Lab"
+        SUB_TITLE = "Recursive Language Model · Evaluation OS"
+
         CSS = """
         Screen {
           layout: vertical;
@@ -261,22 +264,22 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
           color: #e2ecf8;
         }
         Header {
-          background: #030507;
-          color: #8ee7ff;
+          background: #050a12;
+          color: #a78bfa;
           text-style: bold;
-          border-bottom: solid #214866;
+          border-bottom: solid #7c3aed;
         }
         Footer {
-          background: #030507;
+          background: #050a12;
           color: #9bb3cb;
-          border-top: solid #214866;
+          border-top: solid #7c3aed;
         }
         #focus_bar {
           height: auto;
           padding: 0 1;
           margin: 0 1 1 1;
-          border: round #2f6188;
-          background: #05070a;
+          border: round #7c3aed;
+          background: #0a0514;
         }
         .focus_btn {
           margin: 0 1 0 0;
@@ -297,9 +300,10 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
         #center_pane,
         #right_pane,
         #bottom_pane {
-          border: round #2f6188;
-          background: #040507;
+          border: round #3b1d6e;
+          background: #030208;
           padding: 0 1;
+          overflow-y: auto;
         }
         App.-hide-left-pane #left_pane {
           display: none;
@@ -367,9 +371,9 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
           layout: vertical;
         }
         .pane_title {
-          color: #8de7ff;
+          color: #c4b5fd;
           text-style: bold;
-          background: #0a1118;
+          background: #0d0620;
           padding: 0 1;
           margin: 0 0 1 0;
         }
@@ -381,9 +385,9 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
         }
         #status_strip {
           height: auto;
-          background: #05080d;
+          background: #08031a;
           color: #b7d0ea;
-          border: round #2f6188;
+          border: round #5b21b6;
           padding: 0 1;
           margin-bottom: 1;
         }
@@ -412,28 +416,35 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
           min-width: 28;
           margin-right: 1;
         }
-        #preview_panel {
+        #preview_scroll {
           height: 1fr;
+          width: 1fr;
           margin-bottom: 0;
+        }
+        #preview_panel {
+          height: auto;
           width: 1fr;
         }
-        #diff_panel {
+        #diff_scroll {
           height: 1fr;
+        }
+        #diff_panel {
+          height: auto;
         }
         App.-view-files #status_panel {
           display: none;
         }
-        App.-view-files #diff_panel {
+        App.-view-files #diff_scroll {
           display: none;
         }
         App.-view-files #details_preview_row {
           height: 1fr;
           margin-bottom: 0;
         }
-        App.-view-files #preview_panel {
+        App.-view-files #preview_scroll {
           width: 1fr;
         }
-        App.-view-details #preview_panel {
+        App.-view-details #preview_scroll {
           display: none;
         }
         App.-view-details #status_panel {
@@ -456,10 +467,11 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
           display: none;
           height: 1fr;
           layout: vertical;
-          border: round #2f6188;
-          background: #040507;
+          border: round #7c3aed;
+          background: #05020f;
           padding: 0 1;
           margin: 0 1;
+          overflow-y: auto;
         }
         App.-view-research #research_pane {
           display: block;
@@ -469,12 +481,17 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
         }
         #research_subtab_bar {
           height: auto;
-          padding: 0;
+          padding: 0 1;
           margin: 0 0 1 0;
+          border-bottom: solid #7c3aed;
         }
         .research_sub_btn {
           margin: 0 1 0 0;
           min-width: 12;
+        }
+        .research_sub_btn.-active {
+          color: #a78bfa;
+          text-style: bold;
         }
         .replay_btn {
           min-width: 4;
@@ -515,14 +532,14 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
           color: #dce7f3;
         }
         Input {
-          border: round #4c85b5;
+          border: round #5b21b6;
           background: #000000;
           color: #f5f9ff;
           padding: 0 1;
         }
         Input:focus {
-          border: round #82ecff;
-          background: #050505;
+          border: round #a78bfa;
+          background: #050510;
         }
         DirectoryTree {
           background: #000000;
@@ -701,7 +718,7 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 yield Button("🗂 Files", id="view_files_btn", classes="focus_btn")
                 yield Button("📊 Details", id="view_details_btn", classes="focus_btn")
                 yield Button("🧰 Shell", id="view_shell_btn", classes="focus_btn")
-                yield Button("🔬 Research", id="view_research_btn", classes="focus_btn")
+                yield Button("🔬 Research Lab", id="view_research_btn", classes="focus_btn")
                 yield Button("📋 Copy", id="copy_last_btn", classes="focus_btn")
                 yield Button("One Screen: ON", id="single_mode_btn", classes="focus_btn")
                 yield Button("↩ Back to Chat", id="back_chat_btn", classes="focus_btn")
@@ -726,14 +743,16 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                     yield Static("📊 Details & Code", classes="pane_title")
                     with Horizontal(id="details_preview_row"):
                         yield Static(id="status_panel")
-                        yield Static(id="preview_panel")
-                    yield Static(id="diff_panel")
+                        with VerticalScroll(id="preview_scroll"):
+                            yield Static(id="preview_panel")
+                    with VerticalScroll(id="diff_scroll"):
+                        yield Static(id="diff_panel")
             with Vertical(id="bottom_pane"):
                 yield Static("🧰 Tools & Shell", classes="pane_title")
                 yield RichLog(id="tool_log", wrap=True, highlight=True, markup=True)
                 yield Input(placeholder="Shell command (persistent)", id="shell_input")
             with Vertical(id="research_pane"):
-                yield Static("🔬 Research", classes="pane_title")
+                yield Static("🔬 RLM Research Lab", classes="pane_title")
                 with Horizontal(id="research_subtab_bar"):
                     yield Button("Dashboard", id="rsub_dashboard_btn", classes="research_sub_btn")
                     yield Button("Trajectory", id="rsub_trajectory_btn", classes="research_sub_btn")
@@ -745,17 +764,28 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                         yield MetricsPanel(id="research_metrics")
                         yield SparklineChart(label="Reward", id="research_sparkline")
                         yield Static(
-                            "[dim]No runs yet. Use /rlm run to start an experiment.[/dim]",
+                            "[bold #a78bfa]Welcome to the Research Lab[/bold #a78bfa]\n\n"
+                            "[dim]Quick start:[/dim]\n"
+                            "  [cyan]/rlm run \"your task\"[/cyan]     Run an experiment\n"
+                            "  [cyan]/rlm bench preset=X[/cyan]    Run a benchmark suite\n"
+                            "  [cyan]/rlm replay <id>[/cyan]       Replay a past run\n"
+                            "  [cyan]/rlm viz <id>[/cyan]          Visualize a trajectory\n\n"
+                            "[dim]Available presets: dspy_quick, pure_rlm_smoke, paradigm_comparison, oolong_style[/dim]",
                             id="research_summary",
                         )
                     with Vertical(id="rsub_trajectory"):
                         yield Static(
-                            "[dim]Run an experiment to see its trajectory.[/dim]",
+                            "[bold #a78bfa]Trajectory Viewer[/bold #a78bfa]\n\n"
+                            "[dim]Run an experiment with [cyan]/rlm run[/cyan] to see step-by-step trajectory here.\n"
+                            "Each step shows: action, code executed, output, reward signal.[/dim]",
                             id="research_trajectory_detail",
                         )
                     with Vertical(id="rsub_benchmarks"):
                         yield Static(
-                            "[dim]Run /rlm bench to see benchmark results.[/dim]",
+                            "[bold #a78bfa]Benchmarks & Leaderboard[/bold #a78bfa]\n\n"
+                            "[dim]Run [cyan]/rlm bench preset=pure_rlm_smoke[/cyan] to populate results.\n"
+                            "Compare paradigms: Pure RLM vs CodeAct vs Traditional.\n"
+                            "Rankings by: reward, completion rate, tokens, cost, efficiency.[/dim]",
                             id="research_leaderboard_table",
                         )
                         yield Static(id="research_comparison_table")
@@ -766,7 +796,10 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                             yield Button(">", id="replay_fwd_btn", classes="replay_btn")
                             yield Button(">|", id="replay_end_btn", classes="replay_btn")
                             yield Static("Step -/-", id="replay_position")
-                        yield Static(id="replay_step_detail")
+                        yield Static(
+                            "[dim]Use [cyan]/rlm replay <run_id>[/cyan] to load a run, then step through with the controls above.[/dim]",
+                            id="replay_step_detail",
+                        )
                         yield SparklineChart(label="Rewards", id="replay_reward_curve")
                     with Vertical(id="rsub_events"):
                         yield RichLog(
@@ -785,14 +818,23 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             self._set_preview_text("Select a file from the left pane to preview.")
             self._set_diff_text("Use /snapshot then /diff to inspect changes.")
             self._chat_log().write(
-                "[bold #8fd2ff]🚀 RLM Code TUI[/bold #8fd2ff]  "
-                "[dim]Ctrl+1..5 views | Ctrl+O one-screen | Ctrl+K palette | Ctrl+Q quit[/dim]"
+                "[bold #a78bfa]🔬 RLM Research Lab[/bold #a78bfa]  "
+                "[dim]Recursive Language Model · Evaluation OS[/dim]\n"
+                "[dim]Ctrl+1..5 views | Ctrl+5 research | Ctrl+O one-screen | Ctrl+K palette | Ctrl+Q quit[/dim]"
             )
             if self._slash_init_error:
                 self._chat_log().write(
                     f"[yellow]Full slash command bridge unavailable:[/yellow] {self._slash_init_error}"
                 )
             self._chat_log().write('[dim]Type /help to view commands.[/dim]')
+            try:
+                self.query_one("#research_event_log", RichLog).write(
+                    "[bold #a78bfa]Event Stream[/bold #a78bfa]\n"
+                    "[dim]Live events from /rlm run will appear here.\n"
+                    "Events include: run start/end, iterations, LLM calls, code execution, rewards.[/dim]\n"
+                )
+            except Exception:
+                pass
             self.query_one("#chat_input", Input).focus()
 
         def on_unmount(self) -> None:
@@ -1008,7 +1050,7 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 "files": "🗂 Files",
                 "details": "📊 Details",
                 "shell": "🧰 Shell",
-                "research": "🔬 Research",
+                "research": "🔬 Research Lab",
             }
             for view_name, button_id in button_ids.items():
                 button = self.query_one(f"#{button_id}", Button)
@@ -1238,7 +1280,10 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             self._apply_view_mode()
             self._update_focus_buttons()
             self._update_status_panel()
-            self.query_one("#preview_panel", Static).focus()
+            try:
+                self.query_one("#preview_scroll").focus()
+            except Exception:
+                pass
 
         def action_view_shell(self) -> None:
             self.active_view = "shell"
@@ -2299,9 +2344,13 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
 
         @work(thread=True)
         def _run_shell_command(self, command: str) -> None:
-            self.call_from_thread(self._tool_log().write, f"[bold yellow]$[/bold yellow] {command}")
+            self.call_from_thread(self._write_tool_log, f"[bold yellow]$[/bold yellow] {command}")
             result = self.shell.run(command)
             self.call_from_thread(self._render_shell_result, result)
+
+        def _write_tool_log(self, text: str) -> None:
+            """Thread-safe helper: write to tool_log on the main thread."""
+            self._tool_log().write(text)
 
         def _render_shell_result(self, result: ShellResult) -> None:
             if result.output.strip():

@@ -75,12 +75,12 @@ RLM Code is organized into the following top-level packages. Each module is docu
 
 ---
 
-## User Interface
+## 🖥️ User Interface
 
 | Module | Description | Docs |
 |---|---|---|
-| `rlm_code.rlm.research_tui` | Research TUI application with dark theme and custom widgets | [Research TUI](../tui/research.md) |
-| `rlm_code.ui.tui_app` | Standard development TUI | [Standard TUI](../tui/standard.md) |
+| `rlm_code.ui.tui_app` | Unified TUI with 5 tabs (Chat, Files, Details, Shell, Research) | [📋 Tab Reference](../tui/tabs.md) |
+| `rlm_code.rlm.research_tui.widgets` | Reusable research widgets (MetricsPanel, SparklineChart, etc.) | [🔬 Research Tab](../tui/research.md) |
 
 ---
 
