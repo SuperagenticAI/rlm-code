@@ -19,11 +19,11 @@ class ModelConfig:
     ollama_endpoint: str | None = "http://localhost:11434"
     ollama_models: list[str] = field(default_factory=list)
     anthropic_api_key: str | None = None
-    anthropic_model: str = "claude-sonnet-4-20250514"  # Current Claude Sonnet model
+    anthropic_model: str = "claude-opus-4-6"  # Latest Claude Opus model
     openai_api_key: str | None = None
-    openai_model: str = "gpt-4o"  # Current GPT-4o model
+    openai_model: str = "gpt-5.3-codex"  # Latest GPT model
     gemini_api_key: str | None = None
-    gemini_model: str = "gemini-2.0-flash"  # Current Gemini Flash model
+    gemini_model: str = "gemini-2.5-flash"  # Latest Gemini Flash model
     reflection_model: str | None = None  # Model for GEPA reflection (defaults to default_model)
 
 

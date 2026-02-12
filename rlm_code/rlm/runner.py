@@ -282,7 +282,7 @@ class RLMRunner:
     def run_task(
         self,
         task: str,
-        max_steps: int = 4,
+        max_steps: int | None = None,
         exec_timeout: int = 30,
         environment: str = "generic",
         sub_model: str | None = None,
@@ -301,6 +301,12 @@ class RLMRunner:
         cleaned_task = task.strip()
         if not cleaned_task:
             raise ValueError("Task cannot be empty.")
+        # Default max_steps based on environment: Pure RLM needs more iterations
+        if max_steps is None:
+            if environment in ("pure_rlm", "pure-rlm"):
+                max_steps = 30  # Reference default for iterative exploration
+            else:
+                max_steps = 4
         if max_steps < 1:
             raise ValueError("max_steps must be at least 1.")
         if branch_width < 1:
@@ -623,6 +629,45 @@ class RLMRunner:
             },
         )
         return result
+
+    async def arun_task(
+        self,
+        task: str,
+        max_steps: int | None = None,
+        exec_timeout: int = 30,
+        environment: str = "generic",
+        sub_model: str | None = None,
+        sub_provider: str | None = None,
+        branch_width: int = 1,
+        framework: str | None = None,
+        max_depth: int = 2,
+        max_children_per_step: int = 4,
+        parallelism: int = 2,
+        time_budget_seconds: int | None = None,
+    ) -> RLMRunResult:
+        """
+        Async version of ``run_task``.
+
+        Runs the synchronous run loop in a thread pool via
+        ``asyncio.to_thread()``.
+        """
+        import asyncio
+
+        return await asyncio.to_thread(
+            self.run_task,
+            task,
+            max_steps=max_steps,
+            exec_timeout=exec_timeout,
+            environment=environment,
+            sub_model=sub_model,
+            sub_provider=sub_provider,
+            branch_width=branch_width,
+            framework=framework,
+            max_depth=max_depth,
+            max_children_per_step=max_children_per_step,
+            parallelism=parallelism,
+            time_budget_seconds=time_budget_seconds,
+        )
 
     def list_runs(self, limit: int = 10) -> list[dict[str, Any]]:
         """List recent RLM runs from persisted JSONL trajectories."""
@@ -2073,24 +2118,35 @@ class RLMRunner:
         execution_engine: Any,
         exec_timeout: int,
     ) -> list[dict[str, Any]]:
+        # Check if this environment supports free-form response parsing (Pure RLM)
+        has_custom_parser = hasattr(env, "parse_planner_response") and callable(
+            getattr(env, "parse_planner_response", None)
+        )
+
         if branch_width <= 1:
             planner_raw = model_router.generate_response(
                 prompt=planner_prompt,
                 system_prompt=env.system_prompt(),
             )
-            action = self._parse_action(planner_raw)
-            action_dict = {
-                "action": action.action,
-                "code": action.code,
-                "path": action.path,
-                "content": action.content,
-                "command": action.command,
-                "rationale": action.rationale,
-                "done": action.done,
-                "final_response": action.final_response,
-            }
-            if action.extras:
-                action_dict.update(action.extras)
+
+            if has_custom_parser:
+                # Pure RLM: parse free-form response with code block extraction
+                action_dict = env.parse_planner_response(planner_raw)
+            else:
+                # Standard: parse as JSON
+                action = self._parse_action(planner_raw)
+                action_dict = {
+                    "action": action.action,
+                    "code": action.code,
+                    "path": action.path,
+                    "content": action.content,
+                    "command": action.command,
+                    "rationale": action.rationale,
+                    "done": action.done,
+                    "final_response": action.final_response,
+                }
+                if action.extras:
+                    action_dict.update(action.extras)
             return [
                 {
                     "index": 0,
@@ -2110,19 +2166,23 @@ class RLMRunner:
                 prompt=planner_prompt,
                 system_prompt=env.system_prompt(),
             )
-            action = self._parse_action(planner_raw)
-            action_dict = {
-                "action": action.action,
-                "code": action.code,
-                "path": action.path,
-                "content": action.content,
-                "command": action.command,
-                "rationale": action.rationale,
-                "done": action.done,
-                "final_response": action.final_response,
-            }
-            if action.extras:
-                action_dict.update(action.extras)
+
+            if has_custom_parser:
+                action_dict = env.parse_planner_response(planner_raw)
+            else:
+                action = self._parse_action(planner_raw)
+                action_dict = {
+                    "action": action.action,
+                    "code": action.code,
+                    "path": action.path,
+                    "content": action.content,
+                    "command": action.command,
+                    "rationale": action.rationale,
+                    "done": action.done,
+                    "final_response": action.final_response,
+                }
+                if action.extras:
+                    action_dict.update(action.extras)
 
             fingerprint = json.dumps(action_dict, sort_keys=True, default=str)
             if fingerprint in seen_actions:
@@ -2273,9 +2333,70 @@ class RLMRunner:
                         break
         return candidates
 
+    def _extract_answer_from_trajectory(
+        self, task: str, trajectory: list[dict[str, Any]], environment: str
+    ) -> str | None:
+        """
+        Extract fallback: when max_steps is exhausted without FINAL/SUBMIT,
+        call the LLM with the full trajectory to extract the best answer.
+
+        Returns the extracted answer string, or None if extraction fails.
+        """
+        # Build a detailed trajectory summary (more context than _synthesize)
+        traj_parts = []
+        for event in trajectory:
+            step = event.get("step", "?")
+            action_dict = event.get("action", {})
+            code = action_dict.get("code", "")
+            obs = event.get("observation", {})
+            stdout = obs.get("stdout", "")
+            stderr = obs.get("stderr", "")
+            success = obs.get("success", True)
+
+            entry = f"--- Step {step} ---\n"
+            if code:
+                entry += f"Code:\n```python\n{code[:2000]}\n```\n"
+            if stdout:
+                entry += f"Output:\n{stdout[:2000]}\n"
+            if stderr:
+                entry += f"Error:\n{stderr[:500]}\n"
+            entry += f"Success: {success}\n"
+            traj_parts.append(entry)
+
+        # Keep last 10 steps to avoid token overflow
+        traj_text = "\n".join(traj_parts[-10:])
+
+        prompt = (
+            f"The following task was given to an RLM agent, but it ran out of "
+            f"steps before calling FINAL() with an answer.\n\n"
+            f"Task: {task}\n\n"
+            f"Execution history:\n{traj_text}\n\n"
+            f"Based on the execution history above, extract the best possible "
+            f"answer to the original task. If the agent was building up partial "
+            f"results, synthesize them into a final answer. Respond with ONLY "
+            f"the answer, nothing else."
+        )
+        try:
+            response = self.llm_connector.generate_response(
+                prompt=prompt,
+                system_prompt="You extract answers from incomplete agent trajectories. Be concise and direct.",
+            )
+            answer = (response or "").strip()
+            if answer:
+                return answer
+        except Exception as exc:
+            logger.debug(f"Extract fallback failed: {exc}")
+        return None
+
     def _synthesize_final_response(
         self, task: str, trajectory: list[dict[str, Any]], completed: bool, environment: str
     ) -> str:
+        # Try extract fallback first (more context-rich)
+        if not completed:
+            extracted = self._extract_answer_from_trajectory(task, trajectory, environment)
+            if extracted:
+                return extracted
+
         trajectory_lines = []
         for event in trajectory[-6:]:
             action = event.get("action", {}).get("action")
@@ -2333,6 +2454,11 @@ class RLMRunner:
             "adk": "google-adk",
             "google-adk": "google-adk",
             "google_adk": "google-adk",
+            "deepagents": "deepagents",
+            "deep-agents": "deepagents",
+            "deep_agents": "deepagents",
+            "langgraph": "deepagents",
+            "langchain": "deepagents",
         }
         resolved = aliases.get(raw, raw)
         if resolved is None:

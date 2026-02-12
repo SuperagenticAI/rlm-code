@@ -147,6 +147,7 @@ nav:
     - "\U0001F4E6 Sandbox Runtimes":
       - sandbox/index.md
       - "\U0001F4BB Local": sandbox/local.md
+      - "\U0001F9E6 Monty": sandbox/monty.md
       - "\U0001F433 Docker": sandbox/docker.md
       - "\u2601\uFE0F Cloud": sandbox/cloud.md
     - "\U0001F517 Integrations":

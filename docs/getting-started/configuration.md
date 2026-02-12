@@ -65,15 +65,15 @@ models:
 
   # --- Anthropic ---
   anthropic_api_key: null                     # API key (string|null) - prefer env var
-  anthropic_model: "claude-sonnet-4-20250514" # Default Anthropic model (string)
+  anthropic_model: "claude-opus-4-6"          # Default Anthropic model (string)
 
   # --- OpenAI ---
   openai_api_key: null                        # API key (string|null) - prefer env var
-  openai_model: "gpt-4o"                      # Default OpenAI model (string)
+  openai_model: "gpt-5.3-codex"              # Default OpenAI model (string)
 
   # --- Gemini ---
   gemini_api_key: null                        # API key (string|null) - prefer env var
-  gemini_model: "gemini-2.0-flash"            # Default Gemini model (string)
+  gemini_model: "gemini-2.5-flash"            # Default Gemini model (string)
 
   # --- Reflection ---
   reflection_model: null                      # Model for GEPA reflection (string|null)
@@ -405,7 +405,7 @@ config_mgr.save_config(minimal=True)
 ```python
 # Update individual fields
 config_mgr.update_config(
-    default_model="anthropic/claude-sonnet-4-20250514",
+    default_model="anthropic/claude-opus-4-6",
     output_directory="output",
 )
 
@@ -421,7 +421,7 @@ openai_cfg = config_mgr.get_model_config("openai")
 # Returns: {"api_key": "sk-...", "model": "gpt-4o"}
 
 # Set model config
-config_mgr.set_model_config("anthropic", model="claude-sonnet-4-20250514")
+config_mgr.set_model_config("anthropic", model="claude-opus-4-6")
 ```
 
 ### MCP Server Configuration
@@ -590,7 +590,7 @@ Here is a fully annotated `rlm_config.yaml` suitable for a production project:
 name: my-rlm-project
 version: "1.0.0"
 dspy_version: "3.0.4"
-default_model: "anthropic/claude-sonnet-4-20250514"
+default_model: "anthropic/claude-opus-4-6"
 output_directory: generated
 
 # Models (API keys loaded from environment)
@@ -600,11 +600,11 @@ models:
     - llama3.2
     - codellama
   openai_api_key: null
-  openai_model: gpt-4o
+  openai_model: gpt-5.3-codex
   anthropic_api_key: null
-  anthropic_model: "claude-sonnet-4-20250514"
+  anthropic_model: "claude-opus-4-6"
   gemini_api_key: null
-  gemini_model: gemini-2.0-flash
+  gemini_model: gemini-2.5-flash
   reflection_model: null
 
 # Sandbox

@@ -302,19 +302,19 @@ def _interactive_model_setup(config: ProjectConfig) -> None:
 
         if provider == "openai":
             config.models.openai_api_key = api_key
-            model = Prompt.ask("Model name", default="gpt-4")
+            model = Prompt.ask("Model name", default="gpt-5.3-codex")
             config.models.openai_model = model
             config.default_model = model
 
         elif provider == "anthropic":
             config.models.anthropic_api_key = api_key
-            model = Prompt.ask("Model name", default="claude-3-sonnet-20240229")
+            model = Prompt.ask("Model name", default="claude-opus-4-6")
             config.models.anthropic_model = model
             config.default_model = model
 
         elif provider == "gemini":
             config.models.gemini_api_key = api_key
-            model = Prompt.ask("Model name", default="gemini-pro")
+            model = Prompt.ask("Model name", default="gemini-2.5-flash")
             config.models.gemini_model = model
             config.default_model = model
 

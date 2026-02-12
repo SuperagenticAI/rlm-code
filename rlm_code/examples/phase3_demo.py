@@ -79,7 +79,7 @@ def demo_trajectory_logging():
             logger.log_run_start(
                 task="Summarize a 50KB document",
                 context_length=50000,
-                model="claude-sonnet-4-20250514",
+                model="claude-opus-4-6",
             )
 
             # Iteration 1: Explore context

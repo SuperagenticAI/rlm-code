@@ -87,14 +87,14 @@ Risk assessment with **40+ rules**, 6 approval modes, and full audit logging to 
 ### Install & Launch
 
 ```bash
-pip install rlm-code
+uv tool install "rlm-code[tui,llm-all]"
 rlm-code
 ```
 
 ### Connect to a model
 
 ```
-/connect anthropic claude-sonnet-4-20250514
+/connect anthropic claude-opus-4-6
 ```
 
 ### Run your first benchmark

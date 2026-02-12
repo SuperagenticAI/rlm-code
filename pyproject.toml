@@ -107,9 +107,13 @@ pydantic = [
 adk = [
     "google-adk>=1.12.0",
 ]
+deepagents = [
+    "deepagents>=0.0.20",
+]
 frameworks = [
     "pydantic-ai>=0.4.0",
     "google-adk>=1.12.0",
+    "deepagents>=0.0.20",
 ]
 
 [project.urls]
@@ -209,6 +213,11 @@ module = [
     "google.generativeai.*",
     "google.genai.*",
     "mcp.*",
+    "deepagents.*",
+    "langchain.*",
+    "langchain_core.*",
+    "langchain_anthropic.*",
+    "langchain_google_genai.*",
 ]
 ignore_missing_imports = true
 

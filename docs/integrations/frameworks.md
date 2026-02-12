@@ -11,10 +11,11 @@ observability and comparison across execution backends.
 
 ```
 rlm_code.rlm.frameworks
-  +-- base.py              -- Protocol, data classes
-  +-- registry.py          -- Adapter registry
+  +-- base.py                 -- Protocol, data classes
+  +-- registry.py             -- Adapter registry
   +-- pydantic_ai_adapter.py  -- Pydantic AI adapter
   +-- google_adk_adapter.py   -- Google ADK adapter
+  +-- deepagents_adapter.py   -- DeepAgents (LangGraph) adapter
 ```
 
 ---
@@ -26,12 +27,16 @@ graph TD
     Runner["RLM Runner"] --> Registry["FrameworkAdapterRegistry"]
     Registry -->|"get('pydantic-ai')"| PydAI["PydanticAIFrameworkAdapter"]
     Registry -->|"get('google-adk')"| ADK["GoogleADKFrameworkAdapter"]
+    Registry -->|"get('deepagents')"| DA["DeepAgentsFrameworkAdapter"]
     PydAI --> Agent1["Pydantic AI Agent"]
     ADK --> Agent2["Google ADK LlmAgent"]
+    DA --> Agent3["DeepAgents LangGraph Agent"]
     Agent1 --> Steps1["FrameworkStepRecord[]"]
     Agent2 --> Steps2["FrameworkStepRecord[]"]
+    Agent3 --> Steps3["FrameworkStepRecord[]"]
     Steps1 --> Result["FrameworkEpisodeResult"]
     Steps2 --> Result
+    Steps3 --> Result
 ```
 
 ---
@@ -163,12 +168,12 @@ registry = FrameworkAdapterRegistry.default(workdir="/path/to/project")
 
 ### Default Registry
 
-The `default()` factory registers both built-in adapters:
+The `default()` factory registers all three built-in adapters:
 
 ```python
 registry = FrameworkAdapterRegistry.default(workdir="/my/project")
 print(registry.list_ids())
-# ["google-adk", "pydantic-ai"]
+# ["deepagents", "google-adk", "pydantic-ai"]
 ```
 
 ### Doctor Output
@@ -345,6 +350,124 @@ print(len(result.steps))
 
 ---
 
+## DeepAgents Adapter
+
+**Module:** `rlm_code.rlm.frameworks.deepagents_adapter`
+
+**Adapter ID:** `deepagents`
+
+The DeepAgents adapter integrates [DeepAgents](https://github.com/deepagents/deepagents),
+a LangGraph-based agentic framework, into the RLM execution pipeline. It converts
+LangGraph message histories into RLM trajectory-compatible step records, enabling
+unified observability across all framework backends.
+
+### Installation
+
+```bash
+pip install 'rlm-code[deepagents]'
+# or directly:
+pip install deepagents langchain-core
+```
+
+### How It Works
+
+1. Resolves the model name to DeepAgents' `provider:model` format
+2. Selects a backend (`StateBackend`, `FilesystemBackend`, or `LocalShellBackend`)
+3. Creates a deep agent via `create_deep_agent()` with system instructions
+4. Invokes the agent with a `HumanMessage`
+5. Extracts step records from LangChain message history
+
+### Model Resolution
+
+The adapter normalizes RLM provider names to DeepAgents' expected format:
+
+| RLM Provider                | DeepAgents Provider |
+|----------------------------|---------------------|
+| `anthropic`, `claude`       | `anthropic`         |
+| `gemini`, `google`, `google-genai` | `google-genai` |
+| `lmstudio`, `vllm`, `sglang`, `tgi`, `openai-compatible`, `opencode` | `openai` (with base URL) |
+| `ollama`, `local`           | `ollama`            |
+| Others                      | Used as-is          |
+
+If the model name already contains a colon (e.g., `anthropic:claude-opus-4-6`),
+it is passed through unchanged.
+
+!!! info "Environment Passthrough"
+    For local providers mapped to `openai`, the adapter sets
+    `OPENAI_BASE_URL` and `OPENAI_API_KEY` environment variables so the
+    OpenAI SDK routes to the correct local endpoint. For `ollama`, it sets
+    `OLLAMA_BASE_URL` similarly.
+
+### Backend Selection
+
+DeepAgents supports multiple execution backends, selectable via the `context`
+parameter:
+
+| Backend            | Context Key                          | Description                         |
+|--------------------|--------------------------------------|-------------------------------------|
+| `StateBackend`     | `deepagents_backend: "state"` (default) | In-memory state management       |
+| `FilesystemBackend`| `deepagents_backend: "filesystem"`   | File-based state in `workdir`       |
+| `LocalShellBackend`| `deepagents_backend: "local_shell"`  | Shell command execution in `workdir`|
+
+```python
+# Use filesystem backend
+result = adapter.run_episode(
+    task="Organize these files",
+    llm_connector=connector,
+    max_steps=10,
+    exec_timeout=60,
+    workdir="/my/project",
+    context={"deepagents_backend": "filesystem"},
+)
+```
+
+### Step Extraction
+
+LangChain messages are parsed into `FrameworkStepRecord` entries:
+
+| Message Type     | Action         | Reward  | Notes                                |
+|------------------|----------------|---------|--------------------------------------|
+| AI text          | `model_text`   | +0.05   | Non-empty text content               |
+| AI tool call     | `tool_call`    | +0.02   | Standard tool invocation             |
+| AI planning tool | `tool_call`    | +0.03   | `write_todos` or `read_todos`        |
+| Tool result (ok) | `tool_result`  | +0.06   | Successful tool execution            |
+| Tool result (err)| `tool_result`  | -0.05   | Error status or `"Error"` prefix     |
+| Human/System     | *(skipped)*    | --      | Not converted to steps               |
+
+Steps are capped at 80 per episode. The `total_reward` is clamped to `[-1.0, 1.0]`.
+
+!!! tip "Planning Tool Bonus"
+    The `write_todos` and `read_todos` tools receive a higher reward (+0.03
+    vs +0.02) to encourage structured planning behavior in agents.
+
+### Example
+
+```python
+from rlm_code.rlm.frameworks import DeepAgentsFrameworkAdapter
+
+adapter = DeepAgentsFrameworkAdapter(workdir="/my/project")
+
+# Check readiness
+ok, detail = adapter.doctor()
+print(ok, detail)  # True, "deepagents available"
+
+# Run a task
+result = adapter.run_episode(
+    task="Analyze this codebase and suggest improvements",
+    llm_connector=my_connector,
+    max_steps=10,
+    exec_timeout=120,
+    workdir="/my/project",
+    sub_provider="anthropic",
+    sub_model="claude-sonnet-4-20250514",
+)
+print(result.completed)
+print(result.final_response)
+print(f"Steps: {len(result.steps)}, Reward: {result.total_reward:.2f}")
+```
+
+---
+
 ## Writing a Custom Adapter
 
 To add support for a new framework:
@@ -429,3 +552,17 @@ result = adapter.run_episode(task="...", ...)
 | `run_episode()`       | Execute via `InMemoryRunner.run_async()`            |
 | `_resolve_model()`    | Normalize provider to ADK model format              |
 | `_serialize_event()`  | Convert an ADK event to a dictionary                |
+
+### DeepAgentsFrameworkAdapter
+
+| Field / Method               | Description                                          |
+|-----------------------------|------------------------------------------------------|
+| `workdir`                   | Working directory path                               |
+| `framework_id`              | `"deepagents"`                                      |
+| `doctor()`                  | Check if `deepagents` and `langchain-core` are importable |
+| `run_episode()`             | Execute via `create_deep_agent().invoke()`           |
+| `_resolve_model()`          | Normalize provider to DeepAgents `provider:model` format |
+| `_resolve_backend()`        | Select backend from context (`state`, `filesystem`, `local_shell`) |
+| `_extract_steps()`          | Parse LangChain messages into `FrameworkStepRecord` list |
+| `_extract_final_response()` | Extract last AI text from message history            |
+| `_serialize_tool_call()`    | Convert a tool call dict/object to plain dict        |

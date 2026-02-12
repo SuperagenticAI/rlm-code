@@ -1,174 +1,218 @@
 # RLM Code
 
-**RLM Code is a research playground and evaluation OS for recursive language-model (RLM) agentic systems.**
+**Run LLM-powered agents in a REPL loop, benchmark them, and compare results.**
 
-It helps researchers and engineers build, benchmark, debug, and harden coding and non-coding agents across frameworks, providers, and environments.
+RLM Code implements the [Recursive Language Models](https://arxiv.org/abs/2502.07503) (RLM) paper by Zhang, Kraska & Khattab. Instead of stuffing your entire document into the LLM's context window, RLM stores it as a Python variable and lets the LLM write code to analyze it — chunk by chunk, iteration by iteration. This is dramatically more token-efficient for large inputs.
 
-- Documentation: https://superagenticai.github.io/rlm-code/
+RLM Code wraps this algorithm in an interactive terminal UI with built-in benchmarks, trajectory replay, and observability.
 
-## North Star
+## Install
 
-RLM Code becomes the default development and evaluation operating system for agentic AI:
+```bash
+uv tool install "rlm-code[tui,llm-all]"
+```
 
-- build recursive agents,
-- evaluate behavior with reproducible benchmarks,
-- improve policies with feedback loops,
-- ship safely with observability and governance.
+This installs `rlm-code` as a globally available command with its own isolated environment. You get the TUI and all LLM provider clients (OpenAI, Anthropic, Gemini).
 
-## Positioning
+Don't have uv? Install it first:
 
-RLM Code gives researchers and applied teams a unified runtime, benchmark harness, and replayable trajectory system to design, compare, and improve RLM-based agents with evidence.
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
 
-Tagline:
+<details>
+<summary>Alternative: install with pip</summary>
 
-**Research fast. Evaluate rigorously. Ship reliable agents.**
-
-## What RLM Code Is
-
-- A runtime + eval + policy loop platform.
-- A CLI/TUI wedge for fast local iteration.
-- A framework-agnostic control plane.
-- A research-to-production bridge.
-
-## What RLM Code Is Not
-
-- Not another monolithic agent framework.
-- Not tied to one provider, one model, or one orchestration stack.
-- Not limited to coding-only agents.
-
-## Who It Is For
-
-- Agent researchers developing reward/memory/policy improvements.
-- Applied AI engineers shipping coding/support/ops agents.
-- Platform teams enforcing reliability and regression gates.
-- Open-source builders creating framework and benchmark plugins.
-
-## Problems It Solves
-
-- Agent evaluation is fragmented across frameworks/providers.
-- Failures are hard to diagnose without replayable trajectories.
-- Agent regressions are easy to ship without CI-style gates.
-- Research ideas are hard to compare in reproducible conditions.
-
-## Product Pillars
-
-### 1) RLM Code Core
-
-Model-agnostic recursive runtime (`plan -> act -> observe -> reward -> memory`) with safe execution primitives.
-
-### 2) RLM Code Bench
-
-Standard benchmark packs, replayable trajectories, and CI regression gates (`run`, `compare`, `validate`).
-
-### 3) RLM Code Labs
-
-Pluggable experimentation for reward shaping, memory policies, and algorithmic research.
-
-### 4) RLM Code Ops
-
-Tracing, artifacts, model routing, rollout checks, and integration points for tools like MLflow.
-
-### 5) RLM Code Hub (Roadmap)
-
-Shareable benchmark packs, policies, and reproducible runs.
-
-## Interoperability
-
-RLM Code is designed to sit around existing frameworks and coding agents, not replace them.
-
-### Agent Frameworks
-
-Use framework adapters for DSPy, Pydantic AI, Google ADK, and others so you can:
-
-- run consistent benchmarks across frameworks,
-- replay trajectories for debugging,
-- apply the same reward/eval pipeline without rewriting framework code.
-
-### Coding Agents and Model Providers
-
-Use ACP/BYOK/local providers and route work to specialized models while RLM Code keeps control of:
-
-- execution safety,
-- verification,
-- benchmark gating,
-- observability.
+```bash
+pip install rlm-code[tui,llm-all]
+```
+</details>
 
 ## Quick Start
 
+### 1. Launch
+
 ```bash
-pip install --upgrade rlm-code
+mkdir -p ~/my-project && cd ~/my-project
 rlm-code
 ```
 
-Inside TUI mode:
+This opens the terminal UI. You'll see a chat input at the bottom and tabs across the top.
 
-```text
-/model                      # Interactive model selection
-/connect <provider> <model> # Direct model connection
-/init                       # Initialize project context
-/examples                   # Browse/generate templates
-/validate                   # Validate generated or existing code
-/optimize                   # Run optimization workflows
-/status                     # Session state
+### 2. Connect to an LLM
+
+Type one of these in the chat input:
+
+```
+/connect anthropic claude-opus-4-6
 ```
 
-Evaluation-first workflow:
+or
 
-```text
-/rlm import-evals pack=pydantic_time_range_v1
-/rlm run "<task>" framework=dspy steps=4
-/rlm run "<task>" framework=pydantic-ai steps=4
-/rlm run "<task>" framework=google-adk steps=4
+```
+/connect openai gpt-5.3-codex
+```
+
+or
+
+```
+/connect gemini gemini-2.5-flash
+```
+
+or for a free local model via [Ollama](https://ollama.com/):
+
+```
+/connect ollama llama3.2
+```
+
+> You need the matching API key in your environment (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`) or in a `.env` file in your project directory. Ollama needs no key — just a running Ollama server.
+
+Check it worked:
+
+```
+/status
+```
+
+### 3. Run your first RLM task
+
+```
+/rlm run "Write a Python function that finds the longest common subsequence of two strings"
+```
+
+This starts the RLM loop: the LLM writes code in a sandboxed REPL, executes it, sees the output, writes more code, and iterates until it calls `FINAL(answer)` with the result.
+
+### 4. Run a benchmark
+
+Benchmarks let you measure how well a model performs on a set of tasks:
+
+```
+/rlm bench preset=pure_rlm_smoke
+```
+
+This runs 3 test cases through the RLM loop and scores the results.
+
+See all available benchmarks:
+
+```
 /rlm bench list
-/rlm bench preset=dspy_quick framework=dspy
-/rlm bench validate candidate=latest baseline=previous --json
-/rlm bench compare candidate=latest baseline=previous
 ```
 
-Recursive controls:
+### 5. View results
 
-```text
-/rlm run "<task>" depth=3 children=4 parallel=2 budget=120
+```
+/leaderboard
 ```
 
-## Research and Production Packaging
+Shows a table of all your benchmark runs ranked by reward score.
 
-The repository is organized to support two audiences without mixing concerns:
+### 6. Replay a session step-by-step
 
-- research-facing adapters and experiments,
-- production-facing runtime, CLI, and CI interfaces.
+```
+/rlm replay
+```
 
-## Execution Roadmap
+Walk through the last run one step at a time — see what code the LLM wrote, what output it got, and what it did next.
 
-1. Eval dataset adapters (P0): ADK + Pydantic eval imports into `/rlm bench`.
-2. Trajectory visualizer (P0): local viewer for runs, child calls, tool traces, rewards, and failures.
-3. Runtime backends for sandbox (P0): pluggable runtimes beyond local.
-4. Policy/reward lab plugins (P0): hot-swappable reward, memory, and action policies.
-5. Framework event parity (P1): normalized event schema across DSPy, Pydantic AI, and ADK.
-6. Durable/replayable sessions (P1): deterministic restore/replay and branch compare.
-7. Observability upgrade (P1): OTel span linkage + MLflow/OTel export.
-8. Benchmark packs + leaderboard mode (P1): pinned baselines + reproducibility metadata.
-9. Tool approval / HITL gates (P2): optional approvals for risky actions.
-10. Research-focused TUI mode (P2): experiment dashboard with traces/errors and result matrices.
+## How the RLM Loop Works
 
-## Why This Can Win
+Traditional LLM usage: paste your document into the prompt, ask a question, hope the model doesn't lose details in the middle.
 
-Most tools optimize prompting or orchestration in isolation. RLM Code focuses on the full behavior loop:
+RLM approach:
 
-- comparable benchmark corpora,
-- replayable agent trajectories,
-- robust gating and reproducibility,
-- cross-framework portability.
+1. Your document is stored as a Python variable `context` in a REPL
+2. The LLM writes code to process it (e.g., `len(context)`, `context[:5000]`, `context.split('\n')`)
+3. The code runs, and the LLM sees the output
+4. The LLM writes more code based on what it learned
+5. Repeat until the LLM calls `FINAL("here is my answer")`
 
-The moat is evaluation quality and reproducibility, not UI alone.
+This means the LLM can handle documents much larger than its context window, because it reads them in chunks through code rather than all at once through the prompt.
+
+## Key Commands
+
+| Command | What it does |
+|---------|-------------|
+| `/connect <provider> <model>` | Connect to an LLM |
+| `/model` | Interactive model picker |
+| `/status` | Show connection status |
+| `/rlm run "<task>"` | Run a task through the RLM loop |
+| `/rlm bench preset=<name>` | Run a benchmark preset |
+| `/rlm bench list` | List available benchmarks |
+| `/leaderboard` | View benchmark results |
+| `/rlm replay` | Step through the last run |
+| `/rlm chat "<question>"` | Ask the LLM a question about your project |
+| `/help` | Show all available commands |
+
+## What You Can Do With It
+
+- **Analyze large documents**: Feed in a 500-page PDF and ask questions — the LLM reads it in chunks via code
+- **Compare models**: Run the same benchmark with different providers and see who scores higher
+- **Compare paradigms**: Test Pure RLM vs CodeAct vs Traditional approaches on the same task
+- **Debug agent behavior**: Replay any run step-by-step to see exactly what the agent did
+- **Track experiments**: Every run is logged with metrics, tokens used, and trajectory
+
+## Supported LLM Providers
+
+| Provider | Latest Models | Setup |
+|----------|--------------|-------|
+| **Anthropic** | `claude-opus-4-6`, `claude-sonnet-4-5-20250929` | `ANTHROPIC_API_KEY` env var |
+| **OpenAI** | `gpt-5.3-codex`, `gpt-5.2-pro` | `OPENAI_API_KEY` env var |
+| **Google** | `gemini-2.5-pro`, `gemini-2.5-flash` | `GEMINI_API_KEY` or `GOOGLE_API_KEY` env var |
+| **Ollama** | `llama3.2`, `qwen2.5-coder:7b` | Running Ollama server at `localhost:11434` |
+
+## Configuration
+
+Create an `rlm_config.yaml` in your project directory to customize settings:
+
+```yaml
+rlm:
+  paradigm: pure_rlm       # pure_rlm, codeact, or traditional
+  max_steps: 30             # max REPL iterations per run
+  timeout: 60               # seconds
+
+  sandbox:
+    runtime: local          # local, docker, modal, e2b, daytona
+
+  mcp_server:
+    enabled: false
+    transport: stdio
+    port: 8765
+```
+
+Or generate a full sample config:
+
+```
+/init
+```
+
+## Development Setup
+
+```bash
+git clone https://github.com/SuperagenticAI/rlm-code.git
+cd rlm-code
+uv sync --all-extras
+uv run pytest
+```
+
+## Project Structure
+
+```
+rlm_code/
+  rlm/              # Core RLM engine (runner, environments, policies)
+  ui/               # Terminal UI (Textual-based TUI)
+  mcp/              # MCP server for tool integration
+  models/           # LLM provider adapters
+  sandbox/          # Sandboxed code execution
+  observability/    # MLflow, OpenTelemetry, LangSmith, LangFuse
+```
+
+## Documentation
+
+Full docs: https://superagenticai.github.io/rlm-code/
 
 ## Contributing
 
-Contributions are welcome. Start with:
-
-- `CONTRIBUTING.md`
-- docs: `docs/`
+See `CONTRIBUTING.md`.
 
 ## License
 
-MIT License. See `LICENSE`.
+MIT

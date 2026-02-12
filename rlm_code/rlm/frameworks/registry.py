@@ -32,11 +32,13 @@ class FrameworkAdapterRegistry:
     @classmethod
     def default(cls, *, workdir: str) -> "FrameworkAdapterRegistry":
         registry = cls()
+        from .deepagents_adapter import DeepAgentsFrameworkAdapter
         from .google_adk_adapter import GoogleADKFrameworkAdapter
         from .pydantic_ai_adapter import PydanticAIFrameworkAdapter
 
         registry.register(PydanticAIFrameworkAdapter(workdir=workdir))
         registry.register(GoogleADKFrameworkAdapter(workdir=workdir))
+        registry.register(DeepAgentsFrameworkAdapter(workdir=workdir))
         return registry
 
     def doctor(self) -> list[dict[str, Any]]:

@@ -59,7 +59,7 @@ class PureRLMConfig:
 class SandboxConfig:
     """Configuration for sandbox execution."""
 
-    runtime: str = "local"
+    runtime: str = "local"  # local, monty, docker, modal, e2b, daytona
     timeout: int = 30
     memory_mb: int = 512
     network_enabled: bool = False
@@ -73,6 +73,11 @@ class SandboxConfig:
     modal_cpu: float = 1.0
     e2b_template: str = "Python3"
     daytona_workspace: str = "default"
+
+    # Monty specific (sandboxed Rust-based Python interpreter)
+    monty_type_check: bool = False
+    monty_max_allocations: int | None = None
+    monty_max_memory: int | None = None
 
 
 @dataclass
@@ -113,7 +118,7 @@ class RLMConfig:
     # Core settings
     paradigm: str = "pure_rlm"  # pure_rlm, codeact, traditional
     max_depth: int = 2
-    max_steps: int = 6
+    max_steps: int = 30  # RLM reference default; needs 8-30 iterations for iterative exploration
     timeout: int = 60
     branch_width: int = 1
     max_children_per_step: int = 4
@@ -172,6 +177,9 @@ class RLMConfig:
                 modal_cpu=sb.get("modal_cpu", 1.0),
                 e2b_template=sb.get("e2b_template", "Python3"),
                 daytona_workspace=sb.get("daytona_workspace", "default"),
+                monty_type_check=sb.get("monty_type_check", False),
+                monty_max_allocations=sb.get("monty_max_allocations"),
+                monty_max_memory=sb.get("monty_max_memory"),
             )
 
         # MCP Server config
@@ -246,6 +254,9 @@ class RLMConfig:
                 "memory_mb": self.sandbox.memory_mb,
                 "network_enabled": self.sandbox.network_enabled,
                 "env_allowlist": self.sandbox.env_allowlist,
+                "monty_type_check": self.sandbox.monty_type_check,
+                "monty_max_allocations": self.sandbox.monty_max_allocations,
+                "monty_max_memory": self.sandbox.monty_max_memory,
             },
             "mcp_server": {
                 "enabled": self.mcp_server.enabled,
@@ -309,11 +320,19 @@ rlm:
 
   # Sandbox execution settings
   sandbox:
-    runtime: local  # local, docker, modal, e2b, daytona
+    runtime: local  # local, monty, docker, modal, e2b, daytona
     timeout: 30
     memory_mb: 512
     network_enabled: false
     env_allowlist: []
+
+    # Monty settings (when runtime: monty)
+    # Uses pydantic-monty, a sandboxed Python interpreter written in Rust
+    # Supports: external functions, resource limits, type checking, snapshots
+    # Limitations: no imports, no classes (yet), no stdlib
+    monty_type_check: false      # Enable pre-execution type checking
+    monty_max_allocations: null   # Max heap allocations (null = unlimited)
+    monty_max_memory: null        # Max heap memory in bytes (null = unlimited)
 
     # Docker settings (when runtime: docker)
     docker_image: python:3.11-slim

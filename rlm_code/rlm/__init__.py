@@ -63,19 +63,38 @@ from .observability import (
     create_logfire_sink_from_env,
     create_all_sinks_from_env,
 )
+from .code_interpreter import CodeInterpreter, CodeResult, LocalInterpreter
+from .mock_interpreter import MockInterpreter
+from .monty_interpreter import (
+    MontyCodeResult,
+    MontyCodeValidator,
+    MontyExecutionStats,
+    MontyInterpreter,
+    create_rlm_monty_interpreter,
+)
 from .pure_rlm_environment import PureRLMConfig, PureRLMEnvironment
-from .repl_types import REPLEntry, REPLHistory, REPLResult, REPLVariable
+from .repl_types import (
+    ImmutableHistory,
+    ImmutableHistoryEntry,
+    REPLEntry,
+    REPLHistory,
+    REPLResult,
+    REPLVariable,
+)
 from .runner import (
     RLMBenchmarkComparison,
     RLMBenchmarkResult,
     RLMRunner,
     RLMRunResult,
 )
+from .task_signature import TaskSignature
 from .termination import (
     FINAL,
     FINAL_VAR,
+    SUBMIT,
     FinalDetection,
     FinalOutput,
+    SubmitOutput,
     detect_final_in_code,
     detect_final_in_text,
     extract_code_blocks,
@@ -180,15 +199,32 @@ __all__ = [
     "PureRLMEnvironment",
     "RLMRewardProfile",
     # REPL types
+    "ImmutableHistory",
+    "ImmutableHistoryEntry",
     "REPLEntry",
     "REPLHistory",
     "REPLResult",
     "REPLVariable",
+    # Task Signature
+    "TaskSignature",
+    # Code Interpreter
+    "CodeInterpreter",
+    "CodeResult",
+    "LocalInterpreter",
+    "MockInterpreter",
+    # Monty Interpreter (sandboxed Rust-based Python)
+    "MontyInterpreter",
+    "MontyCodeResult",
+    "MontyCodeValidator",
+    "MontyExecutionStats",
+    "create_rlm_monty_interpreter",
     # Termination
     "FINAL",
     "FINAL_VAR",
+    "SUBMIT",
     "FinalDetection",
     "FinalOutput",
+    "SubmitOutput",
     "detect_final_in_code",
     "detect_final_in_text",
     "extract_code_blocks",

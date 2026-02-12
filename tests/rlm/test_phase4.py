@@ -144,7 +144,7 @@ class TestConfigSchema:
 
         assert config.paradigm == "pure_rlm"
         assert config.max_depth == 2
-        assert config.max_steps == 6
+        assert config.max_steps == 30
         assert config.timeout == 60
 
     def test_pure_rlm_config_defaults(self):
@@ -235,7 +235,7 @@ class TestConfigSchema:
         config = RLMConfig.load("/nonexistent/path/rlm.yaml")
 
         assert config.paradigm == "pure_rlm"
-        assert config.max_steps == 6
+        assert config.max_steps == 30
 
     def test_generate_sample_config(self):
         """Test sample config generation."""

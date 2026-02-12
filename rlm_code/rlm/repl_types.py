@@ -8,6 +8,7 @@ types for managing REPL state, variables, and execution history.
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
@@ -265,3 +266,79 @@ class REPLResult:
             "success": self.success,
             "final_output": self.final_output,
         }
+
+
+# ── Immutable history types (frozen, append-returns-new-instance) ────
+
+
+@dataclass(frozen=True, slots=True)
+class ImmutableHistoryEntry:
+    """
+    A single immutable entry in the conversation history.
+
+    Frozen dataclass — once created it cannot be mutated.
+    """
+
+    role: str
+    content: str
+    step: int = 0
+    timestamp: float = field(default_factory=time.time)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize for logging / LLM API calls."""
+        return {
+            "role": self.role,
+            "content": self.content,
+            "step": self.step,
+            "timestamp": self.timestamp,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ImmutableHistory:
+    """
+    Immutable conversation history.
+
+    Every mutation (``append``, ``truncate``) returns a **new** instance
+    rather than modifying the existing one, following the functional
+    pattern from DSPy's RLM implementation.
+    """
+
+    entries: tuple[ImmutableHistoryEntry, ...] = ()
+
+    def append(self, entry: ImmutableHistoryEntry) -> "ImmutableHistory":
+        """Return a new history with *entry* appended."""
+        return ImmutableHistory(entries=self.entries + (entry,))
+
+    def to_messages(self) -> list[dict[str, str]]:
+        """Convert to a list of ``{"role": ..., "content": ...}`` dicts."""
+        return [{"role": e.role, "content": e.content} for e in self.entries]
+
+    def truncate(self, max_chars: int = 20_000) -> "ImmutableHistory":
+        """
+        Return a new history where each entry's content is truncated
+        to *max_chars* characters.
+        """
+        truncated = []
+        for e in self.entries:
+            content = e.content
+            if len(content) > max_chars:
+                content = content[:max_chars] + f"... [{len(e.content) - max_chars} chars truncated]"
+            truncated.append(
+                ImmutableHistoryEntry(
+                    role=e.role,
+                    content=content,
+                    step=e.step,
+                    timestamp=e.timestamp,
+                )
+            )
+        return ImmutableHistory(entries=tuple(truncated))
+
+    def __len__(self) -> int:
+        return len(self.entries)
+
+    def __iter__(self):
+        return iter(self.entries)
+
+    def __bool__(self) -> bool:
+        return bool(self.entries)

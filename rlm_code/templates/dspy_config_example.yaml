@@ -35,19 +35,19 @@ models:
   # RECOMMENDED: Set OPENAI_API_KEY environment variable or in .env file
   # DO NOT commit API keys to version control!
   openai_api_key: null  # Leave as null to use environment variable OPENAI_API_KEY
-  openai_model: gpt-4  # Options: gpt-4, gpt-4-turbo, gpt-3.5-turbo
+  openai_model: gpt-5.3-codex  # Options: gpt-5.3-codex, gpt-5.2-pro, gpt-4o
 
   # --- Anthropic Claude ---
   # Requires API key from https://console.anthropic.com/
   # RECOMMENDED: Set ANTHROPIC_API_KEY environment variable or in .env file
   anthropic_api_key: null  # Leave as null to use environment variable ANTHROPIC_API_KEY
-  anthropic_model: claude-3-sonnet-20240229  # Options: claude-3-opus, claude-3-sonnet, claude-3-haiku
+  anthropic_model: claude-opus-4-6  # Options: claude-opus-4-6, claude-sonnet-4-5-20250929, claude-haiku-4-5-20251001
 
   # --- Google Gemini ---
-  # Requires API key from https://makersuite.google.com/app/apikey
+  # Requires API key from https://aistudio.google.com/apikey
   # RECOMMENDED: Set GEMINI_API_KEY or GOOGLE_API_KEY environment variable or in .env file
   gemini_api_key: null  # Leave as null to use environment variable GEMINI_API_KEY
-  gemini_model: gemini-pro  # Options: gemini-pro, gemini-pro-vision
+  gemini_model: gemini-2.5-flash  # Options: gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-flash
 
   # --- Reflection Model (for GEPA Optimization) ---
   # Model used for reflection during GEPA optimization

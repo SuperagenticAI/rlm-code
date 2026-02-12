@@ -108,16 +108,16 @@ These commands manage the TUI session and overall state.
     /connect
 
     # Direct connection
-    /connect anthropic claude-sonnet-4-20250514
-    /connect openai gpt-4o
-    /connect gemini gemini-2.0-flash
+    /connect anthropic claude-opus-4-6
+    /connect openai gpt-5.3-codex
+    /connect gemini gemini-2.5-flash
     /connect ollama llama3.2
 
     # With explicit API key
-    /connect openai gpt-4o sk-abc123...
+    /connect openai gpt-5.3-codex sk-abc123...
 
     # With custom base URL
-    /connect openai gpt-4o sk-abc123 https://my-proxy.example.com/v1
+    /connect openai gpt-5.3-codex sk-abc123 https://my-proxy.example.com/v1
     ```
 
 ---
@@ -167,7 +167,7 @@ The `/rlm` command is the gateway to the Recursive Language Model engine. It sup
     /rlm run "Analyze this codebase" branch=3
 
     # With sub-model
-    /rlm run "Summarize the context" sub=openai/gpt-4o
+    /rlm run "Summarize the context" sub=openai/gpt-5.3-codex
     ```
 
 ---
@@ -198,9 +198,9 @@ Manage the sandbox execution environment.
     - **local**: Always available. Runs code in a subprocess on the host machine.
     - **docker**: Isolated container execution. Requires Docker to be installed and running.
     - **apple-container**: macOS-native lightweight containers. Requires explicit enablement.
-    - **modal**: Cloud execution via [Modal](https://modal.com/). Requires `pip install modal && modal setup`.
-    - **e2b**: Cloud sandbox via [E2B](https://e2b.dev/). Requires `pip install e2b-code-interpreter`.
-    - **daytona**: Cloud workspace via [Daytona](https://www.daytona.io/). Requires `pip install daytona-sdk`.
+    - **modal**: Cloud execution via [Modal](https://modal.com/). Requires `uv tool install "rlm-code[tui,llm-all]" --with modal && modal setup`.
+    - **e2b**: Cloud sandbox via [E2B](https://e2b.dev/). Requires `uv tool install "rlm-code[tui,llm-all]" --with e2b-code-interpreter`.
+    - **daytona**: Cloud workspace via [Daytona](https://www.daytona.io/). Requires `uv tool install "rlm-code[tui,llm-all]" --with daytona-sdk`.
 
 ---
 

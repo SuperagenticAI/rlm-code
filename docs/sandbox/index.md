@@ -12,14 +12,15 @@ switching between them is a one-line configuration change.
 ```
                      create_runtime()
                           |
-        +-----------------+-----------------+
-        |        |        |        |        |
-      Local   Docker  Apple    Modal   E2B   Daytona
-      (dev)   (iso)   (macOS)  (cloud) (cloud) (cloud)
+        +---------+-------+-------+---------+
+        |         |       |       |         |
+      Local    Monty   Docker  Apple    Cloud
+      (dev)   (sandbox) (iso)  (macOS)  (Modal, E2B, Daytona)
 ```
 
-All six backends live under `rlm_code.sandbox.runtimes` and share the same
-request/result data classes.
+The traditional backends live under `rlm_code.sandbox.runtimes` and share the
+same request/result data classes. The [Monty Interpreter](monty.md) provides an
+alternative sandboxed execution path via `rlm_code.rlm.monty_interpreter`.
 
 ---
 
@@ -28,6 +29,7 @@ request/result data classes.
 | Backend            | Module                                              | Isolation | Requires          | Best For                        |
 |--------------------|-----------------------------------------------------|-----------|-------------------|---------------------------------|
 | **Local**          | `rlm_code.sandbox.runtimes.local_runtime`           | None      | Python on PATH    | Development, fast iteration     |
+| **Monty**          | `rlm_code.rlm.monty_interpreter`                    | Rust VM   | `pydantic-monty`  | Sandboxed RLM REPL execution    |
 | **Docker**         | `rlm_code.sandbox.runtimes.docker_runtime`          | Container | Docker Engine     | Reproducible isolation          |
 | **Apple Container**| `rlm_code.sandbox.runtimes.apple_container_runtime` | Container | macOS `container` CLI | macOS-native sandboxing    |
 | **Modal**          | `rlm_code.sandbox.runtimes.cloud.modal_runtime`     | VM        | `modal` SDK       | Serverless, scalable compute    |
@@ -278,5 +280,6 @@ print(f"Output: {result.stdout}")
 ## Next Steps
 
 - [Local Runtime](local.md) -- zero-config development sandbox
+- [Monty Interpreter](monty.md) -- Rust-based sandboxed Python for RLM REPL
 - [Docker Runtime](docker.md) -- containerized isolation with policy checks
 - [Cloud Runtimes](cloud.md) -- Modal, E2B, Daytona, and Apple Container

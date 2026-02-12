@@ -1,4 +1,4 @@
-# 📦 Installation
+# Installation
 
 This guide covers how to install RLM Code, its optional dependencies, and how to verify your installation.
 
@@ -13,24 +13,54 @@ This guide covers how to install RLM Code, its optional dependencies, and how to
 | **Memory** | 2 GB | 8 GB+ |
 | **Disk** | 200 MB | 1 GB+ (for traces and benchmark artifacts) |
 
-!!! warning "Python Version"
-    RLM Code requires **Python 3.10 or later**. Python 3.9 and earlier are not supported. You can verify your Python version with:
+---
+
+## Install uv
+
+We recommend [uv](https://docs.astral.sh/uv/) as the primary way to install and manage RLM Code.
+
+```bash
+# macOS / Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Or with Homebrew
+brew install uv
+```
+
+!!! tip "Why uv?"
+    `uv` is 10-100x faster than pip for dependency resolution. `uv tool install` creates an isolated environment for CLI tools — no virtualenv management needed. If you don't have Python 3.10+ installed, uv can install it for you:
 
     ```bash
-    python --version
+    uv python install 3.12
     ```
 
 ---
 
 ## Standard Installation
 
-Install RLM Code from PyPI:
+=== "uv tool install (Recommended)"
 
-```bash
-pip install rlm-code
-```
+    ```bash
+    uv tool install "rlm-code[tui,llm-all]"
+    ```
 
-This installs the core package with all required dependencies:
+    This installs `rlm-code` as a globally available command in its own isolated environment. No virtualenv activation needed — just run `rlm-code` from anywhere.
+
+=== "uv pip install"
+
+    If you prefer to install into an existing virtual environment:
+
+    ```bash
+    uv pip install "rlm-code[tui,llm-all]"
+    ```
+
+=== "pip"
+
+    ```bash
+    pip install "rlm-code[tui,llm-all]"
+    ```
+
+This installs the core package, the TUI, and all LLM provider clients:
 
 | Dependency | Purpose |
 |-----------|---------|
@@ -45,6 +75,44 @@ This installs the core package with all required dependencies:
 | `pydantic` >= 2.11.0 | Data validation |
 | `jsonschema` >= 4.20.0 | Schema validation |
 | `packaging` >= 23.0 | Version parsing |
+| `textual` >= 0.86.0 | Terminal UI framework (via `[tui]` extra) |
+| `openai` >= 2.8.1 | OpenAI client (via `[llm-all]` extra) |
+| `anthropic` >= 0.39.0 | Anthropic client (via `[llm-all]` extra) |
+| `google-genai` >= 1.52.0 | Gemini client (via `[llm-all]` extra) |
+
+---
+
+## Minimal Installation
+
+If you only need one LLM provider:
+
+=== "uv tool"
+
+    ```bash
+    # Core + TUI + Anthropic only
+    uv tool install "rlm-code[tui,anthropic]"
+
+    # Core + TUI + OpenAI only
+    uv tool install "rlm-code[tui,openai]"
+
+    # Core + TUI + Gemini only
+    uv tool install "rlm-code[tui,gemini]"
+    ```
+
+=== "pip"
+
+    ```bash
+    pip install "rlm-code[tui,anthropic]"
+    pip install "rlm-code[tui,openai]"
+    pip install "rlm-code[tui,gemini]"
+    ```
+
+| Extra | Package | Version |
+|-------|---------|---------|
+| `openai` | `openai` | >= 2.8.1, < 3.0 |
+| `anthropic` | `anthropic` | >= 0.39.0, < 1.0 |
+| `gemini` | `google-genai` | >= 1.52.0, < 2.0 |
+| `llm-all` | All of the above | -- |
 
 ---
 
@@ -52,14 +120,24 @@ This installs the core package with all required dependencies:
 
 For contributors or those who want to run from source:
 
-```bash
-# Clone the repository
-git clone https://github.com/SuperagenticAI/rlm-code.git
-cd rlm-code
+=== "uv (Recommended)"
 
-# Install in editable mode with dev dependencies
-pip install -e ".[dev]"
-```
+    ```bash
+    git clone https://github.com/SuperagenticAI/rlm-code.git
+    cd rlm-code
+    uv sync --all-extras
+    uv run pytest
+    ```
+
+=== "pip"
+
+    ```bash
+    git clone https://github.com/SuperagenticAI/rlm-code.git
+    cd rlm-code
+    python -m venv .venv
+    source .venv/bin/activate
+    pip install -e ".[dev,tui,llm-all]"
+    ```
 
 The `dev` extra installs:
 
@@ -78,83 +156,43 @@ The `dev` extra installs:
 
 ## Optional Dependencies
 
-RLM Code supports a range of optional extras for LLM providers, TUI features, observability, and more. Install them individually or in groups.
+### Observability Integrations
 
-### TUI Framework
-
-The multi-pane terminal interface requires Textual:
+If you installed with `uv tool install`, use `uv tool install --with` to add extras, or reinstall with additional extras:
 
 ```bash
-pip install rlm-code[tui]
+uv tool install "rlm-code[tui,llm-all,mlflow]"
 ```
-
-!!! note "🖥️ TUI Required for Interactive Mode"
-    The `textual` package (>= 0.86.0) is required for the TUI with all 5 tabs (Chat, Files, Details, Shell, Research). Without it, only headless/scripting usage is available.
-
-### LLM Providers
-
-=== "All Providers"
-
-    ```bash
-    pip install rlm-code[llm-all]
-    ```
-
-=== "OpenAI"
-
-    ```bash
-    pip install rlm-code[openai]
-    ```
-
-=== "Anthropic"
-
-    ```bash
-    pip install rlm-code[anthropic]
-    ```
-
-=== "Gemini"
-
-    ```bash
-    pip install rlm-code[gemini]
-    ```
-
-| Extra | Package | Version |
-|-------|---------|---------|
-| `openai` | `openai` | >= 2.8.1, < 3.0 |
-| `anthropic` | `anthropic` | >= 0.39.0, < 1.0 |
-| `gemini` | `google-genai` | >= 1.52.0, < 2.0 |
-| `llm-all` | All of the above | -- |
-
-### Observability Integrations
 
 === "MLflow"
 
     ```bash
-    pip install rlm-code[mlflow]
+    uv tool install "rlm-code[tui,llm-all,mlflow]"
     ```
 
 === "OpenTelemetry"
 
     ```bash
-    pip install opentelemetry-api opentelemetry-sdk \
-        opentelemetry-exporter-otlp-proto-grpc
+    # If using uv tool, reinstall with the extra packages:
+    uv tool install "rlm-code[tui,llm-all]" --with opentelemetry-api --with opentelemetry-sdk --with opentelemetry-exporter-otlp-proto-grpc
     ```
 
 === "LangSmith"
 
     ```bash
-    pip install langsmith
+    uv tool install "rlm-code[tui,llm-all]" --with langsmith
     ```
 
 === "LangFuse"
 
     ```bash
-    pip install langfuse
+    uv tool install "rlm-code[tui,llm-all]" --with langfuse
     ```
 
 === "Logfire"
 
     ```bash
-    pip install logfire
+    uv tool install "rlm-code[tui,llm-all]" --with logfire
     ```
 
 | Integration | Package | Environment Variable |
@@ -168,7 +206,7 @@ pip install rlm-code[tui]
 ### Framework Adapters
 
 ```bash
-pip install rlm-code[frameworks]
+uv tool install "rlm-code[tui,llm-all,frameworks]"
 ```
 
 | Extra | Package | Purpose |
@@ -180,7 +218,7 @@ pip install rlm-code[frameworks]
 ### MCP WebSocket Transport
 
 ```bash
-pip install rlm-code[mcp-ws]
+uv tool install "rlm-code[tui,llm-all,mcp-ws]"
 ```
 
 Adds `websockets` >= 15.0.1 for WebSocket-based MCP server transport.
@@ -203,7 +241,7 @@ docker info
 ### Documentation
 
 ```bash
-pip install rlm-code[docs]
+uv tool install "rlm-code[docs]"
 ```
 
 Installs `mkdocs`, `mkdocs-material`, `mkdocstrings`, and `mkdocs-minify-plugin` for building these docs locally.
@@ -212,11 +250,19 @@ Installs `mkdocs`, `mkdocs-material`, `mkdocstrings`, and `mkdocs-minify-plugin`
 
 ## Full Installation (Everything)
 
-To install all optional dependencies at once:
+To install with all optional dependencies at once:
 
-```bash
-pip install rlm-code[tui,llm-all,mlflow,frameworks,mcp-ws,dev,docs]
-```
+=== "uv tool"
+
+    ```bash
+    uv tool install "rlm-code[tui,llm-all,mlflow,frameworks,mcp-ws]"
+    ```
+
+=== "pip"
+
+    ```bash
+    pip install "rlm-code[tui,llm-all,mlflow,frameworks,mcp-ws]"
+    ```
 
 ---
 
@@ -228,13 +274,6 @@ After installation, verify that everything works:
 
 ```bash
 rlm-code --version
-```
-
-Expected output:
-
-```
-RLM Code version: 0.1.5
-DSPy version: 3.0.4
 ```
 
 ### Check sandbox runtimes
@@ -267,36 +306,47 @@ This displays the status of all configured observability sinks (Local JSONL, MLf
 python -c "import rlm_code; print(rlm_code.__version__)"
 ```
 
-!!! tip "Using uv"
-    RLM Code works well with [uv](https://docs.astral.sh/uv/) for fast dependency resolution:
-
-    ```bash
-    uv pip install rlm-code[tui,llm-all]
-    ```
-
 ---
 
 ## Upgrading
 
-```bash
-pip install --upgrade rlm-code
-```
+=== "uv tool"
 
-To upgrade with all extras:
+    ```bash
+    uv tool upgrade rlm-code
+    ```
 
-```bash
-pip install --upgrade rlm-code[tui,llm-all,mlflow,frameworks]
-```
+=== "pip"
+
+    ```bash
+    pip install --upgrade "rlm-code[tui,llm-all]"
+    ```
+
+---
+
+## Uninstalling
+
+=== "uv tool"
+
+    ```bash
+    uv tool uninstall rlm-code
+    ```
+
+=== "pip"
+
+    ```bash
+    pip uninstall rlm-code
+    ```
 
 ---
 
 ## Troubleshooting
 
 !!! failure "ModuleNotFoundError: textual"
-    The TUI requires the `textual` package. Install it with:
+    The TUI requires the `textual` package. Reinstall with the `tui` extra:
 
     ```bash
-    pip install rlm-code[tui]
+    uv tool install "rlm-code[tui,llm-all]"
     ```
 
 !!! failure "Docker daemon not running"
@@ -314,8 +364,8 @@ pip install --upgrade rlm-code[tui,llm-all,mlflow,frameworks]
     Some sandbox operations write to temporary directories. Ensure your user has write access to `/tmp` or set the `TMPDIR` environment variable to a writable path.
 
 !!! failure "DSPy not found"
-    RLM Code requires DSPy >= 3.0.4. If you see import errors, upgrade DSPy:
+    RLM Code requires DSPy >= 3.0.4. Reinstall to pick up the latest dependencies:
 
     ```bash
-    pip install --upgrade dspy
+    uv tool install --force "rlm-code[tui,llm-all]"
     ```
