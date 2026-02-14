@@ -17,10 +17,9 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from pathlib import Path
 from typing import Any
 
-from .events import RLMEventBus, RLMEventType, RLMEventData, RLMEventCollector
+from .events import RLMEventBus, RLMEventCollector, RLMEventData, RLMEventType
 
 
 class Paradigm(Enum):
@@ -98,9 +97,7 @@ class ComparisonResult:
     results: dict[Paradigm, ParadigmResult] = field(default_factory=dict)
 
     # Timing
-    started_at: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
-    )
+    started_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     finished_at: str = ""
     total_duration_seconds: float = 0.0
 
@@ -117,7 +114,8 @@ class ComparisonResult:
             return None
 
         valid_results = [
-            (p, r) for p, r in self.results.items()
+            (p, r)
+            for p, r in self.results.items()
             if r.success and getattr(r, metric, None) is not None
         ]
 
@@ -129,7 +127,7 @@ class ComparisonResult:
             return max(valid_results, key=lambda x: x[1].accuracy or 0)[0]
 
         # For tokens/cost/time, lower is better
-        return min(valid_results, key=lambda x: getattr(x[1], metric, float('inf')))[0]
+        return min(valid_results, key=lambda x: getattr(x[1], metric, float("inf")))[0]
 
     def get_summary(self) -> dict[str, Any]:
         """Get comparison summary."""
@@ -434,7 +432,11 @@ class ParadigmComparator:
         # Initialize pure RLM environment
         env = self.runner.environments.get("pure_rlm")
         if env is None:
-            env = PureRLMEnvironment(workdir=self.runner.workdir)
+            builder = getattr(self.runner, "_build_pure_rlm_environment", None)
+            if callable(builder):
+                env = builder(workdir=self.runner.workdir)
+            else:
+                env = PureRLMEnvironment(workdir=self.runner.workdir, allow_unsafe_exec=True)
 
         # Initialize context as variable
         if hasattr(env, "initialize_context"):
@@ -618,11 +620,13 @@ def create_comparison_report(comparison: ComparisonResult) -> str:
     lines.append(comparison.format_table())
 
     # Add analysis
-    lines.extend([
-        "",
-        "ANALYSIS:",
-        "-" * 40,
-    ])
+    lines.extend(
+        [
+            "",
+            "ANALYSIS:",
+            "-" * 40,
+        ]
+    )
 
     # Token analysis
     pure_rlm = comparison.results.get(Paradigm.PURE_RLM)
@@ -657,11 +661,13 @@ def create_comparison_report(comparison: ComparisonResult) -> str:
             faster = "Pure RLM" if time_diff > 0 else "CodeAct"
             lines.append(f"{faster} is {abs(time_diff):.2f}s faster")
 
-    lines.extend([
-        "",
-        "VERDICT:",
-        "-" * 40,
-    ])
+    lines.extend(
+        [
+            "",
+            "VERDICT:",
+            "-" * 40,
+        ]
+    )
 
     token_winner = comparison.get_winner("total_tokens")
     cost_winner = comparison.get_winner("estimated_cost")
@@ -683,9 +689,11 @@ def create_comparison_report(comparison: ComparisonResult) -> str:
             "Consider the specific requirements of your use case."
         )
 
-    lines.extend([
-        "",
-        "=" * 70,
-    ])
+    lines.extend(
+        [
+            "",
+            "=" * 70,
+        ]
+    )
 
     return "\n".join(lines)

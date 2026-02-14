@@ -21,10 +21,9 @@ from __future__ import annotations
 import os
 import subprocess
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Any
+from importlib.util import find_spec
 
-from ..base import RuntimeExecutionRequest, RuntimeExecutionResult, SandboxRuntime
+from ..base import RuntimeExecutionRequest, RuntimeExecutionResult
 
 
 @dataclass
@@ -71,11 +70,8 @@ class DaytonaSandboxRuntime:
             pass
 
         # Check SDK
-        try:
-            import daytona_sdk
-            return True, f"Daytona SDK available"
-        except ImportError:
-            pass
+        if find_spec("daytona_sdk") is not None:
+            return True, "Daytona SDK available"
 
         return False, "Daytona not available (install CLI or pip install daytona-sdk)"
 

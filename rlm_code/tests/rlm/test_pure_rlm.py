@@ -9,22 +9,20 @@ Tests the paper-compliant RLM features:
 """
 
 import pytest
-from pathlib import Path
 
-from rlm_code.rlm.repl_types import REPLVariable, REPLEntry, REPLHistory, REPLResult
+from rlm_code.rlm.pure_rlm_environment import (
+    SAFE_BUILTINS,
+    PureRLMEnvironment,
+)
+from rlm_code.rlm.repl_types import REPLHistory, REPLResult, REPLVariable
 from rlm_code.rlm.termination import (
     FINAL,
     FINAL_VAR,
     FinalOutput,
-    detect_final_in_text,
     detect_final_in_code,
+    detect_final_in_text,
     extract_code_blocks,
     format_final_answer,
-)
-from rlm_code.rlm.pure_rlm_environment import (
-    PureRLMEnvironment,
-    PureRLMConfig,
-    SAFE_BUILTINS,
 )
 
 
@@ -230,13 +228,13 @@ class TestPureRLMEnvironment:
 
     def test_initialization(self, tmp_path):
         """Test environment initialization."""
-        env = PureRLMEnvironment(workdir=tmp_path)
+        env = PureRLMEnvironment(workdir=tmp_path, allow_unsafe_exec=True)
         assert env.name == "pure_rlm"
         assert env.workdir == tmp_path
 
     def test_initialize_context(self, tmp_path):
         """Test initializing context as variable."""
-        env = PureRLMEnvironment(workdir=tmp_path)
+        env = PureRLMEnvironment(workdir=tmp_path, allow_unsafe_exec=True)
         context = "This is a test document with important information."
 
         env.initialize_context(context, description="Test document")
@@ -253,7 +251,7 @@ class TestPureRLMEnvironment:
 
     def test_initialize_with_additional_vars(self, tmp_path):
         """Test initializing with additional variables."""
-        env = PureRLMEnvironment(workdir=tmp_path)
+        env = PureRLMEnvironment(workdir=tmp_path, allow_unsafe_exec=True)
 
         env.initialize_context(
             "main context",
@@ -267,7 +265,7 @@ class TestPureRLMEnvironment:
 
     def test_safe_builtins_available(self, tmp_path):
         """Test that safe builtins are available."""
-        env = PureRLMEnvironment(workdir=tmp_path)
+        env = PureRLMEnvironment(workdir=tmp_path, allow_unsafe_exec=True)
         env.initialize_context("test")
 
         namespace = env.get_namespace()
@@ -288,7 +286,7 @@ class TestPureRLMEnvironment:
 
     def test_show_vars_function(self, tmp_path):
         """Test SHOW_VARS utility function."""
-        env = PureRLMEnvironment(workdir=tmp_path)
+        env = PureRLMEnvironment(workdir=tmp_path, allow_unsafe_exec=True)
         env.initialize_context("test context")
 
         namespace = env.get_namespace()
@@ -297,7 +295,7 @@ class TestPureRLMEnvironment:
 
     def test_system_prompt(self, tmp_path):
         """Test system prompt contains RLM instructions."""
-        env = PureRLMEnvironment(workdir=tmp_path)
+        env = PureRLMEnvironment(workdir=tmp_path, allow_unsafe_exec=True)
         prompt = env.system_prompt()
 
         assert "RLM" in prompt
@@ -308,7 +306,7 @@ class TestPureRLMEnvironment:
 
     def test_planner_prompt_has_variable_metadata(self, tmp_path):
         """Test planner prompt includes variable metadata, not full context."""
-        env = PureRLMEnvironment(workdir=tmp_path)
+        env = PureRLMEnvironment(workdir=tmp_path, allow_unsafe_exec=True)
         large_context = "x" * 100000  # 100KB of context
 
         env.initialize_context(large_context)
@@ -328,7 +326,7 @@ class TestPureRLMEnvironment:
 
     def test_doctor_checks(self, tmp_path):
         """Test doctor checks run without error."""
-        env = PureRLMEnvironment(workdir=tmp_path)
+        env = PureRLMEnvironment(workdir=tmp_path, allow_unsafe_exec=True)
         checks = env.doctor_checks()
 
         assert len(checks) > 0
@@ -340,7 +338,7 @@ class TestPureRLMCodeExecution:
 
     def test_simple_code_execution(self, tmp_path):
         """Test executing simple Python code."""
-        env = PureRLMEnvironment(workdir=tmp_path)
+        env = PureRLMEnvironment(workdir=tmp_path, allow_unsafe_exec=True)
         env.initialize_context("Hello World")
 
         result = env._execute_code("print(context)")
@@ -350,7 +348,7 @@ class TestPureRLMCodeExecution:
 
     def test_variable_persistence(self, tmp_path):
         """Test that variables persist across executions."""
-        env = PureRLMEnvironment(workdir=tmp_path)
+        env = PureRLMEnvironment(workdir=tmp_path, allow_unsafe_exec=True)
         env.initialize_context("test")
 
         # First execution: create variable
@@ -364,7 +362,7 @@ class TestPureRLMCodeExecution:
 
     def test_final_terminates_execution(self, tmp_path):
         """Test that FINAL() sets final_output."""
-        env = PureRLMEnvironment(workdir=tmp_path)
+        env = PureRLMEnvironment(workdir=tmp_path, allow_unsafe_exec=True)
         env.initialize_context("test")
 
         result = env._execute_code('FINAL("The answer is 42")')
@@ -375,7 +373,7 @@ class TestPureRLMCodeExecution:
 
     def test_final_var_terminates_execution(self, tmp_path):
         """Test that FINAL_VAR() sets final_output."""
-        env = PureRLMEnvironment(workdir=tmp_path)
+        env = PureRLMEnvironment(workdir=tmp_path, allow_unsafe_exec=True)
         env.initialize_context("test")
 
         # First create the variable
@@ -390,7 +388,7 @@ class TestPureRLMCodeExecution:
 
     def test_error_handling(self, tmp_path):
         """Test that errors are captured properly."""
-        env = PureRLMEnvironment(workdir=tmp_path)
+        env = PureRLMEnvironment(workdir=tmp_path, allow_unsafe_exec=True)
         env.initialize_context("test")
 
         result = env._execute_code("raise ValueError('test error')")
@@ -401,7 +399,7 @@ class TestPureRLMCodeExecution:
 
     def test_llm_call_count_tracking(self, tmp_path):
         """Test that LLM call count is tracked."""
-        env = PureRLMEnvironment(workdir=tmp_path)
+        env = PureRLMEnvironment(workdir=tmp_path, allow_unsafe_exec=True)
         env.initialize_context("test")
 
         assert env.get_llm_call_count() == 0

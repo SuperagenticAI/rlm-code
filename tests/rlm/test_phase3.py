@@ -9,22 +9,19 @@ Tests for:
 
 import json
 import tempfile
-import time
 from pathlib import Path
 
-import pytest
-
+from rlm_code.rlm.benchmarks import (
+    RLMBenchmarkCase,
+    get_benchmark_cases,
+    list_benchmark_presets,
+)
 from rlm_code.rlm.trajectory import (
     TrajectoryEvent,
     TrajectoryEventType,
     TrajectoryLogger,
     TrajectoryViewer,
     compare_trajectories,
-)
-from rlm_code.rlm.benchmarks import (
-    RLMBenchmarkCase,
-    get_benchmark_cases,
-    list_benchmark_presets,
 )
 
 
@@ -291,7 +288,7 @@ class TestCloudRuntimeRegistry:
 
     def test_cloud_runtimes_in_supported_list(self):
         """Test that cloud runtimes are in SUPPORTED_RUNTIMES."""
-        from rlm_code.sandbox.runtimes.registry import SUPPORTED_RUNTIMES, CLOUD_RUNTIMES
+        from rlm_code.sandbox.runtimes.registry import CLOUD_RUNTIMES, SUPPORTED_RUNTIMES
 
         # Cloud runtimes should be in the supported set
         assert "modal" in SUPPORTED_RUNTIMES
@@ -373,7 +370,9 @@ class TestPaperCompatibleBenchmarks:
         for preset in ["oolong_style", "browsecomp_style", "token_efficiency"]:
             cases = get_benchmark_cases(preset)
             for case in cases:
-                assert case.environment == "pure_rlm", f"{preset}/{case.case_id} should use pure_rlm"
+                assert case.environment == "pure_rlm", (
+                    f"{preset}/{case.case_id} should use pure_rlm"
+                )
 
     def test_benchmark_cases_have_reasonable_timeouts(self):
         """Test that paper benchmarks have appropriate timeouts."""
@@ -391,13 +390,22 @@ class TestTrajectoryEventTypes:
     def test_all_event_types_defined(self):
         """Test that all expected event types are defined."""
         expected_types = [
-            "RUN_START", "RUN_END",
-            "ITERATION_START", "ITERATION_REASONING", "ITERATION_CODE", "ITERATION_OUTPUT", "ITERATION_END",
-            "LLM_REQUEST", "LLM_RESPONSE",
-            "SUB_LLM_REQUEST", "SUB_LLM_RESPONSE",
-            "CHILD_SPAWN", "CHILD_RESULT",
+            "RUN_START",
+            "RUN_END",
+            "ITERATION_START",
+            "ITERATION_REASONING",
+            "ITERATION_CODE",
+            "ITERATION_OUTPUT",
+            "ITERATION_END",
+            "LLM_REQUEST",
+            "LLM_RESPONSE",
+            "SUB_LLM_REQUEST",
+            "SUB_LLM_RESPONSE",
+            "CHILD_SPAWN",
+            "CHILD_RESULT",
             "FINAL_DETECTED",
-            "CONTEXT_LOAD", "CONTEXT_UPDATE",
+            "CONTEXT_LOAD",
+            "CONTEXT_UPDATE",
             "MEMORY_COMPACT",
             "ERROR",
         ]

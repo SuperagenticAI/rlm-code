@@ -14,11 +14,10 @@ from __future__ import annotations
 
 import os
 import time
-from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Generator
+from typing import Any
 
 from ..core.logging import get_logger
 
@@ -83,14 +82,14 @@ class OpenTelemetrySink:
             return
 
         try:
-            from opentelemetry import trace, metrics
-            from opentelemetry.sdk.trace import TracerProvider
-            from opentelemetry.sdk.trace.export import BatchSpanProcessor
+            from opentelemetry import metrics, trace
+            from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
+            from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
             from opentelemetry.sdk.metrics import MeterProvider
             from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
-            from opentelemetry.sdk.resources import Resource, SERVICE_NAME
-            from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-            from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
+            from opentelemetry.sdk.resources import SERVICE_NAME, Resource
+            from opentelemetry.sdk.trace import TracerProvider
+            from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
             # Create resource
             resource = Resource.create({SERVICE_NAME: self.service_name})
@@ -108,7 +107,9 @@ class OpenTelemetrySink:
                 if self.endpoint:
                     metric_exporter = OTLPMetricExporter(endpoint=self.endpoint)
                     metric_reader = PeriodicExportingMetricReader(metric_exporter)
-                    meter_provider = MeterProvider(resource=resource, metric_readers=[metric_reader])
+                    meter_provider = MeterProvider(
+                        resource=resource, metric_readers=[metric_reader]
+                    )
                 else:
                     meter_provider = MeterProvider(resource=resource)
                 metrics.set_meter_provider(meter_provider)
@@ -168,12 +169,9 @@ class OpenTelemetrySink:
             return
 
         try:
-            from opentelemetry import trace
-            from opentelemetry.trace import Status, StatusCode
-
             # Start root span for the run
             span = self._tracer.start_span(
-                f"rlm.run",
+                "rlm.run",
                 attributes={
                     "rlm.run_id": run_id,
                     "rlm.task": task[:500],  # Truncate long tasks
@@ -189,7 +187,9 @@ class OpenTelemetrySink:
             if self._run_counter:
                 self._run_counter.add(1, {"environment": environment})
 
-            logger.debug(f"OTEL: Started trace for run {run_id}, trace_id={span.get_span_context().trace_id:032x}")
+            logger.debug(
+                f"OTEL: Started trace for run {run_id}, trace_id={span.get_span_context().trace_id:032x}"
+            )
 
         except Exception as exc:
             logger.warning(f"OTEL on_run_start failed: {exc}")
@@ -216,7 +216,7 @@ class OpenTelemetrySink:
             # Create step span as child of run span
             with trace.use_span(parent_span, end_on_exit=False):
                 step_span = self._tracer.start_span(
-                    f"rlm.step",
+                    "rlm.step",
                     attributes={
                         "rlm.run_id": run_id,
                         "rlm.step": step,
@@ -241,7 +241,9 @@ class OpenTelemetrySink:
                 if observation.get("success"):
                     step_span.set_status(Status(StatusCode.OK))
                 elif observation.get("error"):
-                    step_span.set_status(Status(StatusCode.ERROR, observation.get("error", "")[:200]))
+                    step_span.set_status(
+                        Status(StatusCode.ERROR, observation.get("error", "")[:200])
+                    )
 
                 step_span.end()
                 self._step_spans[run_id].append(step_span)
@@ -297,10 +299,11 @@ class OpenTelemetrySink:
                 if started_at and finished_at:
                     try:
                         duration = (
-                            datetime.fromisoformat(finished_at) -
-                            datetime.fromisoformat(started_at)
+                            datetime.fromisoformat(finished_at) - datetime.fromisoformat(started_at)
                         ).total_seconds()
-                        self._duration_histogram.record(duration, {"completed": str(getattr(result, "completed", False))})
+                        self._duration_histogram.record(
+                            duration, {"completed": str(getattr(result, "completed", False))}
+                        )
                     except Exception:
                         pass
 
@@ -481,7 +484,9 @@ class LangSmithSink:
                     "total_reward": float(getattr(result, "total_reward", 0.0)),
                     "final_answer": str(getattr(result, "final_answer", ""))[:500],
                 },
-                error=getattr(result, "error", None) if not getattr(result, "completed", False) else None,
+                error=getattr(result, "error", None)
+                if not getattr(result, "completed", False)
+                else None,
             )
             run_tree.post()
 
@@ -566,7 +571,7 @@ class LangFuseSink:
             # Create a trace
             trace = self._langfuse.trace(
                 id=run_id,
-                name=f"rlm-run",
+                name="rlm-run",
                 input={"task": task},
                 metadata={
                     "environment": environment,

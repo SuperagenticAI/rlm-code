@@ -9,26 +9,28 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
-import shutil
-import tempfile
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 from ..core.logging import get_logger
 from ..sandbox.runtimes import detect_runtime_health
-from .benchmarks import (
-    RLMBenchmarkCase,
-    get_benchmark_cases,
-    list_benchmark_presets,
-    load_benchmark_packs,
+from .action_planner import ActionPlannerMixin
+from .benchmark_manager import (
+    BenchmarkManagerMixin,
+    RLMBenchmarkComparison,  # noqa: F401 - re-exported via rlm.__init__
+    RLMBenchmarkReport,  # noqa: F401 - re-exported via rlm.__init__
+    RLMBenchmarkResult,  # noqa: F401 - re-exported via rlm.__init__
+    RLMJudgeResult,  # noqa: F401 - re-exported via rlm.__init__
 )
+from .benchmarks import RLMBenchmarkCase, load_benchmark_packs
+from .chat_session import ChatSessionMixin
 from .context_store import LazyFileContext
+from .delegation import DelegationMixin
 from .environments import (
     DSPyCodingRLMEnvironment,
     EnvironmentActionResult,
@@ -37,10 +39,10 @@ from .environments import (
     RLMEnvironment,
     RLMRewardProfile,
 )
-from .pure_rlm_environment import PureRLMConfig, PureRLMEnvironment
 from .events import RLMEventBus
 from .frameworks import FrameworkAdapterRegistry, FrameworkEpisodeResult
 from .observability import RLMObservability
+from .pure_rlm_environment import PureRLMConfig, PureRLMEnvironment
 from .visualizer import build_run_visualization
 
 logger = get_logger(__name__)
@@ -114,21 +116,6 @@ class _RoleAwareConnector:
 
 
 @dataclass(slots=True)
-class RLMAction:
-    """Planner output for one RLM step."""
-
-    action: str
-    code: str | None = None
-    path: str | None = None
-    content: str | None = None
-    command: str | None = None
-    rationale: str | None = None
-    done: bool = False
-    final_response: str | None = None
-    extras: dict[str, Any] | None = None
-
-
-@dataclass(slots=True)
 class RLMRunResult:
     """Final output for one RLM run."""
 
@@ -146,38 +133,6 @@ class RLMRunResult:
 
 
 @dataclass(slots=True)
-class RLMBenchmarkResult:
-    """Summary payload for one benchmark sweep."""
-
-    benchmark_id: str
-    summary_path: Path
-    preset: str
-    started_at: str
-    finished_at: str
-    total_cases: int
-    completed_cases: int
-    avg_reward: float
-    avg_steps: float
-    case_results: list[dict[str, Any]]
-
-
-@dataclass(slots=True)
-class RLMBenchmarkComparison:
-    """Comparison result between candidate and baseline benchmark summaries."""
-
-    candidate_id: str
-    baseline_id: str
-    candidate_path: Path
-    baseline_path: Path
-    candidate_metrics: dict[str, float]
-    baseline_metrics: dict[str, float]
-    deltas: dict[str, float]
-    case_summary: dict[str, int]
-    gates: dict[str, bool]
-    passed: bool
-
-
-@dataclass(slots=True)
 class _RecursionState:
     started_monotonic: float
     deadline_monotonic: float | None
@@ -185,13 +140,45 @@ class _RecursionState:
     lock: threading.RLock
 
 
-class RLMRunner:
+class _UnavailablePureRLMInterpreter:
+    """Fails closed when secure Pure-RLM backend initialization is unavailable."""
+
+    def __init__(self, reason: str):
+        self.reason = str(reason)
+        self._vars: dict[str, Any] = {}
+
+    def start(self) -> None:
+        return None
+
+    def execute(self, _code: str, variables: dict[str, Any] | None = None) -> SimpleNamespace:
+        if variables:
+            self._vars.update(variables)
+        return SimpleNamespace(
+            output="",
+            error=self.reason,
+            final_output=None,
+            submit_fields=None,
+        )
+
+    def set_variable(self, name: str, value: Any) -> None:
+        self._vars[name] = value
+
+    def register_external(self, _name: str, _handler: Any) -> None:
+        return None
+
+    @property
+    def variables(self) -> dict[str, Any]:
+        return dict(self._vars)
+
+
+class RLMRunner(BenchmarkManagerMixin, ChatSessionMixin, DelegationMixin, ActionPlannerMixin):
     """CLI-native RLM run manager with trajectory persistence."""
 
     _BUNDLED_PACK_ALIASES: dict[str, str] = {
         "pydantic_time_range_v1": "eval/packs/pydantic_time_range_v1.yaml",
         "google_adk_memory_eval": "eval/packs/google_adk_memory_eval.json",
         "superoptix_qa_pairs": "eval/packs/superoptix_qa_pairs.json",
+        "rlm_x_claims_matrix": "eval/packs/rlm_x_claims_matrix.yaml",
     }
 
     def __init__(
@@ -237,7 +224,9 @@ class RLMRunner:
             self.session_dir = self.run_dir / "sessions"
         self.session_dir.mkdir(parents=True, exist_ok=True)
         self._chat_sessions: dict[str, dict[str, Any]] = {}
-        self._benchmark_pack_paths = [str(item) for item in (benchmark_pack_paths or []) if str(item).strip()]
+        self._benchmark_pack_paths = [
+            str(item) for item in (benchmark_pack_paths or []) if str(item).strip()
+        ]
         self.observability = observability or RLMObservability.default(
             workdir=self.workdir,
             run_dir=self.run_dir,
@@ -246,6 +235,27 @@ class RLMRunner:
             self.reward_profile = reward_profile
         else:
             self.reward_profile = RLMRewardProfile.from_mapping(reward_profile)
+        self._pure_rlm_backend = "docker"
+        self._pure_rlm_allow_unsafe_exec = False
+        self._pure_rlm_strict = False
+        self._pure_rlm_config = PureRLMConfig()
+        self._configure_pure_rlm_settings()
+        try:
+            pure_rlm_env = self._build_pure_rlm_environment()
+        except Exception as exc:
+            guidance = (
+                "Pure-RLM secure backend is unavailable. Configure a secure backend with "
+                "sandbox.pure_rlm_backend=monty or docker, then install dependencies "
+                "(Monty: pip install pydantic-monty, Docker: install Docker/OrbStack/Colima). "
+                "Unsafe exec fallback is disabled unless sandbox.pure_rlm_allow_unsafe_exec=true."
+            )
+            logger.warning("%s Root cause: %s", guidance, exc)
+            pure_rlm_env = PureRLMEnvironment(
+                workdir=self.workdir,
+                reward_profile=self.reward_profile,
+                config=self._pure_rlm_config,
+                interpreter=_UnavailablePureRLMInterpreter(f"{guidance} Root cause: {exc}"),
+            )
         self.environments: dict[str, RLMEnvironment] = {
             "generic": GenericRLMEnvironment(
                 workdir=self.workdir,
@@ -269,15 +279,122 @@ class RLMRunner:
             ),
             # Pure RLM environment implementing exact paper semantics
             # Context stored as variable, llm_query() available, FINAL/FINAL_VAR termination
-            "pure_rlm": PureRLMEnvironment(
-                workdir=self.workdir,
-                reward_profile=self.reward_profile,
-            ),
-            "pure-rlm": PureRLMEnvironment(
-                workdir=self.workdir,
-                reward_profile=self.reward_profile,
-            ),
+            "pure_rlm": pure_rlm_env,
+            "pure-rlm": pure_rlm_env,
         }
+
+    def _sandbox_config(self) -> Any | None:
+        manager = getattr(self.execution_engine, "config_manager", None)
+        config = getattr(manager, "config", None)
+        return getattr(config, "sandbox", None)
+
+    def _configure_pure_rlm_settings(self) -> None:
+        sandbox_cfg = self._sandbox_config()
+        if sandbox_cfg is None:
+            return
+
+        backend = (
+            str(getattr(sandbox_cfg, "pure_rlm_backend", "docker") or "docker").strip().lower()
+        )
+        if backend not in {"exec", "monty", "docker"}:
+            logger.warning(
+                "Unsupported pure_rlm backend '%s'; falling back to docker. "
+                "Supported backends right now: exec, monty, docker.",
+                backend,
+            )
+            backend = "docker"
+        self._pure_rlm_backend = backend
+        self._pure_rlm_allow_unsafe_exec = bool(
+            getattr(sandbox_cfg, "pure_rlm_allow_unsafe_exec", False)
+        )
+        self._pure_rlm_strict = bool(getattr(sandbox_cfg, "pure_rlm_strict", False))
+        self._pure_rlm_config = PureRLMConfig(
+            max_iteration_output_chars=max(
+                2000,
+                int(getattr(sandbox_cfg, "pure_rlm_max_iteration_output_chars", 12000) or 12000),
+            ),
+            output_metadata_mode=str(
+                getattr(sandbox_cfg, "pure_rlm_output_mode", "summarize") or "summarize"
+            )
+            .strip()
+            .lower(),
+        )
+
+    def _pure_rlm_secure_backend_guidance(self) -> str:
+        return (
+            "Install secure backend support: "
+            "Monty -> pip install pydantic-monty, "
+            "Docker -> install Docker/OrbStack/Colima and ensure docker daemon is running. "
+            "To intentionally use unsafe exec for local-only experiments, set "
+            "sandbox.pure_rlm_backend=exec and sandbox.pure_rlm_allow_unsafe_exec=true."
+        )
+
+    def _create_monty_interpreter(self) -> Any:
+        from .monty_interpreter import create_rlm_monty_interpreter
+
+        sandbox_cfg = self._sandbox_config()
+        return create_rlm_monty_interpreter(
+            timeout=int(getattr(sandbox_cfg, "default_timeout_seconds", 30) or 30),
+            max_memory=getattr(sandbox_cfg, "monty_max_memory", None),
+            max_allocations=getattr(sandbox_cfg, "monty_max_allocations", None),
+            type_check=bool(getattr(sandbox_cfg, "monty_type_check", False)),
+        )
+
+    def _create_docker_interpreter(self, workdir: Path | None = None) -> Any:
+        from .docker_interpreter import DockerPersistentInterpreter
+
+        sandbox_cfg = self._sandbox_config()
+        docker_cfg = getattr(sandbox_cfg, "docker", None)
+        return DockerPersistentInterpreter(
+            image=str(getattr(docker_cfg, "image", "python:3.11-slim") or "python:3.11-slim"),
+            timeout=int(getattr(sandbox_cfg, "default_timeout_seconds", 30) or 30),
+            workdir=(workdir or self.workdir),
+            network_enabled=bool(getattr(docker_cfg, "network_enabled", False)),
+        )
+
+    def _build_pure_rlm_environment(self, workdir: Path | None = None) -> PureRLMEnvironment:
+        interpreter: Any | None = None
+        selected_backend = self._pure_rlm_backend
+        if selected_backend == "exec":
+            if not self._pure_rlm_allow_unsafe_exec:
+                raise RuntimeError(
+                    "Unsafe pure_rlm backend 'exec' is disabled. "
+                    f"{self._pure_rlm_secure_backend_guidance()}"
+                )
+        else:
+            attempts = ["monty", "docker"] if selected_backend == "monty" else ["docker", "monty"]
+            errors: list[str] = []
+            for candidate in attempts:
+                try:
+                    if candidate == "monty":
+                        interpreter = self._create_monty_interpreter()
+                    else:
+                        interpreter = self._create_docker_interpreter(workdir=workdir)
+                    if candidate != selected_backend:
+                        logger.warning(
+                            "Secure pure_rlm backend '%s' unavailable. Using '%s' instead.",
+                            selected_backend,
+                            candidate,
+                        )
+                    self._pure_rlm_backend = candidate
+                    break
+                except Exception as exc:
+                    errors.append(f"{candidate}: {exc}")
+            if interpreter is None:
+                joined_errors = "; ".join(errors) if errors else "no attempts executed"
+                raise RuntimeError(
+                    "Unable to initialize a secure pure_rlm backend. "
+                    f"Tried {', '.join(attempts)}. Errors: {joined_errors}. "
+                    f"{self._pure_rlm_secure_backend_guidance()}"
+                )
+
+        return PureRLMEnvironment(
+            workdir=(workdir or self.workdir),
+            reward_profile=self.reward_profile,
+            config=self._pure_rlm_config,
+            interpreter=interpreter,
+            allow_unsafe_exec=(selected_backend == "exec" and self._pure_rlm_allow_unsafe_exec),
+        )
 
     def run_task(
         self,
@@ -316,11 +433,11 @@ class RLMRunner:
         if max_children_per_step < 1:
             raise ValueError("max_children_per_step must be >= 1.")
         framework_id = self._resolve_framework_id(framework)
-        if framework_id == "dspy":
-            environment = "dspy"
         env = self._get_environment(environment)
-        native_framework = "dspy" if framework_id == "dspy" else "native"
-        if framework_id is not None and framework_id != "dspy":
+        strict_pure_mode = bool(self._pure_rlm_strict and env.name == "pure_rlm")
+        effective_max_depth = 0 if strict_pure_mode else max_depth
+        native_framework = "native"
+        if framework_id is not None:
             return self._run_task_with_framework_adapter(
                 framework_id=framework_id,
                 task=cleaned_task,
@@ -419,10 +536,13 @@ class RLMRunner:
                 "sub_model": sub_model,
                 "sub_provider": sub_provider,
                 "max_depth": max_depth,
+                "effective_max_depth": effective_max_depth,
                 "depth": _depth,
                 "parallelism": normalized_parallelism,
                 "max_children_per_step": max_children_per_step,
                 "parent_run_id": _parent_run_id,
+                "pure_rlm_backend": self._pure_rlm_backend if env.name == "pure_rlm" else None,
+                "pure_rlm_strict": strict_pure_mode if env.name == "pure_rlm" else None,
             },
         )
         self._emit_runtime_event(
@@ -500,24 +620,36 @@ class RLMRunner:
                 )
 
                 if action_name in {"delegate", "delegate_batch"}:
-                    action_result = self._execute_delegate_action(
-                        parent_run_id=run_id,
-                        action=action_dict,
-                        default_environment=env.name,
-                        model_router=model_router,
-                        max_steps=max_steps,
-                        exec_timeout=exec_timeout,
-                        branch_width=branch_width,
-                        sub_model=sub_model,
-                        sub_provider=sub_provider,
-                        max_depth=max_depth,
-                        max_children_per_step=max_children_per_step,
-                        parallelism=normalized_parallelism,
-                        recursion_state=recursion_state,
-                        depth=_depth,
-                        framework=native_framework,
-                        time_budget_seconds=time_budget_seconds,
-                    )
+                    if strict_pure_mode:
+                        action_result = EnvironmentActionResult(
+                            observation={
+                                "success": False,
+                                "error": "delegate action is disabled in pure_rlm_strict mode.",
+                                "action": action_name,
+                                "pure_rlm_strict": True,
+                            },
+                            reward=-0.35,
+                            memory_note="delegate blocked by pure_rlm_strict mode.",
+                        )
+                    else:
+                        action_result = self._execute_delegate_action(
+                            parent_run_id=run_id,
+                            action=action_dict,
+                            default_environment=env.name,
+                            model_router=model_router,
+                            max_steps=max_steps,
+                            exec_timeout=exec_timeout,
+                            branch_width=branch_width,
+                            sub_model=sub_model,
+                            sub_provider=sub_provider,
+                            max_depth=effective_max_depth,
+                            max_children_per_step=max_children_per_step,
+                            parallelism=normalized_parallelism,
+                            recursion_state=recursion_state,
+                            depth=_depth,
+                            framework=native_framework,
+                            time_budget_seconds=time_budget_seconds,
+                        )
                 else:
                     action_result = env.execute_action(
                         action=action_dict,
@@ -569,7 +701,10 @@ class RLMRunner:
                 recursion_state.active_task_hashes.discard(task_hash)
 
         if not final_response:
-            if recursion_state.deadline_monotonic is not None and time.monotonic() > recursion_state.deadline_monotonic:
+            if (
+                recursion_state.deadline_monotonic is not None
+                and time.monotonic() > recursion_state.deadline_monotonic
+            ):
                 final_response = "Stopped due to time budget."
             else:
                 final_response = self._synthesize_final_response(
@@ -685,391 +820,21 @@ class RLMRunner:
 
     def supported_frameworks(self) -> list[str]:
         """Return sorted list of adapter-backed framework ids."""
-        return sorted({"native", "dspy", *self.framework_registry.list_ids()})
+        return sorted({"native", *self.framework_registry.list_ids()})
 
-    def benchmark_presets(
-        self,
-        *,
-        pack_paths: list[str | Path] | None = None,
-    ) -> list[dict[str, str | int]]:
-        """Return available benchmark preset metadata."""
-        extra_presets, extra_descriptions, extra_sources = self._load_external_benchmark_presets(
-            pack_paths=pack_paths
-        )
-        return list_benchmark_presets(
-            extra_presets,
-            extra_descriptions=extra_descriptions,
-            extra_sources=extra_sources,
-        )
+    # benchmark_presets, benchmark_pack_aliases, import_benchmark_pack_preview,
+    # run_benchmark, list_benchmark_runs, compare_benchmarks, export_benchmark_report,
+    # _resolve_benchmark_reference, _load_benchmark_payload, _benchmark_metrics,
+    # _benchmark_case_regressions, _benchmark_case_rows, _benchmarks_dir,
+    # _load_external_benchmark_presets, _resolve_benchmark_pack_aliases
+    # → moved to benchmark_manager.py (BenchmarkManagerMixin)
 
-    def benchmark_pack_aliases(self) -> dict[str, str]:
-        """Return bundled benchmark pack aliases that are available on disk."""
-        repo_root = Path(__file__).resolve().parents[2]
-        aliases: dict[str, str] = {}
-        for alias, relative_path in self._BUNDLED_PACK_ALIASES.items():
-            candidate = (repo_root / relative_path).resolve()
-            if candidate.exists():
-                aliases[alias] = str(candidate)
-        return aliases
-
-    def import_benchmark_pack_preview(
-        self,
-        *,
-        pack_paths: list[str | Path],
-        per_preset_limit: int = 5,
-    ) -> list[dict[str, Any]]:
-        """Preview imported external benchmark presets/cases without executing them."""
-        if not pack_paths:
-            raise ValueError("No benchmark pack paths provided.")
-        extra_presets, extra_descriptions, extra_sources = self._load_external_benchmark_presets(
-            pack_paths=pack_paths
-        )
-        if not extra_presets:
-            return []
-
-        limit = max(1, int(per_preset_limit))
-        rows: list[dict[str, Any]] = []
-        for preset in sorted(extra_presets.keys()):
-            cases = list(extra_presets.get(preset, []))
-            case_previews = [
-                {
-                    "case_id": case.case_id,
-                    "description": case.description,
-                    "environment": case.environment,
-                    "max_steps": case.max_steps,
-                    "exec_timeout": case.exec_timeout,
-                    "task_preview": self._clip_text(case.task, limit=120),
-                }
-                for case in cases[:limit]
-            ]
-            rows.append(
-                {
-                    "preset": preset,
-                    "source": extra_sources.get(preset, "external"),
-                    "description": extra_descriptions.get(preset, ""),
-                    "total_cases": len(cases),
-                    "previewed_cases": len(case_previews),
-                    "cases": case_previews,
-                }
-            )
-        return rows
-
-    def run_benchmark(
-        self,
-        *,
-        preset: str = "dspy_quick",
-        limit: int | None = None,
-        environment: str | None = None,
-        framework: str | None = None,
-        max_steps: int | None = None,
-        exec_timeout: int | None = None,
-        branch_width: int = 1,
-        sub_model: str | None = None,
-        sub_provider: str | None = None,
-        pack_paths: list[str | Path] | None = None,
-    ) -> RLMBenchmarkResult:
-        """Execute a benchmark preset and persist aggregate summary."""
-        benchmark_id = datetime.now(timezone.utc).strftime("bench_%Y%m%d_%H%M%S_%f")
-        started_at = self._utc_now()
-        extra_presets, extra_descriptions, extra_sources = self._load_external_benchmark_presets(
-            pack_paths=pack_paths
-        )
-        cases = get_benchmark_cases(preset, extra_presets=extra_presets)
-        if limit is not None:
-            cases = cases[: max(1, int(limit))]
-
-        case_results: list[dict[str, Any]] = []
-        for case in cases:
-            case_started = self._utc_now()
-            chosen_env = (environment or case.environment).strip().lower()
-            chosen_steps = int(max_steps) if max_steps is not None else int(case.max_steps)
-            chosen_timeout = int(exec_timeout) if exec_timeout is not None else int(case.exec_timeout)
-            try:
-                result = self.run_task(
-                    task=case.task,
-                    max_steps=max(1, chosen_steps),
-                    exec_timeout=max(1, chosen_timeout),
-                    environment=chosen_env,
-                    framework=framework,
-                    branch_width=max(1, int(branch_width)),
-                    sub_model=sub_model,
-                    sub_provider=sub_provider,
-                )
-                case_results.append(
-                    {
-                        "case_id": case.case_id,
-                        "description": case.description,
-                        "task": case.task,
-                        "environment": result.environment,
-                        "started_at": case_started,
-                        "finished_at": result.finished_at,
-                        "run_id": result.run_id,
-                        "run_path": str(result.run_path),
-                        "completed": bool(result.completed),
-                        "steps": int(result.steps),
-                        "total_reward": float(result.total_reward),
-                        "usage": dict(result.usage_summary or {}),
-                        "final_response": str(result.final_response or ""),
-                    }
-                )
-            except Exception as exc:
-                logger.exception("RLM benchmark case failed: %s", exc)
-                case_results.append(
-                    {
-                        "case_id": case.case_id,
-                        "description": case.description,
-                        "task": case.task,
-                        "environment": chosen_env,
-                        "started_at": case_started,
-                        "finished_at": self._utc_now(),
-                        "run_id": None,
-                        "run_path": None,
-                        "completed": False,
-                        "steps": 0,
-                        "total_reward": -1.0,
-                        "final_response": "",
-                        "error": str(exc),
-                    }
-                )
-
-        finished_at = self._utc_now()
-        total_cases = len(case_results)
-        completed_cases = len([entry for entry in case_results if bool(entry.get("completed"))])
-        total_rewards = [float(entry.get("total_reward", 0.0)) for entry in case_results]
-        total_steps = [int(entry.get("steps", 0)) for entry in case_results]
-        avg_reward = (sum(total_rewards) / total_cases) if total_cases else 0.0
-        avg_steps = (sum(total_steps) / total_cases) if total_cases else 0.0
-
-        payload = {
-            "benchmark_id": benchmark_id,
-            "preset": preset,
-            "source": extra_sources.get(str(preset).strip().lower(), "builtin"),
-            "description": extra_descriptions.get(str(preset).strip().lower(), ""),
-            "pack_paths": [str(item) for item in (pack_paths or self._benchmark_pack_paths)],
-            "started_at": started_at,
-            "finished_at": finished_at,
-            "total_cases": total_cases,
-            "completed_cases": completed_cases,
-            "avg_reward": round(avg_reward, 4),
-            "avg_steps": round(avg_steps, 2),
-            "case_results": case_results,
-        }
-        summary_path = self._benchmarks_dir() / f"{benchmark_id}.json"
-        summary_path.parent.mkdir(parents=True, exist_ok=True)
-        summary_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
-
-        return RLMBenchmarkResult(
-            benchmark_id=benchmark_id,
-            summary_path=summary_path,
-            preset=preset,
-            started_at=started_at,
-            finished_at=finished_at,
-            total_cases=total_cases,
-            completed_cases=completed_cases,
-            avg_reward=round(avg_reward, 4),
-            avg_steps=round(avg_steps, 2),
-            case_results=case_results,
-        )
-
-    def list_benchmark_runs(self, limit: int = 20) -> list[dict[str, Any]]:
-        """List recent benchmark summaries."""
-        files = sorted(
-            self._benchmarks_dir().glob("*.json"),
-            key=lambda item: item.stat().st_mtime,
-            reverse=True,
-        )
-        rows: list[dict[str, Any]] = []
-        for path in files[: max(1, limit)]:
-            payload = self._load_benchmark_payload(path)
-            if payload is None:
-                continue
-            total_cases = int(payload.get("total_cases") or 0)
-            completed_cases = int(payload.get("completed_cases") or 0)
-            completion_rate = (completed_cases / total_cases) if total_cases else 0.0
-            rows.append(
-                {
-                    "benchmark_id": str(payload.get("benchmark_id") or path.stem),
-                    "preset": str(payload.get("preset") or "unknown"),
-                    "source": str(payload.get("source") or "builtin"),
-                    "total_cases": total_cases,
-                    "completed_cases": completed_cases,
-                    "completion_rate": completion_rate,
-                    "avg_reward": float(payload.get("avg_reward") or 0.0),
-                    "avg_steps": float(payload.get("avg_steps") or 0.0),
-                    "started_at": str(payload.get("started_at") or ""),
-                    "finished_at": str(payload.get("finished_at") or ""),
-                    "path": str(path),
-                }
-            )
-        return rows
-
-    def compare_benchmarks(
-        self,
-        *,
-        candidate: str = "latest",
-        baseline: str = "previous",
-        min_reward_delta: float = 0.0,
-        min_completion_delta: float = 0.0,
-        max_steps_increase: float = 0.0,
-        fail_on_completion_regression: bool = True,
-    ) -> RLMBenchmarkComparison:
-        """Compare candidate benchmark vs baseline and compute CI-style gate pass/fail."""
-        candidate_path = self._resolve_benchmark_reference(candidate)
-        if candidate_path is None:
-            raise ValueError(f"Candidate benchmark not found: {candidate}")
-        baseline_path = self._resolve_benchmark_reference(
-            baseline,
-            candidate_path=candidate_path,
-        )
-        if baseline_path is None:
-            raise ValueError(f"Baseline benchmark not found: {baseline}")
-
-        candidate_payload = self._load_benchmark_payload(candidate_path)
-        baseline_payload = self._load_benchmark_payload(baseline_path)
-        if candidate_payload is None:
-            raise ValueError(f"Invalid candidate benchmark summary: {candidate_path}")
-        if baseline_payload is None:
-            raise ValueError(f"Invalid baseline benchmark summary: {baseline_path}")
-
-        candidate_metrics = self._benchmark_metrics(candidate_payload)
-        baseline_metrics = self._benchmark_metrics(baseline_payload)
-
-        reward_delta = candidate_metrics["avg_reward"] - baseline_metrics["avg_reward"]
-        completion_delta = candidate_metrics["completion_rate"] - baseline_metrics["completion_rate"]
-        steps_increase = candidate_metrics["avg_steps"] - baseline_metrics["avg_steps"]
-        deltas = {
-            "avg_reward": reward_delta,
-            "completion_rate": completion_delta,
-            "avg_steps_increase": steps_increase,
-        }
-
-        case_summary = self._benchmark_case_regressions(candidate_payload, baseline_payload)
-        gates = {
-            "reward": reward_delta >= float(min_reward_delta),
-            "completion": completion_delta >= float(min_completion_delta),
-            "steps": steps_increase <= float(max_steps_increase),
-            "completion_regressions": (
-                case_summary["completion_regressions"] == 0
-                if fail_on_completion_regression
-                else True
-            ),
-        }
-
-        return RLMBenchmarkComparison(
-            candidate_id=str(candidate_payload.get("benchmark_id") or candidate_path.stem),
-            baseline_id=str(baseline_payload.get("benchmark_id") or baseline_path.stem),
-            candidate_path=candidate_path,
-            baseline_path=baseline_path,
-            candidate_metrics=candidate_metrics,
-            baseline_metrics=baseline_metrics,
-            deltas=deltas,
-            case_summary=case_summary,
-            gates=gates,
-            passed=all(bool(value) for value in gates.values()),
-        )
-
-    def run_chat_turn(
-        self,
-        message: str,
-        session_id: str = "default",
-        *,
-        environment: str = "generic",
-        framework: str | None = None,
-        max_steps: int = 4,
-        exec_timeout: int = 30,
-        branch_width: int = 1,
-        max_depth: int = 2,
-        max_children_per_step: int = 4,
-        parallelism: int = 2,
-        time_budget_seconds: int | None = None,
-        sub_model: str | None = None,
-        sub_provider: str | None = None,
-        enable_compaction: bool = True,
-        compaction_limit: int = 6,
-        keep_recent: int = 4,
-    ) -> RLMRunResult:
-        """Run one persistent chat turn backed by RLM episodes."""
-        cleaned_message = message.strip()
-        if not cleaned_message:
-            raise ValueError("Chat message cannot be empty.")
-
-        normalized_session_id = self._normalize_session_id(session_id)
-        state = self._load_chat_session_state(
-            normalized_session_id,
-            environment=environment,
-        )
-        task = self._build_chat_task(cleaned_message, state)
-        result = self.run_task(
-            task=task,
-            max_steps=max_steps,
-            exec_timeout=exec_timeout,
-            environment=environment,
-            framework=framework,
-            sub_model=sub_model,
-            sub_provider=sub_provider,
-            branch_width=branch_width,
-            max_depth=max_depth,
-            max_children_per_step=max_children_per_step,
-            parallelism=parallelism,
-            time_budget_seconds=time_budget_seconds,
-        )
-
-        history_entry = {
-            "timestamp": self._utc_now(),
-            "user": cleaned_message,
-            "assistant": str(result.final_response or "").strip(),
-            "run_id": result.run_id,
-        }
-        state["contexts"].append(cleaned_message)
-        state["histories"].append(history_entry)
-        state["environment"] = environment
-        if framework:
-            state["framework"] = framework
-        state["last_run_id"] = result.run_id
-        state["updated_at"] = self._utc_now()
-
-        if enable_compaction:
-            self._compact_chat_session_state(
-                state,
-                compaction_limit=max(1, compaction_limit),
-                keep_recent=max(1, keep_recent),
-            )
-
-        self._save_chat_session_state(state)
-        return result
-
-    def get_chat_session(self, session_id: str = "default") -> dict[str, Any] | None:
-        """Return compact metadata for one chat session."""
-        normalized_session_id = self._normalize_session_id(session_id)
-        state = self._load_chat_session_state(
-            normalized_session_id,
-            environment="generic",
-            create=False,
-        )
-        if not state:
-            return None
-
-        return {
-            "session_id": state["session_id"],
-            "environment": state.get("environment", "generic"),
-            "framework": state.get("framework", "native"),
-            "created_at": state.get("created_at", ""),
-            "updated_at": state.get("updated_at", ""),
-            "context_count": len(state.get("contexts", [])),
-            "history_count": len(state.get("histories", [])),
-            "compacted_count": len(state.get("compacted_summaries", [])),
-            "last_run_id": state.get("last_run_id"),
-        }
-
-    def reset_chat_session(self, session_id: str = "default") -> bool:
-        """Delete persisted chat session state."""
-        normalized_session_id = self._normalize_session_id(session_id)
-        self._chat_sessions.pop(normalized_session_id, None)
-        path = self._chat_session_file(normalized_session_id)
-        if not path.exists():
-            return False
-        path.unlink()
-        return True
+    # run_chat_turn, get_chat_session, reset_chat_session,
+    # _build_chat_task, _compact_chat_session_state, _build_compaction_prompt,
+    # _fallback_compaction_summary, _load_chat_session_state,
+    # _save_chat_session_state, _normalize_chat_state, _new_chat_state,
+    # _chat_session_file, _normalize_session_id
+    # → moved to chat_session.py (ChatSessionMixin)
 
     def observability_status(self) -> list[dict[str, Any]]:
         """Return configured observability sink statuses."""
@@ -1127,8 +892,12 @@ class RLMRunner:
             EnvironmentDoctorCheck(
                 name="model_connection",
                 status="pass" if connected_model else "warn",
-                detail=f"Connected model: {connected_model}" if connected_model else "No model connected.",
-                recommendation=None if connected_model else "Connect a model with /connect before /rlm run.",
+                detail=f"Connected model: {connected_model}"
+                if connected_model
+                else "No model connected.",
+                recommendation=None
+                if connected_model
+                else "Connect a model with /connect before /rlm run.",
             )
         )
 
@@ -1150,197 +919,6 @@ class RLMRunner:
 
         checks.extend(env.doctor_checks())
         return checks
-
-    def _build_chat_task(self, message: str, state: dict[str, Any]) -> str:
-        summary_lines = [
-            f"- {self._clip_text(str(item), limit=500)}"
-            for item in state.get("compacted_summaries", [])[-4:]
-        ]
-        context_lines = [
-            f"context_{idx}: {self._clip_text(str(item), limit=400)}"
-            for idx, item in enumerate(state.get("contexts", []))
-        ]
-        history_lines = []
-        for idx, item in enumerate(state.get("histories", [])):
-            if not isinstance(item, dict):
-                continue
-            user_text = self._clip_text(str(item.get("user", "")), limit=220)
-            assistant_text = self._clip_text(str(item.get("assistant", "")), limit=220)
-            history_lines.append(f"history_{idx}: user={user_text} | assistant={assistant_text}")
-
-        compacted_block = "\n".join(summary_lines) if summary_lines else "- (none)"
-        context_block = "\n".join(context_lines) if context_lines else "- (none)"
-        history_block = "\n".join(history_lines) if history_lines else "- (none)"
-        return (
-            f"RLM persistent chat session: {state['session_id']}\n"
-            f"Environment: {state.get('environment', 'generic')}\n\n"
-            "Compacted long-horizon memory:\n"
-            f"{compacted_block}\n\n"
-            "Available contexts:\n"
-            f"{context_block}\n\n"
-            "Available conversation history:\n"
-            f"{history_block}\n\n"
-            "Current user request:\n"
-            f"{message}\n\n"
-            "Respond to the current user request, using available context/history as needed."
-        )
-
-    def _compact_chat_session_state(
-        self,
-        state: dict[str, Any],
-        *,
-        compaction_limit: int,
-        keep_recent: int,
-    ) -> None:
-        contexts: list[str] = list(state.get("contexts", []))
-        histories: list[dict[str, Any]] = list(state.get("histories", []))
-        if len(histories) <= compaction_limit or len(histories) <= keep_recent:
-            return
-
-        overflow_count = len(histories) - keep_recent
-        old_contexts = contexts[:overflow_count]
-        old_histories = histories[:overflow_count]
-        summary_prompt = self._build_compaction_prompt(old_contexts, old_histories)
-
-        try:
-            summary = self.llm_connector.generate_response(
-                prompt=summary_prompt,
-                system_prompt=(
-                    "Summarize long-horizon assistant memory for a coding chat session. "
-                    "Return concise bullet points."
-                ),
-            )
-            summary_text = str(summary).strip()
-        except Exception:
-            summary_text = self._fallback_compaction_summary(old_contexts, old_histories)
-
-        if not summary_text:
-            summary_text = self._fallback_compaction_summary(old_contexts, old_histories)
-
-        compacted = list(state.get("compacted_summaries", []))
-        compacted.append(self._clip_text(summary_text, limit=2500))
-        state["compacted_summaries"] = compacted[-20:]
-        state["contexts"] = contexts[-keep_recent:]
-        state["histories"] = histories[-keep_recent:]
-
-    def _build_compaction_prompt(
-        self,
-        contexts: list[str],
-        histories: list[dict[str, Any]],
-    ) -> str:
-        context_lines = [
-            f"- context_{idx}: {self._clip_text(item, limit=300)}"
-            for idx, item in enumerate(contexts)
-        ]
-        history_lines = []
-        for idx, entry in enumerate(histories):
-            user = self._clip_text(str(entry.get("user", "")), limit=220)
-            assistant = self._clip_text(str(entry.get("assistant", "")), limit=220)
-            history_lines.append(f"- turn_{idx}: user={user} | assistant={assistant}")
-        return (
-            "Compress the following chat memory into 3-6 bullet points focused on:\n"
-            "1) user goals\n"
-            "2) key code changes/actions\n"
-            "3) unresolved issues/next steps\n\n"
-            "Contexts:\n"
-            f"{chr(10).join(context_lines) if context_lines else '- (none)'}\n\n"
-            "History:\n"
-            f"{chr(10).join(history_lines) if history_lines else '- (none)'}"
-        )
-
-    @staticmethod
-    def _fallback_compaction_summary(contexts: list[str], histories: list[dict[str, Any]]) -> str:
-        user_goals = [str(entry.get("user", "")).strip() for entry in histories if entry.get("user")]
-        assistant_actions = [
-            str(entry.get("assistant", "")).strip() for entry in histories if entry.get("assistant")
-        ]
-        parts = []
-        if contexts:
-            parts.append(f"Context items compacted: {len(contexts)}.")
-        if user_goals:
-            parts.append(f"Recent user goals: {', '.join(user_goals[:3])}.")
-        if assistant_actions:
-            parts.append(f"Recent assistant outputs: {', '.join(assistant_actions[:2])}.")
-        return " ".join(parts) or "Compacted prior conversation history."
-
-    def _load_chat_session_state(
-        self,
-        session_id: str,
-        *,
-        environment: str,
-        create: bool = True,
-    ) -> dict[str, Any] | None:
-        if session_id in self._chat_sessions:
-            return self._chat_sessions[session_id]
-
-        path = self._chat_session_file(session_id)
-        if path.exists():
-            try:
-                payload = json.loads(path.read_text(encoding="utf-8"))
-            except Exception:
-                payload = {}
-            if isinstance(payload, dict):
-                state = self._normalize_chat_state(payload, session_id, environment=environment)
-                self._chat_sessions[session_id] = state
-                return state
-
-        if not create:
-            return None
-
-        state = self._new_chat_state(session_id, environment=environment)
-        self._chat_sessions[session_id] = state
-        return state
-
-    def _save_chat_session_state(self, state: dict[str, Any]) -> None:
-        session_id = self._normalize_session_id(str(state.get("session_id", "default")))
-        path = self._chat_session_file(session_id)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
-        self._chat_sessions[session_id] = state
-
-    def _normalize_chat_state(
-        self,
-        payload: dict[str, Any],
-        session_id: str,
-        *,
-        environment: str,
-    ) -> dict[str, Any]:
-        now = self._utc_now()
-        state = {
-            "session_id": session_id,
-            "environment": str(payload.get("environment") or environment),
-            "framework": str(payload.get("framework") or "native"),
-            "created_at": str(payload.get("created_at") or now),
-            "updated_at": str(payload.get("updated_at") or now),
-            "last_run_id": payload.get("last_run_id"),
-            "contexts": list(payload.get("contexts") or []),
-            "histories": list(payload.get("histories") or []),
-            "compacted_summaries": list(payload.get("compacted_summaries") or []),
-        }
-        return state
-
-    def _new_chat_state(self, session_id: str, *, environment: str) -> dict[str, Any]:
-        now = self._utc_now()
-        return {
-            "session_id": session_id,
-            "environment": environment,
-            "framework": "native",
-            "created_at": now,
-            "updated_at": now,
-            "last_run_id": None,
-            "contexts": [],
-            "histories": [],
-            "compacted_summaries": [],
-        }
-
-    def _chat_session_file(self, session_id: str) -> Path:
-        safe_name = self._normalize_session_id(session_id)
-        return self.session_dir / f"{safe_name}.json"
-
-    @staticmethod
-    def _normalize_session_id(session_id: str) -> str:
-        cleaned = re.sub(r"[^a-zA-Z0-9_.-]+", "_", (session_id or "default").strip())
-        return cleaned or "default"
 
     @staticmethod
     def _clip_text(text: str, limit: int = 300) -> str:
@@ -1658,7 +1236,9 @@ class RLMRunner:
                 steps_written += 1
 
             if steps_written == 0:
-                total_reward = self.reward_profile.apply_global_scale(float(episode.total_reward or 0.0))
+                total_reward = self.reward_profile.apply_global_scale(
+                    float(episode.total_reward or 0.0)
+                )
             completed = bool(episode.completed)
             final_response = str(episode.final_response or "").strip()
         except Exception as exc:
@@ -1683,7 +1263,9 @@ class RLMRunner:
             steps_written = 1
 
         if not final_response:
-            final_response = self._synthesize_final_response(task, [], completed, environment=env.name)
+            final_response = self._synthesize_final_response(
+                task, [], completed, environment=env.name
+            )
 
         finished = self._utc_now()
         usage_end = self._usage_snapshot()
@@ -1729,274 +1311,7 @@ class RLMRunner:
         )
         return result
 
-    def _execute_delegate_action(
-        self,
-        *,
-        parent_run_id: str,
-        action: dict[str, Any],
-        default_environment: str,
-        model_router: _RoleAwareConnector,
-        max_steps: int,
-        exec_timeout: int,
-        branch_width: int,
-        sub_model: str | None,
-        sub_provider: str | None,
-        max_depth: int,
-        max_children_per_step: int,
-        parallelism: int,
-        recursion_state: _RecursionState,
-        depth: int,
-        framework: str | None,
-        time_budget_seconds: int | None,
-    ) -> EnvironmentActionResult:
-        if depth >= max_depth:
-            return EnvironmentActionResult(
-                observation={
-                    "success": False,
-                    "error": "delegate blocked by max_depth guard.",
-                    "max_depth": max_depth,
-                    "depth": depth,
-                },
-                reward=-0.3,
-                memory_note="delegate blocked by max_depth guard.",
-            )
-
-        action_name = str(action.get("action", "")).strip().lower()
-        requested_children = self._as_int(action.get("max_children"), default=max_children_per_step, minimum=1)
-        child_limit = max(1, min(requested_children, max_children_per_step))
-
-        raw_tasks: list[str] = []
-        if action_name == "delegate_batch":
-            payload = action.get("tasks")
-            if isinstance(payload, list):
-                raw_tasks = [str(item).strip() for item in payload if str(item).strip()]
-        else:
-            single = (
-                action.get("task")
-                or action.get("subtask")
-                or action.get("prompt")
-                or action.get("rationale")
-            )
-            if isinstance(single, str) and single.strip():
-                raw_tasks = [single.strip()]
-
-        raw_tasks = raw_tasks[:child_limit]
-        if not raw_tasks:
-            return EnvironmentActionResult(
-                observation={"success": False, "error": "delegate requires task/tasks payload."},
-                reward=-0.25,
-                memory_note="delegate missing tasks.",
-            )
-
-        context_refs = self.context_store.resolve_many(action.get("context_refs"), limit=8)
-        if not context_refs:
-            include = action.get("context_include")
-            include_globs = include if isinstance(include, list) else None
-            auto_refs = self.context_store.discover(include=include_globs, limit=4)
-            context_refs.extend(auto_refs)
-        context_block = self.context_store.render(context_refs, max_chars=6000, max_chars_per_ref=1400)
-
-        child_environment = str(action.get("environment") or action.get("env") or default_environment).strip()
-        child_steps = self._as_int(
-            action.get("steps"),
-            default=max(1, min(3, max_steps)),
-            minimum=1,
-            maximum=max(1, max_steps),
-        )
-        child_timeout = self._as_int(
-            action.get("timeout"),
-            default=max(1, exec_timeout),
-            minimum=1,
-            maximum=3600,
-        )
-        child_branch = self._as_int(
-            action.get("branch"),
-            default=1,
-            minimum=1,
-            maximum=max(1, branch_width),
-        )
-        child_parallel = self._as_int(action.get("parallel"), default=parallelism, minimum=1)
-        child_parallel = max(1, min(child_parallel, len(raw_tasks), self._max_parallelism))
-        child_sub_model = str(action.get("model") or sub_model or "").strip() or None
-        child_sub_provider = str(action.get("provider") or sub_provider or "").strip() or None
-
-        delegate_tasks: list[str] = []
-        for raw_task in raw_tasks:
-            delegate_task = raw_task
-            if context_block:
-                delegate_task = f"{raw_task}\n\nContext snippets:\n{context_block}"
-            delegate_tasks.append(delegate_task)
-
-        results: list[dict[str, Any]] = []
-
-        def _run_child(index: int, child_task: str, original_task: str) -> dict[str, Any]:
-            child_hash = self._task_fingerprint(original_task, child_environment)
-            with recursion_state.lock:
-                if child_hash in recursion_state.active_task_hashes:
-                    return {
-                        "index": index,
-                        "task": original_task,
-                        "skipped": True,
-                        "reason": "cycle_guard",
-                    }
-
-            if recursion_state.deadline_monotonic is not None:
-                remaining = recursion_state.deadline_monotonic - time.monotonic()
-                if remaining <= 0:
-                    return {
-                        "index": index,
-                        "task": original_task,
-                        "skipped": True,
-                        "reason": "time_budget",
-                    }
-                effective_timeout = max(1, min(child_timeout, int(remaining)))
-            else:
-                effective_timeout = child_timeout
-
-            acquired = self._parallel_semaphore.acquire(blocking=False)
-            if not acquired:
-                return {
-                    "index": index,
-                    "task": original_task,
-                    "skipped": True,
-                    "reason": "parallel_capacity",
-                }
-
-            try:
-                self._emit_runtime_event(
-                    "child_run_start",
-                    {
-                        "parent_run_id": parent_run_id,
-                        "index": index,
-                        "task": original_task,
-                        "depth": depth + 1,
-                    },
-                )
-                try:
-                    child_result = self.run_task(
-                        task=child_task,
-                        max_steps=child_steps,
-                        exec_timeout=effective_timeout,
-                        environment=child_environment,
-                        framework=framework,
-                        sub_model=child_sub_model,
-                        sub_provider=child_sub_provider,
-                        branch_width=child_branch,
-                        max_depth=max_depth,
-                        max_children_per_step=max_children_per_step,
-                        parallelism=parallelism,
-                        time_budget_seconds=time_budget_seconds,
-                        _recursion_state=recursion_state,
-                        _depth=depth + 1,
-                        _parent_run_id=parent_run_id,
-                    )
-                    payload = {
-                        "index": index,
-                        "task": original_task,
-                        "run_id": child_result.run_id,
-                        "run_path": str(child_result.run_path),
-                        "completed": bool(child_result.completed),
-                        "steps": int(child_result.steps),
-                        "total_reward": float(child_result.total_reward),
-                        "final_response": str(child_result.final_response),
-                        "skipped": False,
-                    }
-                    self._emit_runtime_event(
-                        "child_run_end",
-                        {
-                            "parent_run_id": parent_run_id,
-                            "index": index,
-                            "run_id": child_result.run_id,
-                            "completed": bool(child_result.completed),
-                            "depth": depth + 1,
-                        },
-                    )
-                    return payload
-                except Exception as exc:
-                    self._emit_runtime_event(
-                        "child_run_error",
-                        {
-                            "parent_run_id": parent_run_id,
-                            "index": index,
-                            "task": original_task,
-                            "error": str(exc),
-                            "depth": depth + 1,
-                        },
-                    )
-                    return {
-                        "index": index,
-                        "task": original_task,
-                        "skipped": False,
-                        "error": str(exc),
-                    }
-            finally:
-                self._parallel_semaphore.release()
-
-        if child_parallel <= 1 or len(delegate_tasks) <= 1:
-            for idx, (delegate_task, original_task) in enumerate(zip(delegate_tasks, raw_tasks)):
-                results.append(_run_child(idx, delegate_task, original_task))
-        else:
-            with ThreadPoolExecutor(max_workers=child_parallel) as executor:
-                future_map = {
-                    executor.submit(_run_child, idx, delegate_task, original_task): idx
-                    for idx, (delegate_task, original_task) in enumerate(zip(delegate_tasks, raw_tasks))
-                }
-                for future in as_completed(future_map):
-                    try:
-                        results.append(future.result())
-                    except Exception as exc:  # pragma: no cover - defensive fallback
-                        idx = future_map[future]
-                        results.append(
-                            {
-                                "index": idx,
-                                "task": raw_tasks[idx],
-                                "skipped": False,
-                                "error": str(exc),
-                            }
-                        )
-
-        results.sort(key=lambda item: int(item.get("index", 0)))
-        attempted = len(results)
-        skipped = len([item for item in results if item.get("skipped")])
-        failures = len([item for item in results if item.get("error")])
-        completed_children = len([item for item in results if item.get("completed")])
-        rewards = [float(item.get("total_reward", 0.0)) for item in results if not item.get("skipped")]
-        avg_reward = (sum(rewards) / len(rewards)) if rewards else 0.0
-
-        if attempted == 0:
-            reward = -0.3
-        else:
-            completion_ratio = completed_children / attempted
-            failure_ratio = failures / attempted
-            skip_ratio = skipped / attempted
-            reward = 0.2 + (0.5 * completion_ratio) - (0.35 * failure_ratio) - (0.1 * skip_ratio)
-        reward = self.reward_profile.clamp(reward)
-
-        return EnvironmentActionResult(
-            observation={
-                "success": completed_children > 0 and failures == 0,
-                "mode": action_name,
-                "children_requested": len(raw_tasks),
-                "children_executed": attempted - skipped,
-                "children_completed": completed_children,
-                "children_failed": failures,
-                "children_skipped": skipped,
-                "average_child_reward": round(avg_reward, 4),
-                "context_refs": [ref.path for ref in context_refs],
-                "results": results,
-            },
-            reward=reward,
-            done=bool(action.get("done", False)),
-            final_response=(
-                str(action.get("final_response") or "").strip()
-                if bool(action.get("done", False))
-                else None
-            ),
-            memory_note=(
-                f"delegate completed {completed_children}/{attempted} children "
-                f"(failed={failures}, skipped={skipped})."
-            ),
-        )
+    # _execute_delegate_action → moved to delegation.py (DelegationMixin)
 
     def _emit_runtime_event(self, name: str, payload: dict[str, Any]) -> None:
         try:
@@ -2047,7 +1362,9 @@ class RLMRunner:
         start = before or {}
         end = after or {}
         return {
-            "total_calls": max(0, int(end.get("total_calls", 0)) - int(start.get("total_calls", 0))),
+            "total_calls": max(
+                0, int(end.get("total_calls", 0)) - int(start.get("total_calls", 0))
+            ),
             "prompt_tokens": max(
                 0, int(end.get("prompt_tokens", 0)) - int(start.get("prompt_tokens", 0))
             ),
@@ -2057,372 +1374,11 @@ class RLMRunner:
             ),
         }
 
-    def _parse_action(self, raw: str) -> RLMAction:
-        parsed = self._extract_json(raw)
-        if parsed is None:
-            text = raw.strip()
-            return RLMAction(
-                action="final",
-                done=True,
-                final_response=text or "No structured planner output.",
-                rationale="Planner did not return valid JSON.",
-                extras={},
-            )
-
-        action_name = str(parsed.get("action", "final")).strip().lower()
-        done = bool(parsed.get("done", False))
-        code = parsed.get("code")
-        path = parsed.get("path")
-        content = parsed.get("content")
-        command = parsed.get("command")
-        rationale = parsed.get("rationale")
-        final_response = parsed.get("final_response") or parsed.get("response")
-        known_keys = {
-            "action",
-            "code",
-            "path",
-            "content",
-            "command",
-            "rationale",
-            "done",
-            "final_response",
-            "response",
-        }
-        extras = {key: value for key, value in parsed.items() if key not in known_keys}
-
-        if action_name in {"finish", "complete"}:
-            action_name = "final"
-            done = True
-        if action_name == "final":
-            done = True
-
-        return RLMAction(
-            action=action_name,
-            code=str(code) if isinstance(code, str) else None,
-            path=str(path) if isinstance(path, str) else None,
-            content=str(content) if isinstance(content, str) else None,
-            command=str(command) if isinstance(command, str) else None,
-            rationale=str(rationale) if isinstance(rationale, str) else None,
-            done=done,
-            final_response=str(final_response) if isinstance(final_response, str) else None,
-            extras=extras,
-        )
-
-    def _propose_step_candidates(
-        self,
-        *,
-        planner_prompt: str,
-        env: RLMEnvironment,
-        model_router: _RoleAwareConnector,
-        branch_width: int,
-        execution_engine: Any,
-        exec_timeout: int,
-    ) -> list[dict[str, Any]]:
-        # Check if this environment supports free-form response parsing (Pure RLM)
-        has_custom_parser = hasattr(env, "parse_planner_response") and callable(
-            getattr(env, "parse_planner_response", None)
-        )
-
-        if branch_width <= 1:
-            planner_raw = model_router.generate_response(
-                prompt=planner_prompt,
-                system_prompt=env.system_prompt(),
-            )
-
-            if has_custom_parser:
-                # Pure RLM: parse free-form response with code block extraction
-                action_dict = env.parse_planner_response(planner_raw)
-            else:
-                # Standard: parse as JSON
-                action = self._parse_action(planner_raw)
-                action_dict = {
-                    "action": action.action,
-                    "code": action.code,
-                    "path": action.path,
-                    "content": action.content,
-                    "command": action.command,
-                    "rationale": action.rationale,
-                    "done": action.done,
-                    "final_response": action.final_response,
-                }
-                if action.extras:
-                    action_dict.update(action.extras)
-            return [
-                {
-                    "index": 0,
-                    "planner_raw": planner_raw,
-                    "action": action_dict,
-                    "reward": 0.0,
-                    "done": bool(action_dict.get("done", False)),
-                    "score": 0.0,
-                }
-            ]
-
-        candidates: list[dict[str, Any]] = []
-        seen_actions: set[str] = set()
-
-        for index in range(branch_width):
-            planner_raw = model_router.generate_response(
-                prompt=planner_prompt,
-                system_prompt=env.system_prompt(),
-            )
-
-            if has_custom_parser:
-                action_dict = env.parse_planner_response(planner_raw)
-            else:
-                action = self._parse_action(planner_raw)
-                action_dict = {
-                    "action": action.action,
-                    "code": action.code,
-                    "path": action.path,
-                    "content": action.content,
-                    "command": action.command,
-                    "rationale": action.rationale,
-                    "done": action.done,
-                    "final_response": action.final_response,
-                }
-                if action.extras:
-                    action_dict.update(action.extras)
-
-            fingerprint = json.dumps(action_dict, sort_keys=True, default=str)
-            if fingerprint in seen_actions:
-                # Keep at least one candidate and continue to search diversity.
-                if candidates:
-                    continue
-            seen_actions.add(fingerprint)
-
-            reward, done = self._preview_action_score(
-                env=env,
-                action=action_dict,
-                execution_engine=execution_engine,
-                exec_timeout=exec_timeout,
-                model_router=model_router,
-            )
-            score = reward
-            if done:
-                score += 0.05
-            if str(action_dict.get("action", "")).lower() == "final":
-                score += 0.02
-
-            candidates.append(
-                {
-                    "index": index,
-                    "planner_raw": planner_raw,
-                    "action": action_dict,
-                    "reward": reward,
-                    "done": done,
-                    "score": score,
-                }
-            )
-
-        if not candidates:
-            fallback_action = {
-                "action": "final",
-                "done": True,
-                "final_response": "No valid candidate action generated.",
-            }
-            candidates.append(
-                {
-                    "index": 0,
-                    "planner_raw": '{"action":"final","done":true}',
-                    "action": fallback_action,
-                    "reward": -0.1,
-                    "done": True,
-                    "score": -0.05,
-                }
-            )
-
-        return candidates
-
-    def _preview_action_score(
-        self,
-        *,
-        env: RLMEnvironment,
-        action: dict[str, Any],
-        execution_engine: Any,
-        exec_timeout: int,
-        model_router: _RoleAwareConnector,
-    ) -> tuple[float, bool]:
-        action_name = str(action.get("action", "")).lower()
-        if action_name == "final":
-            final_response = str(action.get("final_response") or "").strip()
-            bonus = 0.1 if final_response else 0.0
-            return 0.8 + bonus, True
-        if action_name in {"delegate", "delegate_batch"}:
-            tasks = action.get("tasks") if action_name == "delegate_batch" else [action.get("task")]
-            count = 0
-            if isinstance(tasks, list):
-                count = len([item for item in tasks if str(item or "").strip()])
-            return min(0.65, 0.35 + (0.05 * max(0, count - 1))), False
-
-        with tempfile.TemporaryDirectory(prefix="rlm_branch_") as temp_dir:
-            temp_workdir = Path(temp_dir)
-            self._copy_workspace_for_preview(self.workdir, temp_workdir)
-            preview_env = self._clone_environment_for_preview(env=env, workdir=temp_workdir)
-            preview_result = preview_env.execute_action(
-                action=action,
-                execution_engine=execution_engine,
-                exec_timeout=exec_timeout,
-                llm_connector=model_router,
-            )
-            return self.reward_profile.apply_global_scale(float(preview_result.reward)), bool(
-                preview_result.done
-            )
-
-    def _clone_environment_for_preview(self, env: RLMEnvironment, workdir: Path) -> RLMEnvironment:
-        if isinstance(env, PureRLMEnvironment):
-            return PureRLMEnvironment(workdir=workdir, reward_profile=self.reward_profile)
-        if isinstance(env, DSPyCodingRLMEnvironment):
-            return DSPyCodingRLMEnvironment(workdir=workdir, reward_profile=self.reward_profile)
-        if isinstance(env, GenericRLMEnvironment):
-            return GenericRLMEnvironment(workdir=workdir, reward_profile=self.reward_profile)
-        # Fallback to generic environment in preview if an unknown env type appears.
-        return GenericRLMEnvironment(workdir=workdir, reward_profile=self.reward_profile)
-
-    def _copy_workspace_for_preview(self, source: Path, target: Path) -> None:
-        ignore_names = {
-            ".git",
-            ".venv",
-            "node_modules",
-            "__pycache__",
-            ".mypy_cache",
-            ".pytest_cache",
-            ".ruff_cache",
-            ".rlm_code",
-            ".rlm_code",
-            ".dspy_code",
-        }
-        for entry in source.iterdir():
-            if entry.name in ignore_names:
-                continue
-            dest = target / entry.name
-            if entry.is_dir():
-                shutil.copytree(entry, dest, dirs_exist_ok=True)
-            elif entry.is_file():
-                shutil.copy2(entry, dest)
-
-    def _extract_json(self, raw: str) -> dict[str, Any] | None:
-        fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw, re.DOTALL | re.IGNORECASE)
-        candidates: list[str] = []
-        if fenced:
-            candidates.append(fenced.group(1))
-
-        candidates.extend(self._balanced_brace_candidates(raw))
-        for candidate in candidates:
-            try:
-                payload = json.loads(candidate)
-            except Exception:
-                continue
-            if isinstance(payload, dict):
-                return payload
-        return None
-
-    def _balanced_brace_candidates(self, text: str) -> list[str]:
-        candidates: list[str] = []
-        starts = [idx for idx, ch in enumerate(text) if ch == "{"][:8]
-        for start in starts:
-            depth = 0
-            for end in range(start, len(text)):
-                char = text[end]
-                if char == "{":
-                    depth += 1
-                elif char == "}":
-                    depth -= 1
-                    if depth == 0:
-                        candidates.append(text[start : end + 1])
-                        break
-        return candidates
-
-    def _extract_answer_from_trajectory(
-        self, task: str, trajectory: list[dict[str, Any]], environment: str
-    ) -> str | None:
-        """
-        Extract fallback: when max_steps is exhausted without FINAL/SUBMIT,
-        call the LLM with the full trajectory to extract the best answer.
-
-        Returns the extracted answer string, or None if extraction fails.
-        """
-        # Build a detailed trajectory summary (more context than _synthesize)
-        traj_parts = []
-        for event in trajectory:
-            step = event.get("step", "?")
-            action_dict = event.get("action", {})
-            code = action_dict.get("code", "")
-            obs = event.get("observation", {})
-            stdout = obs.get("stdout", "")
-            stderr = obs.get("stderr", "")
-            success = obs.get("success", True)
-
-            entry = f"--- Step {step} ---\n"
-            if code:
-                entry += f"Code:\n```python\n{code[:2000]}\n```\n"
-            if stdout:
-                entry += f"Output:\n{stdout[:2000]}\n"
-            if stderr:
-                entry += f"Error:\n{stderr[:500]}\n"
-            entry += f"Success: {success}\n"
-            traj_parts.append(entry)
-
-        # Keep last 10 steps to avoid token overflow
-        traj_text = "\n".join(traj_parts[-10:])
-
-        prompt = (
-            f"The following task was given to an RLM agent, but it ran out of "
-            f"steps before calling FINAL() with an answer.\n\n"
-            f"Task: {task}\n\n"
-            f"Execution history:\n{traj_text}\n\n"
-            f"Based on the execution history above, extract the best possible "
-            f"answer to the original task. If the agent was building up partial "
-            f"results, synthesize them into a final answer. Respond with ONLY "
-            f"the answer, nothing else."
-        )
-        try:
-            response = self.llm_connector.generate_response(
-                prompt=prompt,
-                system_prompt="You extract answers from incomplete agent trajectories. Be concise and direct.",
-            )
-            answer = (response or "").strip()
-            if answer:
-                return answer
-        except Exception as exc:
-            logger.debug(f"Extract fallback failed: {exc}")
-        return None
-
-    def _synthesize_final_response(
-        self, task: str, trajectory: list[dict[str, Any]], completed: bool, environment: str
-    ) -> str:
-        # Try extract fallback first (more context-rich)
-        if not completed:
-            extracted = self._extract_answer_from_trajectory(task, trajectory, environment)
-            if extracted:
-                return extracted
-
-        trajectory_lines = []
-        for event in trajectory[-6:]:
-            action = event.get("action", {}).get("action")
-            reward = event.get("reward")
-            obs = event.get("observation", {})
-            success = obs.get("success")
-            trajectory_lines.append(
-                f"step={event.get('step')} action={action} success={success} reward={reward}"
-            )
-        summary = "\n".join(trajectory_lines) or "No steps executed."
-        prompt = (
-            f"Task: {task}\n"
-            f"Environment: {environment}\n"
-            f"Run marked completed={completed}\n"
-            f"Trajectory summary:\n{summary}\n"
-            "Provide a concise final response for the user."
-        )
-        try:
-            response = self.llm_connector.generate_response(
-                prompt=prompt,
-                system_prompt="You are a concise engineering assistant.",
-            )
-            return response.strip() or "RLM run finished without a model summary."
-        except Exception as exc:
-            logger.debug(f"Failed to synthesize final response: {exc}")
-            return "RLM run finished. No final synthesis was available."
+    # _parse_action, _propose_step_candidates, _preview_action_score,
+    # _clone_environment_for_preview, _copy_workspace_for_preview,
+    # _extract_json, _balanced_brace_candidates,
+    # _extract_answer_from_trajectory, _synthesize_final_response
+    # → moved to action_planner.py (ActionPlannerMixin)
 
     def _get_environment(self, name: str) -> RLMEnvironment:
         normalized = (name or "generic").strip().lower()
@@ -2445,13 +1401,18 @@ class RLMRunner:
         aliases = {
             "native": None,
             "rlm": None,
-            "dspy": "dspy",
-            "dspy-coding": "dspy",
+            "dspy": "dspy-rlm",
+            "dspy-coding": "dspy-rlm",
+            "dspy-rlm": "dspy-rlm",
+            "dspy_rlm": "dspy-rlm",
+            "dspyrlm": "dspy-rlm",
             "generic": None,
             "pydantic": "pydantic-ai",
             "pydantic_ai": "pydantic-ai",
             "pydantic-ai": "pydantic-ai",
             "adk": "google-adk",
+            "adk-rlm": "adk-rlm",
+            "adk_rlm": "adk-rlm",
             "google-adk": "google-adk",
             "google_adk": "google-adk",
             "deepagents": "deepagents",

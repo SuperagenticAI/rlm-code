@@ -20,10 +20,10 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from pathlib import Path
+from importlib.util import find_spec
 from typing import Any
 
-from ..base import RuntimeExecutionRequest, RuntimeExecutionResult, SandboxRuntime
+from ..base import RuntimeExecutionRequest, RuntimeExecutionResult
 
 
 @dataclass
@@ -54,27 +54,22 @@ class E2BSandboxRuntime:
     @staticmethod
     def check_health() -> tuple[bool, str]:
         """Check if E2B is available."""
-        try:
-            from e2b_code_interpreter import Sandbox
-            api_key = os.environ.get("E2B_API_KEY")
-            if not api_key:
-                return False, "E2B_API_KEY environment variable not set"
-            return True, "E2B SDK available and API key configured"
-        except ImportError:
+        if find_spec("e2b_code_interpreter") is None:
             return False, "E2B SDK not installed (pip install e2b-code-interpreter)"
-        except Exception as e:
-            return False, f"E2B check failed: {e}"
+        api_key = os.environ.get("E2B_API_KEY")
+        if not api_key:
+            return False, "E2B_API_KEY environment variable not set"
+        return True, "E2B SDK available and API key configured"
 
     def _ensure_e2b(self) -> None:
         """Lazily import e2b."""
         if self._e2b is None:
             try:
                 from e2b_code_interpreter import Sandbox
+
                 self._e2b = Sandbox
             except ImportError:
-                raise RuntimeError(
-                    "E2B SDK not installed. Run: pip install e2b-code-interpreter"
-                )
+                raise RuntimeError("E2B SDK not installed. Run: pip install e2b-code-interpreter")
 
     def execute(self, request: RuntimeExecutionRequest) -> RuntimeExecutionResult:
         """Execute code in E2B sandbox."""

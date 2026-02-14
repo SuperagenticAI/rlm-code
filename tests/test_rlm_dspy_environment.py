@@ -182,7 +182,9 @@ def test_read_search_list_and_patch_actions(tmp_path):
         exec_timeout=10,
     )
     assert list_result.observation["success"] is True
-    assert any(item["path"].endswith("src/module.py") for item in list_result.observation["entries"])
+    assert any(
+        item["path"].endswith("src/module.py") for item in list_result.observation["entries"]
+    )
 
     patch_result = env.execute_action(
         {

@@ -15,11 +15,11 @@ from __future__ import annotations
 import csv
 import json
 import statistics
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Iterator
+from typing import Any
 
 from ..core.logging import get_logger
 
@@ -158,7 +158,9 @@ class LeaderboardEntry:
         return cls(
             entry_id=data.get("benchmark_id", "")[:16],
             benchmark_id=data.get("benchmark_id", ""),
-            environment=data.get("environment", case_results[0].get("environment", "") if case_results else ""),
+            environment=data.get(
+                "environment", case_results[0].get("environment", "") if case_results else ""
+            ),
             model=data.get("model", ""),
             preset=data.get("preset", ""),
             timestamp=data.get("started_at", ""),
@@ -249,7 +251,10 @@ class LeaderboardFilter:
             return False
         if self.max_reward is not None and entry.avg_reward > self.max_reward:
             return False
-        if self.min_completion_rate is not None and entry.completion_rate < self.min_completion_rate:
+        if (
+            self.min_completion_rate is not None
+            and entry.completion_rate < self.min_completion_rate
+        ):
             return False
         if self.min_cases is not None and entry.total_cases < self.min_cases:
             return False
@@ -575,19 +580,21 @@ class Leaderboard:
             writer.writerow(columns)
 
             for rank, entry in enumerate(result.entries, 1):
-                writer.writerow([
-                    rank,
-                    entry.entry_id,
-                    entry.environment,
-                    entry.model,
-                    entry.preset,
-                    f"{entry.avg_reward:.4f}",
-                    f"{entry.completion_rate:.2%}",
-                    f"{entry.avg_steps:.2f}",
-                    entry.total_tokens,
-                    f"{entry.efficiency:.4f}",
-                    entry.timestamp[:19] if entry.timestamp else "",
-                ])
+                writer.writerow(
+                    [
+                        rank,
+                        entry.entry_id,
+                        entry.environment,
+                        entry.model,
+                        entry.preset,
+                        f"{entry.avg_reward:.4f}",
+                        f"{entry.completion_rate:.2%}",
+                        f"{entry.avg_steps:.2f}",
+                        entry.total_tokens,
+                        f"{entry.efficiency:.4f}",
+                        entry.timestamp[:19] if entry.timestamp else "",
+                    ]
+                )
 
     def to_markdown(
         self,
@@ -615,15 +622,17 @@ class Leaderboard:
                 f"{entry.avg_steps:.1f} | {entry.total_tokens:,} | {entry.efficiency:.3f} |"
             )
 
-        lines.extend([
-            "",
-            "## Statistics",
-            "",
-            f"- **Mean**: {result.mean:.4f}",
-            f"- **Median**: {result.median:.4f}",
-            f"- **Std Dev**: {result.std_dev:.4f}",
-            f"- **Range**: {result.min_value:.4f} - {result.max_value:.4f}",
-        ])
+        lines.extend(
+            [
+                "",
+                "## Statistics",
+                "",
+                f"- **Mean**: {result.mean:.4f}",
+                f"- **Median**: {result.median:.4f}",
+                f"- **Std Dev**: {result.std_dev:.4f}",
+                f"- **Range**: {result.min_value:.4f} - {result.max_value:.4f}",
+            ]
+        )
 
         return "\n".join(lines)
 
@@ -665,8 +674,16 @@ class Leaderboard:
 
         for rank, entry in enumerate(result.entries, 1):
             # Color reward based on value
-            reward_style = "green" if entry.avg_reward >= 0.7 else ("yellow" if entry.avg_reward >= 0.4 else "red")
-            completion_style = "green" if entry.completion_rate >= 0.8 else ("yellow" if entry.completion_rate >= 0.5 else "red")
+            reward_style = (
+                "green"
+                if entry.avg_reward >= 0.7
+                else ("yellow" if entry.avg_reward >= 0.4 else "red")
+            )
+            completion_style = (
+                "green"
+                if entry.completion_rate >= 0.8
+                else ("yellow" if entry.completion_rate >= 0.5 else "red")
+            )
 
             table.add_row(
                 str(rank),
@@ -841,11 +858,13 @@ def compute_trend(
         window_values = values[-window:]
         moving_avg = statistics.mean(window_values)
 
-        result.append({
-            "timestamp": entry.timestamp,
-            "entry_id": entry.entry_id,
-            "value": value,
-            "moving_avg": moving_avg,
-        })
+        result.append(
+            {
+                "timestamp": entry.timestamp,
+                "entry_id": entry.entry_id,
+                "value": value,
+                "moving_avg": moving_avg,
+            }
+        )
 
     return result

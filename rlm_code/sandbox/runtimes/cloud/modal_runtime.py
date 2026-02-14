@@ -19,19 +19,15 @@ Configuration:
 
 from __future__ import annotations
 
-import json
-import os
-import tempfile
 import threading
-import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ..base import RuntimeExecutionRequest, RuntimeExecutionResult, SandboxRuntime
+from ..base import RuntimeExecutionRequest, RuntimeExecutionResult
 
 # HTTP broker code that runs inside the Modal sandbox
-_BROKER_CODE = '''
+_BROKER_CODE = """
 import json
 import threading
 import time
@@ -121,7 +117,7 @@ def start_broker(port=8080):
 
 if __name__ == "__main__":
     start_broker()
-'''
+"""
 
 
 @dataclass
@@ -164,6 +160,7 @@ class ModalSandboxRuntime:
         """Check if Modal is available."""
         try:
             import modal
+
             return True, f"Modal SDK available (version {modal.__version__})"
         except ImportError:
             return False, "Modal SDK not installed (pip install modal)"
@@ -175,11 +172,10 @@ class ModalSandboxRuntime:
         if self._modal is None:
             try:
                 import modal
+
                 self._modal = modal
             except ImportError:
-                raise RuntimeError(
-                    "Modal SDK not installed. Run: pip install modal && modal setup"
-                )
+                raise RuntimeError("Modal SDK not installed. Run: pip install modal && modal setup")
 
     def execute(self, request: RuntimeExecutionRequest) -> RuntimeExecutionResult:
         """Execute code in Modal sandbox."""
@@ -236,8 +232,8 @@ class ModalSandboxRuntime:
         )
         def run_code(code_to_run: str, context_data: str) -> dict:
             """Execute code in sandbox."""
-            import sys
             import io
+            import sys
             import traceback
 
             # Capture output
@@ -256,6 +252,7 @@ class ModalSandboxRuntime:
                 namespace = {"__builtins__": __builtins__}
                 if context_data:
                     import json
+
                     namespace["context"] = json.loads(context_data)
 
                 exec(code_to_run, namespace)

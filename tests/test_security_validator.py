@@ -2,11 +2,10 @@
 Tests for security validator.
 """
 
-import pytest
-from hypothesis import given, strategies as st
+from hypothesis import given
+from hypothesis import strategies as st
 
 from rlm_code.validation.security import SecurityValidator
-from rlm_code.validation.models import IssueSeverity
 
 
 class TestEvalDetection:
@@ -160,7 +159,6 @@ line 4
         assert issues[0].line == 3
 
 
-
 class TestGeneratedCodeSafety:
     """Tests for generated code safety."""
 
@@ -193,12 +191,8 @@ class TestGeneratedCodeSafety:
         # Create task definition that triggers ReAct pattern
         task_def = TaskDefinition(
             description="Answer questions using tools",
-            input_fields=[
-                FieldDefinition(name="question", type="str", description="The question")
-            ],
-            output_fields=[
-                FieldDefinition(name="answer", type="str", description="The answer")
-            ],
+            input_fields=[FieldDefinition(name="question", type="str", description="The question")],
+            output_fields=[FieldDefinition(name="answer", type="str", description="The answer")],
             complexity="complex",
             domain="qa",
         )
@@ -215,6 +209,6 @@ class TestGeneratedCodeSafety:
         validator = SecurityValidator()
 
         # Check module code (where calculator_tool is defined)
-        assert not validator.has_eval(
-            program.module_code
-        ), f"Generated module code should not contain eval():\n{program.module_code}"
+        assert not validator.has_eval(program.module_code), (
+            f"Generated module code should not contain eval():\n{program.module_code}"
+        )

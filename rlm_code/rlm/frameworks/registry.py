@@ -32,10 +32,14 @@ class FrameworkAdapterRegistry:
     @classmethod
     def default(cls, *, workdir: str) -> "FrameworkAdapterRegistry":
         registry = cls()
+        from .adk_rlm_adapter import ADKRLMFrameworkAdapter
         from .deepagents_adapter import DeepAgentsFrameworkAdapter
+        from .dspy_rlm_adapter import DSPyRLMFrameworkAdapter
         from .google_adk_adapter import GoogleADKFrameworkAdapter
         from .pydantic_ai_adapter import PydanticAIFrameworkAdapter
 
+        registry.register(DSPyRLMFrameworkAdapter(workdir=workdir))
+        registry.register(ADKRLMFrameworkAdapter(workdir=workdir))
         registry.register(PydanticAIFrameworkAdapter(workdir=workdir))
         registry.register(GoogleADKFrameworkAdapter(workdir=workdir))
         registry.register(DeepAgentsFrameworkAdapter(workdir=workdir))
@@ -50,6 +54,8 @@ class FrameworkAdapterRegistry:
                     "framework": framework_id,
                     "ok": bool(ok),
                     "detail": str(detail),
+                    "mode": str(getattr(adapter, "adapter_mode", "adapter")),
+                    "reference": str(getattr(adapter, "reference_impl", "")),
                 }
             )
         return rows

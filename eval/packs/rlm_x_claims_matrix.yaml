@@ -1,0 +1,62 @@
+presets:
+  rlm_x_claims_sparse:
+    description: Validate sparse long-context retrieval claims under RLM-style workflows.
+    cases:
+      - id: sparse_fact_extraction
+        description: Extract claim-evidence pairs from scattered context
+        task: >
+          You are given a very long context with mixed claims about RLM novelty.
+          Use programmatic filtering to extract only lines that assert measurable outcomes
+          (accuracy deltas, token savings, benchmark wins). Return a structured claim->evidence map.
+        environment: pure_rlm
+        steps: 6
+        timeout: 75
+      - id: sparse_counterexample
+        description: Find counterexamples and contradictions
+        task: >
+          Scan a long mixed corpus of opinions and identify contradictions to the statement:
+          "RLM is strictly better than coding-agent harnesses for all tasks."
+          Return contradictory snippets and a final verdict.
+        environment: pure_rlm
+        steps: 6
+        timeout: 75
+
+  rlm_x_claims_dense:
+    description: Validate dense reasoning claims where most of context is relevant.
+    cases:
+      - id: dense_argument_synthesis
+        description: Synthesize both pro and skeptical arguments
+        task: >
+          Build a balanced summary from a long debate containing both enthusiasm and skepticism.
+          Explicitly list where evidence is benchmark-backed versus opinion-backed.
+        environment: pure_rlm
+        steps: 7
+        timeout: 90
+      - id: dense_benchmark_reasoning
+        description: Compare benchmark deltas to baseline agent scaffolds
+        task: >
+          Given benchmark snippets for RLM, subagents, and retrieval scaffolds,
+          compute relative deltas and produce a concise scoreboard with caveats.
+        environment: pure_rlm
+        steps: 7
+        timeout: 90
+
+  rlm_x_claims_cost:
+    description: Track cost and tail-latency tradeoffs when proving RLM value.
+    cases:
+      - id: cost_tail_analysis
+        description: Analyze median vs tail cost behavior
+        task: >
+          Summarize when RLM has lower median cost but high tail trajectories.
+          Produce a recommendation table for when to use native RLM vs harness baselines.
+        environment: pure_rlm
+        steps: 6
+        timeout: 80
+      - id: deployment_readiness
+        description: Produce production-readiness checklist
+        task: >
+          Create a checklist for production adoption: sandboxing, tracing, benchmarks,
+          and fallback modes (native, harness, direct-llm). Include pass/fail criteria.
+        environment: pure_rlm
+        steps: 6
+        timeout: 80

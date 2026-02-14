@@ -92,8 +92,8 @@ class FinalDetection:
 
     detected: bool
     final_type: str | None = None  # "direct", "variable", or "submit"
-    content: str | None = None     # The answer or variable name
-    raw_match: str | None = None   # The full matched pattern
+    content: str | None = None  # The answer or variable name
+    raw_match: str | None = None  # The full matched pattern
     submit_fields: dict[str, Any] = field(default_factory=dict)  # Parsed SUBMIT kwargs
 
 
@@ -150,7 +150,7 @@ def detect_final_in_text(text: str) -> FinalDetection:
         if match:
             answer = match.group(1).strip()
             # Clean up common formatting issues
-            answer = answer.strip('"\'')
+            answer = answer.strip("\"'")
             return FinalDetection(
                 detected=True,
                 final_type="direct",
@@ -196,7 +196,7 @@ def detect_final_in_code(code: str) -> FinalDetection:
             raw_match=final_var_match.group(0),
         )
 
-    final_match = re.search(r'\bFINAL\s*\(', code)
+    final_match = re.search(r"\bFINAL\s*\(", code)
     if final_match:
         return FinalDetection(
             detected=True,
@@ -205,7 +205,7 @@ def detect_final_in_code(code: str) -> FinalDetection:
             raw_match=final_match.group(0),
         )
 
-    submit_match = re.search(r'\bSUBMIT\s*\(', code)
+    submit_match = re.search(r"\bSUBMIT\s*\(", code)
     if submit_match:
         return FinalDetection(
             detected=True,
@@ -292,18 +292,20 @@ def _parse_submit_kwargs(raw: str) -> dict[str, Any]:
     result: dict[str, Any] = {}
     # Match keyword=value pairs
     kw_pattern = re.compile(
-        r'(\w+)\s*=\s*'
-        r'(?:'
-        r'"([^"]*)"'       # double-quoted string
-        r"|'([^']*)'"      # single-quoted string
-        r'|([^\s,]+)'      # unquoted value
-        r')'
+        r"(\w+)\s*=\s*"
+        r"(?:"
+        r'"([^"]*)"'  # double-quoted string
+        r"|'([^']*)'"  # single-quoted string
+        r"|([^\s,]+)"  # unquoted value
+        r")"
     )
     for m in kw_pattern.finditer(raw):
         key = m.group(1)
         # Pick whichever group matched
-        value: Any = m.group(2) if m.group(2) is not None else (
-            m.group(3) if m.group(3) is not None else m.group(4)
+        value: Any = (
+            m.group(2)
+            if m.group(2) is not None
+            else (m.group(3) if m.group(3) is not None else m.group(4))
         )
         # Try to coerce numeric values
         if isinstance(value, str):
@@ -336,6 +338,7 @@ def format_final_answer(answer: Any) -> str:
         # Try to format as readable text
         try:
             import json
+
             return json.dumps(answer, indent=2, default=str)
         except Exception:
             return str(answer)

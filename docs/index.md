@@ -103,10 +103,10 @@ rlm-code
 /rlm bench preset=dspy_quick
 ```
 
-### View the leaderboard
+### Compare benchmark output
 
 ```
-/leaderboard
+/rlm bench compare candidate=latest baseline=previous
 ```
 
 ### Switch to the Research tab

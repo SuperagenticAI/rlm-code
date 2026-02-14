@@ -26,16 +26,10 @@ logger = get_logger(__name__)
 
 # Re-export additional sinks from observability_sinks module
 from .observability_sinks import (
-    OpenTelemetrySink,
-    LangSmithSink,
-    LangFuseSink,
-    LogfireSink,
-    CompositeSink,
-    create_otel_sink_from_env,
-    create_langsmith_sink_from_env,
     create_langfuse_sink_from_env,
+    create_langsmith_sink_from_env,
     create_logfire_sink_from_env,
-    create_all_sinks_from_env,
+    create_otel_sink_from_env,
 )
 
 

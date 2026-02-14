@@ -19,19 +19,22 @@ from .local_runtime import LocalSandboxRuntime
 
 # Cloud runtimes (optional dependencies)
 try:
-    from .cloud.modal_runtime import ModalSandboxRuntime, ModalConfig
+    from .cloud.modal_runtime import ModalConfig, ModalSandboxRuntime
+
     MODAL_AVAILABLE = True
 except ImportError:
     MODAL_AVAILABLE = False
 
 try:
-    from .cloud.e2b_runtime import E2BSandboxRuntime, E2BConfig
+    from .cloud.e2b_runtime import E2BConfig, E2BSandboxRuntime
+
     E2B_AVAILABLE = True
 except ImportError:
     E2B_AVAILABLE = False
 
 try:
-    from .cloud.daytona_runtime import DaytonaSandboxRuntime, DaytonaConfig
+    from .cloud.daytona_runtime import DaytonaConfig, DaytonaSandboxRuntime
+
     DAYTONA_AVAILABLE = True
 except ImportError:
     DAYTONA_AVAILABLE = False
@@ -114,7 +117,17 @@ def create_runtime(runtime_name: str, sandbox_config: Any = None) -> SandboxRunt
             raise ConfigurationError(
                 "apple-container runtime is disabled. Set sandbox.apple_container_enabled=true first."
             )
-        return AppleContainerRuntime()
+        apple_cfg = getattr(sandbox_config, "apple", None)
+        return AppleContainerRuntime(
+            image=str(
+                getattr(apple_cfg, "image", "docker.io/library/python:3.11-slim")
+                or "docker.io/library/python:3.11-slim"
+            ),
+            memory_limit_mb=int(getattr(apple_cfg, "memory_limit_mb", 512) or 512),
+            cpus=getattr(apple_cfg, "cpus", 1.0),
+            network_enabled=bool(getattr(apple_cfg, "network_enabled", False)),
+            extra_args=list(getattr(apple_cfg, "extra_args", []) or []),
+        )
 
     # Cloud runtimes
     if normalized == "modal":
@@ -173,26 +186,46 @@ def detect_runtime_health() -> dict[str, RuntimeHealth]:
 
     # Apple Container runtime
     apple_ok, apple_detail = AppleContainerRuntime.check_health()
-    results.append(RuntimeHealth(runtime="apple-container", available=apple_ok, detail=apple_detail))
+    results.append(
+        RuntimeHealth(runtime="apple-container", available=apple_ok, detail=apple_detail)
+    )
 
     # Cloud runtimes
     if MODAL_AVAILABLE:
         modal_ok, modal_detail = ModalSandboxRuntime.check_health()
         results.append(RuntimeHealth(runtime="modal", available=modal_ok, detail=modal_detail))
     else:
-        results.append(RuntimeHealth(runtime="modal", available=False, detail="SDK not installed (pip install modal)"))
+        results.append(
+            RuntimeHealth(
+                runtime="modal", available=False, detail="SDK not installed (pip install modal)"
+            )
+        )
 
     if E2B_AVAILABLE:
         e2b_ok, e2b_detail = E2BSandboxRuntime.check_health()
         results.append(RuntimeHealth(runtime="e2b", available=e2b_ok, detail=e2b_detail))
     else:
-        results.append(RuntimeHealth(runtime="e2b", available=False, detail="SDK not installed (pip install e2b-code-interpreter)"))
+        results.append(
+            RuntimeHealth(
+                runtime="e2b",
+                available=False,
+                detail="SDK not installed (pip install e2b-code-interpreter)",
+            )
+        )
 
     if DAYTONA_AVAILABLE:
         daytona_ok, daytona_detail = DaytonaSandboxRuntime.check_health()
-        results.append(RuntimeHealth(runtime="daytona", available=daytona_ok, detail=daytona_detail))
+        results.append(
+            RuntimeHealth(runtime="daytona", available=daytona_ok, detail=daytona_detail)
+        )
     else:
-        results.append(RuntimeHealth(runtime="daytona", available=False, detail="Not installed (pip install daytona-sdk or install CLI)"))
+        results.append(
+            RuntimeHealth(
+                runtime="daytona",
+                available=False,
+                detail="Not installed (pip install daytona-sdk or install CLI)",
+            )
+        )
 
     return {entry.runtime: entry for entry in results}
 
@@ -236,7 +269,7 @@ def run_runtime_doctor(
                 name="configured_runtime",
                 status="fail",
                 detail=f"Unsupported runtime '{runtime_name}'.",
-                recommendation="Use one of: local, docker, apple-container.",
+                recommendation=f"Use one of: {', '.join(sorted(SUPPORTED_RUNTIMES))}.",
             )
         )
         return checks
@@ -268,7 +301,119 @@ def run_runtime_doctor(
             )
         )
 
-    if runtime_name != "docker":
+    if runtime_name not in {"docker", "apple-container"}:
+        return checks
+
+    temp_root = Path(tempfile.gettempdir()).resolve()
+    allowed_roots = _resolve_allowed_mount_roots(sandbox_config, project_root)
+    if _is_path_allowed(temp_root, allowed_roots):
+        checks.append(
+            RuntimeDoctorCheck(
+                name="mount_policy",
+                status="pass",
+                detail=f"Temp dir '{temp_root}' is allowed for bind mounts.",
+            )
+        )
+    else:
+        roots = ", ".join(str(root) for root in allowed_roots) or "(none)"
+        checks.append(
+            RuntimeDoctorCheck(
+                name="mount_policy",
+                status="fail",
+                detail=f"Temp dir '{temp_root}' is blocked by sandbox.allowed_mount_roots.",
+                recommendation=f"Add a matching root in sandbox.allowed_mount_roots. Current: {roots}",
+            )
+        )
+
+    if os.access(temp_root, os.W_OK):
+        checks.append(
+            RuntimeDoctorCheck(
+                name="temp_write_access",
+                status="pass",
+                detail=f"Writable temp directory: {temp_root}",
+            )
+        )
+    else:
+        checks.append(
+            RuntimeDoctorCheck(
+                name="temp_write_access",
+                status="fail",
+                detail=f"Temp directory is not writable: {temp_root}",
+                recommendation="Fix filesystem permissions or set TMPDIR to a writable path.",
+            )
+        )
+
+    if runtime_name == "apple-container":
+        if not bool(getattr(sandbox_config, "apple_container_enabled", False)):
+            checks.append(
+                RuntimeDoctorCheck(
+                    name="apple_runtime_gate",
+                    status="fail",
+                    detail="apple-container runtime is disabled in config.",
+                    recommendation="Set sandbox.apple_container_enabled=true.",
+                )
+            )
+            return checks
+
+        apple_cfg = getattr(sandbox_config, "apple", None)
+        image = str(
+            getattr(apple_cfg, "image", "docker.io/library/python:3.11-slim")
+            or "docker.io/library/python:3.11-slim"
+        )
+        network_enabled = bool(getattr(apple_cfg, "network_enabled", False))
+
+        cli_path = shutil.which("container")
+        if cli_path:
+            checks.append(
+                RuntimeDoctorCheck(
+                    name="apple_container_cli",
+                    status="pass",
+                    detail=f"container CLI found at {cli_path}.",
+                )
+            )
+        else:
+            checks.append(
+                RuntimeDoctorCheck(
+                    name="apple_container_cli",
+                    status="fail",
+                    detail="container CLI not found on PATH.",
+                    recommendation="Install Apple container CLI and retry /sandbox doctor.",
+                )
+            )
+            return checks
+
+        apple_ok, apple_detail = AppleContainerRuntime.check_health()
+        checks.append(
+            RuntimeDoctorCheck(
+                name="apple_container_service",
+                status="pass" if apple_ok else "fail",
+                detail=apple_detail,
+                recommendation=None if apple_ok else "Run: container system start",
+            )
+        )
+
+        checks.append(
+            RuntimeDoctorCheck(
+                name="apple_network_policy",
+                status="warn" if network_enabled else "pass",
+                detail="Container networking is enabled."
+                if network_enabled
+                else "Container networking is disabled.",
+                recommendation=(
+                    "Set sandbox.apple.network_enabled=false unless external access is required."
+                    if network_enabled
+                    else None
+                ),
+            )
+        )
+
+        checks.append(
+            RuntimeDoctorCheck(
+                name="apple_image",
+                status="pass",
+                detail=f"Configured image: {image}",
+            )
+        )
         return checks
 
     docker_cfg = getattr(sandbox_config, "docker", None)
@@ -374,45 +519,6 @@ def run_runtime_doctor(
                 name="docker_extra_args",
                 status="pass",
                 detail="Docker extra args passed policy checks.",
-            )
-        )
-
-    temp_root = Path(tempfile.gettempdir()).resolve()
-    allowed_roots = _resolve_allowed_mount_roots(sandbox_config, project_root)
-    if _is_path_allowed(temp_root, allowed_roots):
-        checks.append(
-            RuntimeDoctorCheck(
-                name="mount_policy",
-                status="pass",
-                detail=f"Temp dir '{temp_root}' is allowed for bind mounts.",
-            )
-        )
-    else:
-        roots = ", ".join(str(root) for root in allowed_roots) or "(none)"
-        checks.append(
-            RuntimeDoctorCheck(
-                name="mount_policy",
-                status="fail",
-                detail=f"Temp dir '{temp_root}' is blocked by sandbox.allowed_mount_roots.",
-                recommendation=f"Add a matching root in sandbox.allowed_mount_roots. Current: {roots}",
-            )
-        )
-
-    if os.access(temp_root, os.W_OK):
-        checks.append(
-            RuntimeDoctorCheck(
-                name="temp_write_access",
-                status="pass",
-                detail=f"Writable temp directory: {temp_root}",
-            )
-        )
-    else:
-        checks.append(
-            RuntimeDoctorCheck(
-                name="temp_write_access",
-                status="fail",
-                detail=f"Temp directory is not writable: {temp_root}",
-                recommendation="Fix filesystem permissions or set TMPDIR to a writable path.",
             )
         )
 

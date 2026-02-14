@@ -9,10 +9,10 @@ from __future__ import annotations
 from typing import Any, Callable, Type, TypeVar
 
 from .base import (
-    Policy,
-    RewardPolicy,
     ActionSelectionPolicy,
     CompactionPolicy,
+    Policy,
+    RewardPolicy,
     TerminationPolicy,
 )
 
@@ -46,10 +46,12 @@ class PolicyRegistry:
         cls, name: str | None = None
     ) -> Callable[[Type[RewardPolicy]], Type[RewardPolicy]]:
         """Register a reward policy by name."""
+
         def decorator(policy_class: Type[RewardPolicy]) -> Type[RewardPolicy]:
             policy_name = name or policy_class.name
             cls._reward_policies[policy_name] = policy_class
             return policy_class
+
         return decorator
 
     @classmethod
@@ -57,10 +59,12 @@ class PolicyRegistry:
         cls, name: str | None = None
     ) -> Callable[[Type[ActionSelectionPolicy]], Type[ActionSelectionPolicy]]:
         """Register an action selection policy by name."""
+
         def decorator(policy_class: Type[ActionSelectionPolicy]) -> Type[ActionSelectionPolicy]:
             policy_name = name or policy_class.name
             cls._action_policies[policy_name] = policy_class
             return policy_class
+
         return decorator
 
     @classmethod
@@ -68,10 +72,12 @@ class PolicyRegistry:
         cls, name: str | None = None
     ) -> Callable[[Type[CompactionPolicy]], Type[CompactionPolicy]]:
         """Register a compaction policy by name."""
+
         def decorator(policy_class: Type[CompactionPolicy]) -> Type[CompactionPolicy]:
             policy_name = name or policy_class.name
             cls._compaction_policies[policy_name] = policy_class
             return policy_class
+
         return decorator
 
     @classmethod
@@ -79,10 +85,12 @@ class PolicyRegistry:
         cls, name: str | None = None
     ) -> Callable[[Type[TerminationPolicy]], Type[TerminationPolicy]]:
         """Register a termination policy by name."""
+
         def decorator(policy_class: Type[TerminationPolicy]) -> Type[TerminationPolicy]:
             policy_name = name or policy_class.name
             cls._termination_policies[policy_name] = policy_class
             return policy_class
+
         return decorator
 
     @classmethod

@@ -11,6 +11,7 @@ from .runtimes.registry import (
     detect_runtime_health,
     run_runtime_doctor,
 )
+from .superbox import Superbox, SuperboxResolution
 
 __all__ = [
     "RuntimeExecutionRequest",
@@ -19,6 +20,8 @@ __all__ = [
     "RuntimeHealth",
     "SUPPORTED_RUNTIMES",
     "SandboxRuntime",
+    "Superbox",
+    "SuperboxResolution",
     "create_runtime",
     "detect_runtime_health",
     "run_runtime_doctor",

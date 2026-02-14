@@ -3,7 +3,7 @@ Pytest configuration and fixtures for RLM Code tests.
 """
 
 import pytest
-from hypothesis import settings, Verbosity
+from hypothesis import Verbosity, settings
 
 # Configure hypothesis settings for property-based testing
 settings.register_profile(
@@ -29,6 +29,7 @@ settings.register_profile(
 
 # Load profile from environment or use default
 import os
+
 settings.load_profile(os.getenv("HYPOTHESIS_PROFILE", "default"))
 
 
@@ -71,25 +72,25 @@ class SentimentModule(dspy.Module):
 @pytest.fixture
 def sample_invalid_code():
     """Sample invalid Python code for testing."""
-    return '''
+    return """
 def broken_function(
     # Missing closing parenthesis
-'''
+"""
 
 
 @pytest.fixture
 def sample_code_with_eval():
     """Sample code containing eval() for security testing."""
-    return '''
+    return """
 def calculate(expression):
     return eval(expression)
-'''
+"""
 
 
 @pytest.fixture
 def sample_code_with_exec():
     """Sample code containing exec() for security testing."""
-    return '''
+    return """
 def run_code(code_string):
     exec(code_string)
-'''
+"""

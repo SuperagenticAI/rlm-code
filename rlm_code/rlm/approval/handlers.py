@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import asyncio
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Awaitable
+from typing import Awaitable, Callable
 
 from .gate import ApprovalRequest, ApprovalResponse, ApprovalStatus
 
@@ -210,7 +210,6 @@ class ConditionalApprovalHandler(ApprovalHandler):
 
     async def handle(self, request: ApprovalRequest) -> ApprovalResponse:
         """Conditionally route based on risk level."""
-        from .policy import ToolRiskLevel
 
         risk_order = ["safe", "low", "medium", "high", "critical"]
         request_level = request.risk_assessment.level.value

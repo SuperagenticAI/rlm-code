@@ -67,6 +67,15 @@ default_model: null
 sandbox:
   # Runtime backend: local | docker | apple-container
   runtime: local
+  # Preset policy: secure | dev | custom
+  superbox_profile: custom
+  # Enable automatic runtime fallback chain
+  superbox_auto_fallback: true
+  # Ordered fallback candidates used by superbox
+  superbox_fallback_runtimes:
+    - docker
+    - apple-container
+    - local
 
   # Default timeout for execution commands (seconds)
   default_timeout_seconds: 30
@@ -87,6 +96,16 @@ sandbox:
 
   # Enable experimental Apple container runtime
   apple_container_enabled: false
+
+  # Pure RLM secure backend preference: docker | monty | exec (unsafe opt-in)
+  pure_rlm_backend: docker
+  pure_rlm_allow_unsafe_exec: false
+  pure_rlm_strict: false
+  pure_rlm_output_mode: summarize
+  pure_rlm_max_iteration_output_chars: 12000
+  monty_type_check: false
+  monty_max_allocations: null
+  monty_max_memory: null
 
   docker:
     # Docker image used for isolated Python execution

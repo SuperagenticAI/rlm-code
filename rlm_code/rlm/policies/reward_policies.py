@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .base import RewardPolicy, ActionResult, PolicyContext, RewardSignal
+from .base import ActionResult, PolicyContext, RewardPolicy, RewardSignal
 from .registry import PolicyRegistry
 
 

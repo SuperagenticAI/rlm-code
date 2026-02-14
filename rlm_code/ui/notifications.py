@@ -93,7 +93,9 @@ async def notify_async(
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(
         None,
-        lambda: notify(title, body, level, sound=sound, timeout_seconds=timeout_seconds, subtitle=subtitle),
+        lambda: notify(
+            title, body, level, sound=sound, timeout_seconds=timeout_seconds, subtitle=subtitle
+        ),
     )
 
 
@@ -145,10 +147,14 @@ def _notify_linux(
     result = subprocess.run(
         [
             "notify-send",
-            "--urgency", urgency,
-            "--expire-time", str(timeout_ms),
-            "--icon", icon,
-            "--app-name", "RLM Code",
+            "--urgency",
+            urgency,
+            "--expire-time",
+            str(timeout_ms),
+            "--icon",
+            icon,
+            "--app-name",
+            "RLM Code",
             title,
             body,
         ],
@@ -196,6 +202,7 @@ def _notify_windows(
 
 
 # ---- Convenience helpers ----
+
 
 def notify_run_complete(
     run_id: str,

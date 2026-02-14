@@ -7,29 +7,26 @@ Tests the following components:
 - Paradigm comparison infrastructure
 """
 
-import pytest
-from datetime import datetime
-
+from rlm_code.rlm.comparison import (
+    ComparisonResult,
+    Paradigm,
+    ParadigmResult,
+    create_comparison_report,
+)
 from rlm_code.rlm.events import (
-    RLMEventType,
-    RLMEventData,
     RLMEventBus,
     RLMEventCollector,
+    RLMEventData,
+    RLMEventType,
     RLMRuntimeEvent,
 )
 from rlm_code.rlm.memory_compaction import (
-    MemoryCompactor,
     CompactionConfig,
     CompactionResult,
     ConversationMemory,
+    MemoryCompactor,
 )
-from rlm_code.rlm.comparison import (
-    Paradigm,
-    ParadigmResult,
-    ComparisonResult,
-    create_comparison_report,
-)
-from rlm_code.rlm.repl_types import REPLHistory, REPLEntry
+from rlm_code.rlm.repl_types import REPLHistory
 
 
 class TestRLMEventType:
@@ -38,14 +35,24 @@ class TestRLMEventType:
     def test_event_types_exist(self):
         """Test that all expected event types are defined."""
         expected_types = [
-            "RUN_START", "RUN_END", "RUN_ERROR",
-            "ITERATION_START", "ITERATION_END",
-            "LLM_CALL_START", "LLM_CALL_END",
-            "CODE_FOUND", "CODE_EXEC_START", "CODE_EXEC_END",
-            "SUB_LLM_START", "SUB_LLM_END",
-            "FINAL_DETECTED", "FINAL_ANSWER",
-            "MEMORY_COMPACT_START", "MEMORY_COMPACT_END",
-            "COMPARISON_START", "COMPARISON_END",
+            "RUN_START",
+            "RUN_END",
+            "RUN_ERROR",
+            "ITERATION_START",
+            "ITERATION_END",
+            "LLM_CALL_START",
+            "LLM_CALL_END",
+            "CODE_FOUND",
+            "CODE_EXEC_START",
+            "CODE_EXEC_END",
+            "SUB_LLM_START",
+            "SUB_LLM_END",
+            "FINAL_DETECTED",
+            "FINAL_ANSWER",
+            "MEMORY_COMPACT_START",
+            "MEMORY_COMPACT_END",
+            "COMPARISON_START",
+            "COMPARISON_END",
         ]
 
         for type_name in expected_types:
@@ -213,19 +220,23 @@ class TestRLMEventCollector:
         collector = RLMEventCollector()
 
         for i in range(3):
-            collector.collect(RLMRuntimeEvent(
-                name=f"iter_{i}",
+            collector.collect(
+                RLMRuntimeEvent(
+                    name=f"iter_{i}",
+                    timestamp="2025-01-01T00:00:00Z",
+                    payload={},
+                    event_type=RLMEventType.ITERATION_START,
+                )
+            )
+
+        collector.collect(
+            RLMRuntimeEvent(
+                name="run_end",
                 timestamp="2025-01-01T00:00:00Z",
                 payload={},
-                event_type=RLMEventType.ITERATION_START,
-            ))
-
-        collector.collect(RLMRuntimeEvent(
-            name="run_end",
-            timestamp="2025-01-01T00:00:00Z",
-            payload={},
-            event_type=RLMEventType.RUN_END,
-        ))
+                event_type=RLMEventType.RUN_END,
+            )
+        )
 
         iteration_events = collector.get_events_by_type(RLMEventType.ITERATION_START)
         assert len(iteration_events) == 3
@@ -420,21 +431,25 @@ class TestParadigmComparison:
         )
 
         # Add results
-        comparison.add_result(ParadigmResult(
-            paradigm=Paradigm.PURE_RLM,
-            success=True,
-            answer="Answer 1",
-            total_tokens=500,
-            estimated_cost=0.01,
-        ))
+        comparison.add_result(
+            ParadigmResult(
+                paradigm=Paradigm.PURE_RLM,
+                success=True,
+                answer="Answer 1",
+                total_tokens=500,
+                estimated_cost=0.01,
+            )
+        )
 
-        comparison.add_result(ParadigmResult(
-            paradigm=Paradigm.CODEACT,
-            success=True,
-            answer="Answer 2",
-            total_tokens=2000,
-            estimated_cost=0.04,
-        ))
+        comparison.add_result(
+            ParadigmResult(
+                paradigm=Paradigm.CODEACT,
+                success=True,
+                answer="Answer 2",
+                total_tokens=2000,
+                estimated_cost=0.04,
+            )
+        )
 
         assert len(comparison.results) == 2
 
@@ -446,21 +461,25 @@ class TestParadigmComparison:
             context_length=1000,
         )
 
-        comparison.add_result(ParadigmResult(
-            paradigm=Paradigm.PURE_RLM,
-            success=True,
-            answer="A",
-            total_tokens=500,
-            estimated_cost=0.01,
-        ))
+        comparison.add_result(
+            ParadigmResult(
+                paradigm=Paradigm.PURE_RLM,
+                success=True,
+                answer="A",
+                total_tokens=500,
+                estimated_cost=0.01,
+            )
+        )
 
-        comparison.add_result(ParadigmResult(
-            paradigm=Paradigm.CODEACT,
-            success=True,
-            answer="B",
-            total_tokens=2000,
-            estimated_cost=0.04,
-        ))
+        comparison.add_result(
+            ParadigmResult(
+                paradigm=Paradigm.CODEACT,
+                success=True,
+                answer="B",
+                total_tokens=2000,
+                estimated_cost=0.04,
+            )
+        )
 
         # Pure RLM should win on tokens and cost
         assert comparison.get_winner("total_tokens") == Paradigm.PURE_RLM
@@ -474,12 +493,14 @@ class TestParadigmComparison:
             context_length=5000,
         )
 
-        comparison.add_result(ParadigmResult(
-            paradigm=Paradigm.PURE_RLM,
-            success=True,
-            answer="Answer",
-            total_tokens=500,
-        ))
+        comparison.add_result(
+            ParadigmResult(
+                paradigm=Paradigm.PURE_RLM,
+                success=True,
+                answer="Answer",
+                total_tokens=500,
+            )
+        )
 
         table = comparison.format_table()
 
@@ -495,23 +516,27 @@ class TestParadigmComparison:
             context_length=10000,
         )
 
-        comparison.add_result(ParadigmResult(
-            paradigm=Paradigm.PURE_RLM,
-            success=True,
-            answer="Answer 1",
-            context_tokens=200,
-            total_tokens=500,
-            estimated_cost=0.01,
-        ))
+        comparison.add_result(
+            ParadigmResult(
+                paradigm=Paradigm.PURE_RLM,
+                success=True,
+                answer="Answer 1",
+                context_tokens=200,
+                total_tokens=500,
+                estimated_cost=0.01,
+            )
+        )
 
-        comparison.add_result(ParadigmResult(
-            paradigm=Paradigm.CODEACT,
-            success=True,
-            answer="Answer 2",
-            context_tokens=2500,
-            total_tokens=3000,
-            estimated_cost=0.06,
-        ))
+        comparison.add_result(
+            ParadigmResult(
+                paradigm=Paradigm.CODEACT,
+                success=True,
+                answer="Answer 2",
+                context_tokens=2500,
+                total_tokens=3000,
+                estimated_cost=0.06,
+            )
+        )
 
         report = create_comparison_report(comparison)
 

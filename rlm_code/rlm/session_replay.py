@@ -17,14 +17,13 @@ Enables:
 
 from __future__ import annotations
 
-import copy
-import json
 import hashlib
-from dataclasses import dataclass, field, asdict
+import json
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, Iterator, Callable
+from typing import Any, Callable, Iterator
 
 from ..core.logging import get_logger
 
@@ -306,11 +305,14 @@ class SessionRecorder:
         self._final_answer = ""
 
         # Record session start
-        self._record_event(SessionEventType.SESSION_START, {
-            "task": task,
-            "environment": environment,
-            "model": model,
-        })
+        self._record_event(
+            SessionEventType.SESSION_START,
+            {
+                "task": task,
+                "environment": environment,
+                "model": model,
+            },
+        )
 
     def _record_event(
         self,
@@ -355,10 +357,13 @@ class SessionRecorder:
         rationale: str = "",
     ) -> None:
         """Record an action."""
-        self._record_event(SessionEventType.STEP_ACTION, {
-            "action": action,
-            "rationale": rationale,
-        })
+        self._record_event(
+            SessionEventType.STEP_ACTION,
+            {
+                "action": action,
+                "rationale": rationale,
+            },
+        )
 
     def record_result(
         self,
@@ -424,19 +429,25 @@ class SessionRecorder:
     def record_variable_update(self, name: str, value: Any) -> None:
         """Record variable update."""
         self._variables[name] = value
-        self._record_event(SessionEventType.VARIABLE_UPDATE, {
-            "name": name,
-            "type": type(value).__name__,
-            "preview": str(value)[:200],
-        })
+        self._record_event(
+            SessionEventType.VARIABLE_UPDATE,
+            {
+                "name": name,
+                "type": type(value).__name__,
+                "preview": str(value)[:200],
+            },
+        )
 
     def record_llm_request(self, prompt: str, model: str = "") -> None:
         """Record LLM request."""
-        self._record_event(SessionEventType.LLM_REQUEST, {
-            "prompt_preview": prompt[:500],
-            "prompt_length": len(prompt),
-            "model": model,
-        })
+        self._record_event(
+            SessionEventType.LLM_REQUEST,
+            {
+                "prompt_preview": prompt[:500],
+                "prompt_length": len(prompt),
+                "model": model,
+            },
+        )
 
     def record_llm_response(
         self,
@@ -459,11 +470,14 @@ class SessionRecorder:
 
     def record_child_spawn(self, child_id: str, task: str, depth: int) -> None:
         """Record child agent spawn."""
-        self._record_event(SessionEventType.CHILD_SPAWN, {
-            "child_id": child_id,
-            "task": task[:200],
-            "depth": depth,
-        })
+        self._record_event(
+            SessionEventType.CHILD_SPAWN,
+            {
+                "child_id": child_id,
+                "task": task[:200],
+                "depth": depth,
+            },
+        )
 
     def record_child_result(
         self,
@@ -472,27 +486,36 @@ class SessionRecorder:
         result: str = "",
     ) -> None:
         """Record child agent result."""
-        self._record_event(SessionEventType.CHILD_RESULT, {
-            "child_id": child_id,
-            "success": success,
-            "result_preview": result[:200],
-        })
+        self._record_event(
+            SessionEventType.CHILD_RESULT,
+            {
+                "child_id": child_id,
+                "success": success,
+                "result_preview": result[:200],
+            },
+        )
 
     def record_final(self, answer: str, completed: bool = True) -> None:
         """Record final answer detection."""
         self._completed = completed
         self._final_answer = answer
-        self._record_event(SessionEventType.FINAL_DETECTED, {
-            "answer": answer,
-            "completed": completed,
-        })
+        self._record_event(
+            SessionEventType.FINAL_DETECTED,
+            {
+                "answer": answer,
+                "completed": completed,
+            },
+        )
 
     def record_error(self, error: str, recoverable: bool = True) -> None:
         """Record an error."""
-        self._record_event(SessionEventType.ERROR, {
-            "error": error,
-            "recoverable": recoverable,
-        })
+        self._record_event(
+            SessionEventType.ERROR,
+            {
+                "error": error,
+                "recoverable": recoverable,
+            },
+        )
 
     def create_checkpoint(self, name: str = "") -> SessionSnapshot:
         """Create a checkpoint snapshot."""
@@ -501,21 +524,27 @@ class SessionRecorder:
         snapshot = self.get_snapshot()
         snapshot.metadata["checkpoint_name"] = checkpoint_name
 
-        self._record_event(SessionEventType.CHECKPOINT, {
-            "checkpoint_name": checkpoint_name,
-            "step": self._current_step,
-        })
+        self._record_event(
+            SessionEventType.CHECKPOINT,
+            {
+                "checkpoint_name": checkpoint_name,
+                "step": self._current_step,
+            },
+        )
 
         return snapshot
 
     def end_session(self) -> SessionSnapshot:
         """End the session and return final snapshot."""
-        self._record_event(SessionEventType.SESSION_END, {
-            "completed": self._completed,
-            "total_steps": len(self._steps),
-            "total_reward": self._cumulative_reward,
-            "total_tokens": self._total_tokens,
-        })
+        self._record_event(
+            SessionEventType.SESSION_END,
+            {
+                "completed": self._completed,
+                "total_steps": len(self._steps),
+                "total_reward": self._cumulative_reward,
+                "total_tokens": self._total_tokens,
+            },
+        )
 
         return self.get_snapshot()
 
@@ -708,7 +737,8 @@ class SessionReplayer:
             "duration_seconds": self._snapshot.duration_seconds,
             "success_rate": (
                 sum(1 for s in self._snapshot.steps if s.success) / len(self._snapshot.steps)
-                if self._snapshot.steps else 0.0
+                if self._snapshot.steps
+                else 0.0
             ),
             "error_count": sum(1 for s in self._snapshot.steps if s.error),
         }
@@ -783,16 +813,18 @@ class SessionStore:
         for path in self._snapshots_dir.glob("*.json"):
             try:
                 data = json.loads(path.read_text(encoding="utf-8"))
-                sessions.append({
-                    "session_id": data.get("session_id"),
-                    "run_id": data.get("run_id"),
-                    "task": data.get("task", "")[:50],
-                    "environment": data.get("environment"),
-                    "completed": data.get("completed"),
-                    "total_steps": data.get("total_steps"),
-                    "created_at": data.get("created_at"),
-                    "path": str(path),
-                })
+                sessions.append(
+                    {
+                        "session_id": data.get("session_id"),
+                        "run_id": data.get("run_id"),
+                        "task": data.get("task", "")[:50],
+                        "environment": data.get("environment"),
+                        "completed": data.get("completed"),
+                        "total_steps": data.get("total_steps"),
+                        "created_at": data.get("created_at"),
+                        "path": str(path),
+                    }
+                )
             except Exception:
                 continue
         return sorted(sessions, key=lambda x: x.get("created_at", ""), reverse=True)
@@ -804,13 +836,15 @@ class SessionStore:
         for path in self._checkpoints_dir.glob(pattern):
             try:
                 data = json.loads(path.read_text(encoding="utf-8"))
-                checkpoints.append({
-                    "session_id": data.get("session_id"),
-                    "checkpoint_name": data.get("metadata", {}).get("checkpoint_name"),
-                    "step": data.get("step"),
-                    "created_at": data.get("created_at"),
-                    "path": str(path),
-                })
+                checkpoints.append(
+                    {
+                        "session_id": data.get("session_id"),
+                        "checkpoint_name": data.get("metadata", {}).get("checkpoint_name"),
+                        "step": data.get("step"),
+                        "created_at": data.get("created_at"),
+                        "path": str(path),
+                    }
+                )
             except Exception:
                 continue
         return sorted(checkpoints, key=lambda x: x.get("created_at", ""), reverse=True)
@@ -925,8 +959,16 @@ def compare_sessions(
             break
 
     # Compute efficiencies
-    a_efficiency = (snapshot_a.total_reward * 1000) / snapshot_a.total_tokens if snapshot_a.total_tokens > 0 else 0
-    b_efficiency = (snapshot_b.total_reward * 1000) / snapshot_b.total_tokens if snapshot_b.total_tokens > 0 else 0
+    a_efficiency = (
+        (snapshot_a.total_reward * 1000) / snapshot_a.total_tokens
+        if snapshot_a.total_tokens > 0
+        else 0
+    )
+    b_efficiency = (
+        (snapshot_b.total_reward * 1000) / snapshot_b.total_tokens
+        if snapshot_b.total_tokens > 0
+        else 0
+    )
 
     return SessionComparison(
         session_a_id=snapshot_a.session_id,
@@ -1097,7 +1139,9 @@ def _build_snapshot_from_events(
                     current_step_data.setdefault("raw_observation", obs)
                 if "reward" in event.data:
                     current_step_data.setdefault("reward", event.data["reward"])
-                    current_step_data.setdefault("cumulative_reward", event.data.get("cumulative_reward", 0.0))
+                    current_step_data.setdefault(
+                        "cumulative_reward", event.data.get("cumulative_reward", 0.0)
+                    )
                 if "success" in event.data:
                     current_step_data.setdefault("success", event.data["success"])
 

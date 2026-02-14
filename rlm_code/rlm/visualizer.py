@@ -59,9 +59,7 @@ def build_run_visualization(
             "action": action_name,
             "reward": reward,
             "cumulative_reward": round(cumulative_reward, 4),
-            "success": observation_dict.get("success")
-            if "success" in observation_dict
-            else None,
+            "success": observation_dict.get("success") if "success" in observation_dict else None,
             "path": str(observation_dict.get("path") or ""),
             "children_executed": int(observation_dict.get("children_executed") or 0),
         }

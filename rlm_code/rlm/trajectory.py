@@ -24,11 +24,10 @@ from __future__ import annotations
 
 import json
 import time
-from dataclasses import dataclass, field, asdict
-from datetime import datetime
+from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
 from typing import Any, Iterator
-from enum import Enum
 
 
 class TrajectoryEventType(str, Enum):
@@ -93,7 +92,9 @@ class TrajectoryEvent:
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         result = {
-            "event_type": self.event_type.value if isinstance(self.event_type, Enum) else self.event_type,
+            "event_type": self.event_type.value
+            if isinstance(self.event_type, Enum)
+            else self.event_type,
             "timestamp": self.timestamp,
             "run_id": self.run_id,
         }
@@ -180,15 +181,17 @@ class TrajectoryLogger:
         model: str | None = None,
     ) -> None:
         """Log run start event."""
-        self.log_event(TrajectoryEvent(
-            event_type=TrajectoryEventType.RUN_START,
-            data={
-                "task": task,
-                "context_length": context_length,
-                "model": model,
-                "metadata": self.metadata,
-            },
-        ))
+        self.log_event(
+            TrajectoryEvent(
+                event_type=TrajectoryEventType.RUN_START,
+                data={
+                    "task": task,
+                    "context_length": context_length,
+                    "model": model,
+                    "metadata": self.metadata,
+                },
+            )
+        )
 
     def log_run_end(
         self,
@@ -198,24 +201,28 @@ class TrajectoryLogger:
         duration_seconds: float | None = None,
     ) -> None:
         """Log run end event."""
-        self.log_event(TrajectoryEvent(
-            event_type=TrajectoryEventType.RUN_END,
-            data={
-                "success": success,
-                "answer": answer,
-                "total_iterations": self._current_iteration,
-            },
-            tokens_in=total_tokens,
-            duration_ms=(duration_seconds or (time.time() - self._start_time)) * 1000,
-        ))
+        self.log_event(
+            TrajectoryEvent(
+                event_type=TrajectoryEventType.RUN_END,
+                data={
+                    "success": success,
+                    "answer": answer,
+                    "total_iterations": self._current_iteration,
+                },
+                tokens_in=total_tokens,
+                duration_ms=(duration_seconds or (time.time() - self._start_time)) * 1000,
+            )
+        )
 
     def log_iteration_start(self, iteration: int) -> None:
         """Log iteration start."""
         self._current_iteration = iteration
-        self.log_event(TrajectoryEvent(
-            event_type=TrajectoryEventType.ITERATION_START,
-            iteration=iteration,
-        ))
+        self.log_event(
+            TrajectoryEvent(
+                event_type=TrajectoryEventType.ITERATION_START,
+                iteration=iteration,
+            )
+        )
 
     def log_iteration(
         self,
@@ -230,27 +237,33 @@ class TrajectoryLogger:
         self._current_iteration = iteration
 
         # Reasoning
-        self.log_event(TrajectoryEvent(
-            event_type=TrajectoryEventType.ITERATION_REASONING,
-            iteration=iteration,
-            data={"reasoning": reasoning},
-        ))
+        self.log_event(
+            TrajectoryEvent(
+                event_type=TrajectoryEventType.ITERATION_REASONING,
+                iteration=iteration,
+                data={"reasoning": reasoning},
+            )
+        )
 
         # Code
-        self.log_event(TrajectoryEvent(
-            event_type=TrajectoryEventType.ITERATION_CODE,
-            iteration=iteration,
-            data={"code": code},
-        ))
+        self.log_event(
+            TrajectoryEvent(
+                event_type=TrajectoryEventType.ITERATION_CODE,
+                iteration=iteration,
+                data={"code": code},
+            )
+        )
 
         # Output
-        self.log_event(TrajectoryEvent(
-            event_type=TrajectoryEventType.ITERATION_OUTPUT,
-            iteration=iteration,
-            data={"output": output},
-            duration_ms=duration_ms,
-            tokens_out=tokens_used,
-        ))
+        self.log_event(
+            TrajectoryEvent(
+                event_type=TrajectoryEventType.ITERATION_OUTPUT,
+                iteration=iteration,
+                data={"output": output},
+                duration_ms=duration_ms,
+                tokens_out=tokens_used,
+            )
+        )
 
     def log_llm_call(
         self,
@@ -263,30 +276,30 @@ class TrajectoryLogger:
     ) -> None:
         """Log an LLM call."""
         event_type = (
-            TrajectoryEventType.SUB_LLM_REQUEST
-            if is_sub_llm
-            else TrajectoryEventType.LLM_REQUEST
+            TrajectoryEventType.SUB_LLM_REQUEST if is_sub_llm else TrajectoryEventType.LLM_REQUEST
         )
 
         # Log request
-        self.log_event(TrajectoryEvent(
-            event_type=event_type,
-            data={"prompt": prompt if isinstance(prompt, str) else "[messages]"},
-            tokens_in=tokens_in,
-        ))
+        self.log_event(
+            TrajectoryEvent(
+                event_type=event_type,
+                data={"prompt": prompt if isinstance(prompt, str) else "[messages]"},
+                tokens_in=tokens_in,
+            )
+        )
 
         # Log response
         response_type = (
-            TrajectoryEventType.SUB_LLM_RESPONSE
-            if is_sub_llm
-            else TrajectoryEventType.LLM_RESPONSE
+            TrajectoryEventType.SUB_LLM_RESPONSE if is_sub_llm else TrajectoryEventType.LLM_RESPONSE
         )
-        self.log_event(TrajectoryEvent(
-            event_type=response_type,
-            data={"response": response[:1000] if len(response) > 1000 else response},
-            tokens_out=tokens_out,
-            duration_ms=duration_ms,
-        ))
+        self.log_event(
+            TrajectoryEvent(
+                event_type=response_type,
+                data={"response": response[:1000] if len(response) > 1000 else response},
+                tokens_out=tokens_out,
+                duration_ms=duration_ms,
+            )
+        )
 
     def log_child_spawn(
         self,
@@ -295,14 +308,16 @@ class TrajectoryLogger:
         depth: int,
     ) -> None:
         """Log child agent spawn."""
-        self.log_event(TrajectoryEvent(
-            event_type=TrajectoryEventType.CHILD_SPAWN,
-            depth=depth,
-            data={
-                "child_id": child_id,
-                "task": task,
-            },
-        ))
+        self.log_event(
+            TrajectoryEvent(
+                event_type=TrajectoryEventType.CHILD_SPAWN,
+                depth=depth,
+                data={
+                    "child_id": child_id,
+                    "task": task,
+                },
+            )
+        )
 
     def log_child_result(
         self,
@@ -311,21 +326,25 @@ class TrajectoryLogger:
         success: bool,
     ) -> None:
         """Log child agent result."""
-        self.log_event(TrajectoryEvent(
-            event_type=TrajectoryEventType.CHILD_RESULT,
-            data={
-                "child_id": child_id,
-                "result": result[:500] if len(result) > 500 else result,
-                "success": success,
-            },
-        ))
+        self.log_event(
+            TrajectoryEvent(
+                event_type=TrajectoryEventType.CHILD_RESULT,
+                data={
+                    "child_id": child_id,
+                    "result": result[:500] if len(result) > 500 else result,
+                    "success": success,
+                },
+            )
+        )
 
     def log_final(self, answer: str) -> None:
         """Log final answer detection."""
-        self.log_event(TrajectoryEvent(
-            event_type=TrajectoryEventType.FINAL_DETECTED,
-            data={"answer": answer},
-        ))
+        self.log_event(
+            TrajectoryEvent(
+                event_type=TrajectoryEventType.FINAL_DETECTED,
+                data={"answer": answer},
+            )
+        )
 
     def log_context_load(
         self,
@@ -334,24 +353,28 @@ class TrajectoryLogger:
         preview: str | None = None,
     ) -> None:
         """Log context loading."""
-        self.log_event(TrajectoryEvent(
-            event_type=TrajectoryEventType.CONTEXT_LOAD,
-            data={
-                "context_type": context_type,
-                "length": length,
-                "preview": preview[:200] if preview else None,
-            },
-        ))
+        self.log_event(
+            TrajectoryEvent(
+                event_type=TrajectoryEventType.CONTEXT_LOAD,
+                data={
+                    "context_type": context_type,
+                    "length": length,
+                    "preview": preview[:200] if preview else None,
+                },
+            )
+        )
 
     def log_error(self, error: str, traceback: str | None = None) -> None:
         """Log an error."""
-        self.log_event(TrajectoryEvent(
-            event_type=TrajectoryEventType.ERROR,
-            data={
-                "error": error,
-                "traceback": traceback,
-            },
-        ))
+        self.log_event(
+            TrajectoryEvent(
+                event_type=TrajectoryEventType.ERROR,
+                data={
+                    "error": error,
+                    "traceback": traceback,
+                },
+            )
+        )
 
     def push_depth(self, parent_id: str) -> None:
         """Push recursion depth for child agent."""
@@ -442,8 +465,12 @@ class TrajectoryViewer:
             event_counts[etype] = event_counts.get(etype, 0) + 1
 
         # Find run info
-        run_start = next((e for e in self._events if e.event_type == TrajectoryEventType.RUN_START), None)
-        run_end = next((e for e in self._events if e.event_type == TrajectoryEventType.RUN_END), None)
+        run_start = next(
+            (e for e in self._events if e.event_type == TrajectoryEventType.RUN_START), None
+        )
+        run_end = next(
+            (e for e in self._events if e.event_type == TrajectoryEventType.RUN_END), None
+        )
 
         return {
             "run_id": self._events[0].run_id if self._events else None,
@@ -480,7 +507,9 @@ class TrajectoryViewer:
                 current_iteration = event.iteration
                 lines.append(f"{indent}[Iteration {current_iteration}]")
 
-            etype = event.event_type.value if isinstance(event.event_type, Enum) else event.event_type
+            etype = (
+                event.event_type.value if isinstance(event.event_type, Enum) else event.event_type
+            )
 
             if etype == "iteration_reasoning":
                 reasoning = event.data.get("reasoning", "")[:80]
@@ -491,7 +520,11 @@ class TrajectoryViewer:
             elif etype == "iteration_output":
                 output = event.data.get("output", "")[:60].replace("\n", " ")
                 duration = event.duration_ms
-                lines.append(f"{indent}  OUTPUT: {output}... ({duration:.0f}ms)" if duration else f"{indent}  OUTPUT: {output}...")
+                lines.append(
+                    f"{indent}  OUTPUT: {output}... ({duration:.0f}ms)"
+                    if duration
+                    else f"{indent}  OUTPUT: {output}..."
+                )
             elif etype == "sub_llm_request":
                 lines.append(f"{indent}  -> SUB_LLM_CALL")
             elif etype == "child_spawn":
@@ -506,7 +539,9 @@ class TrajectoryViewer:
                 lines.append(f"{indent}  ERROR: {error}")
 
         lines.append("")
-        lines.append(f"Summary: {summary['total_iterations']} iterations, {summary['total_tokens']} tokens, {summary['total_duration_ms']:.0f}ms")
+        lines.append(
+            f"Summary: {summary['total_iterations']} iterations, {summary['total_tokens']} tokens, {summary['total_duration_ms']:.0f}ms"
+        )
 
         return "\n".join(lines)
 
@@ -518,7 +553,7 @@ class TrajectoryViewer:
         html = f"""<!DOCTYPE html>
 <html>
 <head>
-    <title>RLM Trajectory: {summary.get('run_id', 'unknown')}</title>
+    <title>RLM Trajectory: {summary.get("run_id", "unknown")}</title>
     <style>
         body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 20px; background: #1e1e1e; color: #d4d4d4; }}
         .header {{ background: #2d2d2d; padding: 20px; border-radius: 8px; margin-bottom: 20px; }}
@@ -548,30 +583,30 @@ class TrajectoryViewer:
 <body>
     <div class="header">
         <h1>RLM Trajectory</h1>
-        <p>Run ID: {summary.get('run_id', 'unknown')}</p>
-        <p>Task: {summary.get('task', 'unknown')}</p>
+        <p>Run ID: {summary.get("run_id", "unknown")}</p>
+        <p>Task: {summary.get("task", "unknown")}</p>
         <div class="metrics">
             <div class="metric">
                 <div class="metric-label">Status</div>
-                <div class="metric-value" style="color: {'#4ec9b0' if summary.get('success') else '#f14c4c'}">
-                    {'SUCCESS' if summary.get('success') else 'INCOMPLETE'}
+                <div class="metric-value" style="color: {"#4ec9b0" if summary.get("success") else "#f14c4c"}">
+                    {"SUCCESS" if summary.get("success") else "INCOMPLETE"}
                 </div>
             </div>
             <div class="metric">
                 <div class="metric-label">Iterations</div>
-                <div class="metric-value">{summary['total_iterations']}</div>
+                <div class="metric-value">{summary["total_iterations"]}</div>
             </div>
             <div class="metric">
                 <div class="metric-label">Total Tokens</div>
-                <div class="metric-value">{summary['total_tokens']:,}</div>
+                <div class="metric-value">{summary["total_tokens"]:,}</div>
             </div>
             <div class="metric">
                 <div class="metric-label">Duration</div>
-                <div class="metric-value">{summary['total_duration_ms']:.0f}ms</div>
+                <div class="metric-value">{summary["total_duration_ms"]:.0f}ms</div>
             </div>
             <div class="metric">
                 <div class="metric-label">Max Depth</div>
-                <div class="metric-value">{summary['max_depth']}</div>
+                <div class="metric-value">{summary["max_depth"]}</div>
             </div>
         </div>
     </div>
@@ -605,7 +640,9 @@ class TrajectoryViewer:
             if event.iteration is not None and event.iteration != current_iteration:
                 # Output previous iteration
                 if iteration_events:
-                    html_parts.append(self._render_iteration_html(current_iteration, iteration_events))
+                    html_parts.append(
+                        self._render_iteration_html(current_iteration, iteration_events)
+                    )
                 current_iteration = event.iteration
                 iteration_events = []
             iteration_events.append(event)
@@ -621,7 +658,9 @@ class TrajectoryViewer:
         events_html = []
 
         for event in events:
-            etype = event.event_type.value if isinstance(event.event_type, Enum) else event.event_type
+            etype = (
+                event.event_type.value if isinstance(event.event_type, Enum) else event.event_type
+            )
 
             extra_class = ""
             if etype == "final_detected":
@@ -653,29 +692,28 @@ class TrajectoryViewer:
             elif etype == "child_spawn":
                 child_id = event.data.get("child_id", "?")
                 task = event.data.get("task", "")
-                data_html = f'<div>Child: {child_id}<br>Task: {self._escape_html(task)}</div>'
+                data_html = f"<div>Child: {child_id}<br>Task: {self._escape_html(task)}</div>"
 
-            events_html.append(f'''
+            events_html.append(f"""
                 <div class="event {extra_class}">
                     <div class="event-type">{etype.upper()}</div>
                     <div class="event-data">{data_html}</div>
                 </div>
-            ''')
+            """)
 
-        return f'''
+        return f"""
             <div class="iteration">
                 <div class="iteration-header">Iteration {iteration}</div>
                 <div class="iteration-content">
-                    {''.join(events_html)}
+                    {"".join(events_html)}
                 </div>
             </div>
-        '''
+        """
 
     def _escape_html(self, text: str) -> str:
         """Escape HTML special characters."""
         return (
-            text
-            .replace("&", "&amp;")
+            text.replace("&", "&amp;")
             .replace("<", "&lt;")
             .replace(">", "&gt;")
             .replace('"', "&quot;")
@@ -709,9 +747,18 @@ def compare_trajectories(
             for p, s in zip(paths, summaries)
         ],
         "comparison": {
-            "avg_iterations": sum(s.get("total_iterations", 0) for s in summaries) / len(summaries) if summaries else 0,
-            "avg_tokens": sum(s.get("total_tokens", 0) for s in summaries) / len(summaries) if summaries else 0,
-            "avg_duration_ms": sum(s.get("total_duration_ms", 0) for s in summaries) / len(summaries) if summaries else 0,
-            "success_rate": sum(1 for s in summaries if s.get("success")) / len(summaries) if summaries else 0,
+            "avg_iterations": sum(s.get("total_iterations", 0) for s in summaries) / len(summaries)
+            if summaries
+            else 0,
+            "avg_tokens": sum(s.get("total_tokens", 0) for s in summaries) / len(summaries)
+            if summaries
+            else 0,
+            "avg_duration_ms": sum(s.get("total_duration_ms", 0) for s in summaries)
+            / len(summaries)
+            if summaries
+            else 0,
+            "success_rate": sum(1 for s in summaries if s.get("success")) / len(summaries)
+            if summaries
+            else 0,
         },
     }

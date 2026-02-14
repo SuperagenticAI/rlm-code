@@ -14,6 +14,7 @@ from rlm_code.rlm.frameworks import FrameworkEpisodeResult, FrameworkStepRecord
 class _FakeConnector:
     def __init__(self, responses: list[str]):
         self._responses = list(responses)
+        self.current_model = "fake-model"
 
     def generate_response(self, prompt: str, system_prompt: str | None = None, context=None) -> str:
         if self._responses:
@@ -24,6 +25,28 @@ class _FakeConnector:
 class _FakeExecutionEngine:
     def __init__(self):
         self.calls = 0
+        self.config_manager = SimpleNamespace(
+            config=SimpleNamespace(
+                sandbox=SimpleNamespace(
+                    runtime="local",
+                    default_timeout_seconds=5,
+                    pure_rlm_backend="exec",
+                    pure_rlm_allow_unsafe_exec=True,
+                    pure_rlm_strict=False,
+                    pure_rlm_output_mode="summarize",
+                    pure_rlm_max_iteration_output_chars=4000,
+                    monty_type_check=False,
+                    monty_max_allocations=None,
+                    monty_max_memory=None,
+                    docker=SimpleNamespace(
+                        image="python:3.11-slim",
+                        network_enabled=False,
+                        memory_limit_mb=512,
+                        cpus=1.0,
+                    ),
+                )
+            )
+        )
 
     def validate_code(self, code: str):
         return SimpleNamespace(is_valid=True, errors=[], warnings=[])
@@ -35,6 +58,33 @@ class _FakeExecutionEngine:
             stdout="ok",
             stderr="",
             execution_time=0.01,
+        )
+
+
+class _ConfigurableExecutionEngine(_FakeExecutionEngine):
+    def __init__(self, **sandbox_overrides):
+        super().__init__()
+        sandbox_defaults = {
+            "runtime": "local",
+            "default_timeout_seconds": 5,
+            "pure_rlm_backend": "exec",
+            "pure_rlm_allow_unsafe_exec": True,
+            "pure_rlm_strict": False,
+            "pure_rlm_output_mode": "summarize",
+            "pure_rlm_max_iteration_output_chars": 4000,
+            "monty_type_check": False,
+            "monty_max_allocations": None,
+            "monty_max_memory": None,
+            "docker": SimpleNamespace(
+                image="python:3.11-slim",
+                network_enabled=False,
+                memory_limit_mb=512,
+                cpus=1.0,
+            ),
+        }
+        sandbox_defaults.update(sandbox_overrides)
+        self.config_manager = SimpleNamespace(
+            config=SimpleNamespace(sandbox=SimpleNamespace(**sandbox_defaults))
         )
 
 
@@ -129,6 +179,36 @@ class _UsageConnector:
         return dict(self._snapshot)
 
 
+class _JudgeConnector:
+    def __init__(self, responses: list[str]):
+        self._responses = list(responses)
+        self.current_model = "judge-default"
+        self.model_type = "openai"
+        self.calls: list[tuple[str, str | None, str | None]] = []
+
+    def _next(self) -> str:
+        if self._responses:
+            return self._responses.pop(0)
+        return "no"
+
+    def generate_response(self, prompt: str, system_prompt: str | None = None, context=None) -> str:
+        self.calls.append(("default", None, None))
+        return self._next()
+
+    def generate_response_with_model(
+        self,
+        prompt: str,
+        model_name: str,
+        model_type: str | None = None,
+        system_prompt: str | None = None,
+        context=None,
+        api_key: str | None = None,
+        base_url: str | None = None,
+    ) -> str:
+        self.calls.append(("override", model_type, model_name))
+        return self._next()
+
+
 def test_rlm_run_task_persists_jsonl(tmp_path):
     connector = _FakeConnector(
         responses=[
@@ -201,7 +281,9 @@ def test_rlm_run_task_with_dspy_environment_write_file(tmp_path):
 def test_rlm_doctor_returns_core_checks(tmp_path):
     connector = SimpleNamespace(current_model="mock-model")
     engine = _FakeExecutionEngine()
-    runner = RLMRunner(llm_connector=connector, execution_engine=engine, run_dir=tmp_path, workdir=tmp_path)
+    runner = RLMRunner(
+        llm_connector=connector, execution_engine=engine, run_dir=tmp_path, workdir=tmp_path
+    )
 
     checks = runner.doctor(environment="dspy")
     names = {check.name for check in checks}
@@ -382,6 +464,168 @@ def test_rlm_run_task_records_usage_by_step_and_final(tmp_path):
     assert final_event["usage"]["total_calls"] == 2
 
 
+def test_rlm_judge_predictions_writes_results_and_metrics(tmp_path):
+    reference_path = tmp_path / "reference.json"
+    reference_path.write_text(
+        json.dumps(
+            [
+                {
+                    "question_id": "q1",
+                    "question": "Capital of France?",
+                    "answer": "Paris",
+                    "question_type": "factoid",
+                },
+                {
+                    "question_id": "q2",
+                    "question": "How many days are in a week?",
+                    "answer": "7",
+                    "question_type": "temporal-reasoning",
+                },
+            ]
+        ),
+        encoding="utf-8",
+    )
+    predictions_path = tmp_path / "predictions.jsonl"
+    predictions_path.write_text(
+        (
+            json.dumps({"question_id": "q1", "hypothesis": "Paris"})
+            + "\n"
+            + json.dumps({"question_id": "q2", "hypothesis": "8"})
+            + "\n"
+            + json.dumps({"question_id": "q_missing", "hypothesis": "N/A"})
+            + "\n"
+        ),
+        encoding="utf-8",
+    )
+
+    connector = _JudgeConnector(["yes", "no"])
+    runner = RLMRunner(
+        llm_connector=connector,
+        execution_engine=_FakeExecutionEngine(),
+        run_dir=tmp_path / "runs",
+        workdir=tmp_path,
+    )
+
+    result = runner.judge_predictions(
+        predictions_path=predictions_path,
+        reference_path=reference_path,
+    )
+    assert result.judge_model == "openai/judge-default"
+    assert result.total_predictions == 3
+    assert result.eligible_predictions == 2
+    assert result.newly_judged == 2
+    assert result.judged_total == 2
+    assert result.correct_total == 1
+    assert result.accuracy == 0.5
+    assert result.by_type["factoid"]["accuracy"] == 1.0
+    assert result.by_type["temporal-reasoning"]["accuracy"] == 0.0
+    assert result.result_path.exists()
+    rows = [
+        json.loads(line)
+        for line in result.result_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert len(rows) == 2
+    assert rows[0]["autoeval_label"]["label"] is True
+    assert rows[1]["autoeval_label"]["label"] is False
+    assert len(connector.calls) == 2
+    assert connector.calls[0][0] == "default"
+
+
+def test_rlm_judge_predictions_resume_skips_existing_entries(tmp_path):
+    reference_path = tmp_path / "reference.json"
+    reference_path.write_text(
+        json.dumps(
+            [
+                {
+                    "question_id": "q1",
+                    "question": "1+1?",
+                    "answer": "2",
+                    "question_type": "factoid",
+                },
+                {
+                    "question_id": "q2",
+                    "question": "2+2?",
+                    "answer": "4",
+                    "question_type": "factoid",
+                },
+            ]
+        ),
+        encoding="utf-8",
+    )
+    predictions_path = tmp_path / "predictions.jsonl"
+    predictions_path.write_text(
+        (
+            json.dumps({"question_id": "q1", "hypothesis": "2"})
+            + "\n"
+            + json.dumps({"question_id": "q2", "hypothesis": "4"})
+            + "\n"
+        ),
+        encoding="utf-8",
+    )
+    output_path = tmp_path / "judged.jsonl"
+
+    connector = _JudgeConnector(["yes", "yes"])
+    runner = RLMRunner(
+        llm_connector=connector,
+        execution_engine=_FakeExecutionEngine(),
+        run_dir=tmp_path / "runs",
+        workdir=tmp_path,
+    )
+    first = runner.judge_predictions(
+        predictions_path=predictions_path,
+        reference_path=reference_path,
+        output_path=output_path,
+        limit=1,
+        resume=True,
+    )
+    second = runner.judge_predictions(
+        predictions_path=predictions_path,
+        reference_path=reference_path,
+        output_path=output_path,
+        resume=True,
+    )
+    assert first.newly_judged == 1
+    assert second.newly_judged == 1
+    assert second.judged_total == 2
+    assert second.correct_total == 2
+    rows = [line for line in output_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert len(rows) == 2
+    assert len(connector.calls) == 2
+
+
+def test_rlm_judge_predictions_accepts_provider_prefixed_model(tmp_path):
+    reference_path = tmp_path / "reference.json"
+    reference_path.write_text(
+        json.dumps(
+            [
+                {"question_id": "q1", "question": "A?", "answer": "A", "question_type": "factoid"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    predictions_path = tmp_path / "predictions.jsonl"
+    predictions_path.write_text(
+        json.dumps({"question_id": "q1", "hypothesis": "A"}) + "\n",
+        encoding="utf-8",
+    )
+
+    connector = _JudgeConnector(["yes"])
+    runner = RLMRunner(
+        llm_connector=connector,
+        execution_engine=_FakeExecutionEngine(),
+        run_dir=tmp_path / "runs",
+        workdir=tmp_path,
+    )
+    result = runner.judge_predictions(
+        predictions_path=predictions_path,
+        reference_path=reference_path,
+        judge_model="openai/gpt-4.1-mini",
+    )
+    assert result.judge_model == "openai/gpt-4.1-mini"
+    assert connector.calls == [("override", "openai", "gpt-4.1-mini")]
+
+
 def test_rlm_run_benchmark_persists_summary(tmp_path):
     connector = _FakeConnector(
         responses=[
@@ -538,6 +782,7 @@ def test_repo_eval_packs_are_loadable():
         "eval/packs/pydantic_time_range_v1.yaml",
         "eval/packs/google_adk_memory_eval.json",
         "eval/packs/superoptix_qa_pairs.json",
+        "eval/packs/rlm_x_claims_matrix.yaml",
     ]
     presets, descriptions, sources = load_benchmark_packs(pack_paths, workdir=repo_root)
     assert presets
@@ -561,8 +806,11 @@ def test_runner_benchmark_pack_aliases_and_preview(tmp_path):
     )
     aliases = runner.benchmark_pack_aliases()
     assert "pydantic_time_range_v1" in aliases
+    assert "rlm_x_claims_matrix" in aliases
 
-    rows = runner.import_benchmark_pack_preview(pack_paths=["pydantic_time_range_v1"], per_preset_limit=1)
+    rows = runner.import_benchmark_pack_preview(
+        pack_paths=["pydantic_time_range_v1"], per_preset_limit=1
+    )
     assert rows
     assert rows[0]["previewed_cases"] == 1
 
@@ -794,6 +1042,82 @@ def test_rlm_list_benchmark_runs_and_compare(tmp_path):
     assert comparison.passed is True
 
 
+def test_rlm_run_benchmark_supports_direct_llm_mode(tmp_path):
+    connector = _FakeConnector(responses=["direct answer"])
+    engine = _FakeExecutionEngine()
+    runner = RLMRunner(
+        llm_connector=connector,
+        execution_engine=engine,
+        run_dir=tmp_path / "runs",
+        workdir=tmp_path,
+    )
+
+    benchmark = runner.run_benchmark(
+        preset="generic_smoke",
+        mode="direct-llm",
+        limit=1,
+    )
+    assert benchmark.mode == "direct-llm"
+    assert benchmark.total_cases == 1
+    assert benchmark.case_results[0]["mode"] == "direct-llm"
+    payload = json.loads(benchmark.summary_path.read_text(encoding="utf-8"))
+    assert payload["mode"] == "direct-llm"
+    assert payload["latency_seconds"]["p50"] >= 0.0
+
+
+def test_rlm_run_benchmark_supports_harness_mode(tmp_path):
+    connector = _FakeConnector(
+        responses=[
+            '{"action":"final","response":"harness done"}',
+        ]
+    )
+    engine = _FakeExecutionEngine()
+    runner = RLMRunner(
+        llm_connector=connector,
+        execution_engine=engine,
+        run_dir=tmp_path / "runs",
+        workdir=tmp_path,
+    )
+
+    benchmark = runner.run_benchmark(
+        preset="generic_smoke",
+        mode="harness",
+        limit=1,
+    )
+    assert benchmark.mode == "harness"
+    assert benchmark.total_cases == 1
+    assert benchmark.case_results[0]["mode"] == "harness"
+    payload = json.loads(benchmark.summary_path.read_text(encoding="utf-8"))
+    assert payload["mode"] == "harness"
+
+
+def test_rlm_export_benchmark_report_writes_markdown(tmp_path):
+    connector = _FakeConnector(
+        responses=[
+            '{"action":"final","done":true,"final_response":"done"}',
+        ]
+    )
+    engine = _FakeExecutionEngine()
+    runner = RLMRunner(
+        llm_connector=connector,
+        execution_engine=engine,
+        run_dir=tmp_path / "runs",
+        workdir=tmp_path,
+    )
+
+    first = runner.run_benchmark(preset="generic_smoke", limit=1, environment="generic")
+    time.sleep(0.002)
+    second = runner.run_benchmark(preset="generic_smoke", limit=1, environment="generic")
+    report = runner.export_benchmark_report(
+        candidate=second.benchmark_id,
+        baseline=first.benchmark_id,
+        report_format="markdown",
+    )
+    assert report.report_path.exists()
+    text = report.report_path.read_text(encoding="utf-8")
+    assert "# RLM Benchmark Report" in text
+
+
 def test_rlm_compare_benchmarks_requires_two_runs(tmp_path):
     connector = _FakeConnector(
         responses=[
@@ -893,6 +1217,127 @@ def test_rlm_delegate_respects_max_depth_guard(tmp_path):
     assert "max_depth" in str(step_event.get("observation", {}))
 
 
+def test_rlm_pure_strict_blocks_delegate_actions(tmp_path):
+    connector = _FakeConnector(
+        responses=[
+            "delegate step",
+            "final step",
+        ]
+    )
+    engine = _ConfigurableExecutionEngine(
+        pure_rlm_backend="exec",
+        pure_rlm_strict=True,
+    )
+    runner = RLMRunner(
+        llm_connector=connector,
+        execution_engine=engine,
+        run_dir=tmp_path / "runs",
+        workdir=tmp_path,
+    )
+    pure_env = runner.environments["pure_rlm"]
+    planned_actions = [
+        {"action": "delegate", "task": "child task", "done": False},
+        {"action": "final", "done": True, "final_response": "done"},
+    ]
+    pure_env.parse_planner_response = lambda _raw: planned_actions.pop(0)
+
+    result = runner.run_task(
+        "strict pure run",
+        max_steps=2,
+        exec_timeout=5,
+        environment="pure_rlm",
+        max_depth=3,
+    )
+
+    assert result.completed is True
+    events = runner.load_run_events(result.run_id)
+    step_event = next(event for event in events if event.get("type") == "step")
+    observation = step_event.get("observation", {})
+    assert "pure_rlm_strict" in str(observation)
+    assert "delegate action is disabled" in str(observation)
+
+
+def test_rlm_runner_blocks_exec_without_unsafe_opt_in(tmp_path):
+    engine = _ConfigurableExecutionEngine(
+        pure_rlm_backend="exec",
+        pure_rlm_allow_unsafe_exec=False,
+    )
+    runner = RLMRunner(
+        llm_connector=_FakeConnector(responses=[]),
+        execution_engine=engine,
+        run_dir=tmp_path / "runs",
+        workdir=tmp_path,
+    )
+    pure_env = runner.environments["pure_rlm"]
+    assert pure_env._interpreter is not None
+    assert "UnavailablePureRLMInterpreter" in pure_env._interpreter.__class__.__name__
+
+
+def test_rlm_runner_builds_docker_pure_backend(monkeypatch, tmp_path):
+    class _FakeDockerInterpreter:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+            self._vars = {}
+
+        def start(self):
+            return None
+
+        def execute(self, code: str, variables=None):
+            if variables:
+                self._vars.update(variables)
+            self._vars["last_code"] = code
+            return SimpleNamespace(
+                output="",
+                error=None,
+                final_output=None,
+                submit_fields=None,
+            )
+
+        def set_variable(self, name, value):
+            self._vars[name] = value
+
+        def register_external(self, name, handler):
+            return None
+
+        @property
+        def variables(self):
+            return dict(self._vars)
+
+    monkeypatch.setattr(
+        "rlm_code.rlm.docker_interpreter.DockerPersistentInterpreter",
+        _FakeDockerInterpreter,
+    )
+    engine = _ConfigurableExecutionEngine(
+        pure_rlm_backend="docker",
+        pure_rlm_strict=False,
+    )
+    runner = RLMRunner(
+        llm_connector=_FakeConnector(responses=[]),
+        execution_engine=engine,
+        run_dir=tmp_path / "runs",
+        workdir=tmp_path,
+    )
+    pure_env = runner.environments["pure_rlm"]
+    assert pure_env._interpreter is not None
+    assert pure_env._interpreter.__class__.__name__ == "_FakeDockerInterpreter"
+
+
+def test_rlm_supported_frameworks_include_all_adapters(tmp_path):
+    runner = RLMRunner(
+        llm_connector=_FakeConnector(responses=[]),
+        execution_engine=_FakeExecutionEngine(),
+        run_dir=tmp_path / "runs",
+        workdir=tmp_path,
+    )
+    supported = set(runner.supported_frameworks())
+    assert "native" in supported
+    assert "dspy-rlm" in supported
+    assert "adk-rlm" in supported
+    assert "pydantic-ai" in supported
+    assert "google-adk" in supported
+    assert "deepagents" in supported
+
+
 class _FakeFrameworkAdapter:
     framework_id = "fake-framework"
 
@@ -952,13 +1397,8 @@ def test_rlm_run_task_framework_adapter_mode(tmp_path):
     assert final_event.get("framework") == "fake-framework"
 
 
-def test_rlm_run_task_framework_dspy_uses_native_dspy_loop(tmp_path):
-    connector = _FakeConnector(
-        responses=[
-            '{"action":"write_file","path":"sig.py","content":"import dspy\\n","done":false}',
-            '{"action":"final","done":true,"final_response":"done"}',
-        ]
-    )
+def test_rlm_run_task_framework_dspy_alias_routes_to_registry_adapter(tmp_path):
+    connector = _FakeConnector(responses=[])
     engine = _FakeExecutionEngine()
     runner = RLMRunner(
         llm_connector=connector,
@@ -967,16 +1407,22 @@ def test_rlm_run_task_framework_dspy_uses_native_dspy_loop(tmp_path):
         workdir=tmp_path,
     )
 
+    class _FakeDSPyRegistryAdapter(_FakeFrameworkAdapter):
+        framework_id = "dspy-rlm"
+
+    runner.framework_registry.register(_FakeDSPyRegistryAdapter())
+
     result = runner.run_task(
-        "dspy framework route",
+        "dspy alias route",
         max_steps=3,
         exec_timeout=5,
         framework="dspy",
         environment="generic",
     )
+
     assert result.completed is True
-    assert (tmp_path / "sig.py").exists()
+    assert "framework:dspy alias route" in result.final_response
     events = runner.load_run_events(result.run_id)
     final_event = next(event for event in events if event.get("type") == "final")
-    assert final_event.get("framework") == "dspy"
-    assert final_event.get("environment") == "dspy"
+    assert final_event.get("framework") == "dspy-rlm"
+    assert final_event.get("environment") == "generic"

@@ -16,17 +16,16 @@ from pathlib import Path
 import pytest
 
 from rlm_code.rlm.session_replay import (
-    SessionSnapshot,
-    SessionRecorder,
-    SessionReplayer,
-    SessionStore,
     SessionEvent,
     SessionEventType,
+    SessionRecorder,
+    SessionReplayer,
+    SessionSnapshot,
+    SessionStore,
     StepState,
-    SessionComparison,
     compare_sessions,
-    load_session,
     create_recorder,
+    load_session,
 )
 
 
@@ -359,7 +358,12 @@ class TestSessionReplayer:
     def create_sample_snapshot(self) -> SessionSnapshot:
         """Create a sample snapshot for testing."""
         steps = [
-            StepState(step=i, timestamp=f"2024-01-15T10:00:0{i}+00:00", reward=0.2, cumulative_reward=0.2*(i+1))
+            StepState(
+                step=i,
+                timestamp=f"2024-01-15T10:00:0{i}+00:00",
+                reward=0.2,
+                cumulative_reward=0.2 * (i + 1),
+            )
             for i in range(5)
         ]
         return SessionSnapshot(
@@ -444,12 +448,25 @@ class TestSessionReplayer:
         """Test finding a step by predicate."""
         steps = [
             StepState(step=0, timestamp="", success=True, reward=0.2, cumulative_reward=0.2),
-            StepState(step=1, timestamp="", success=False, error="fail", reward=-0.1, cumulative_reward=0.1),
+            StepState(
+                step=1,
+                timestamp="",
+                success=False,
+                error="fail",
+                reward=-0.1,
+                cumulative_reward=0.1,
+            ),
             StepState(step=2, timestamp="", success=True, reward=0.3, cumulative_reward=0.4),
         ]
         snapshot = SessionSnapshot(
-            snapshot_id="s1", session_id="s1", run_id="r1",
-            created_at="", step=3, total_steps=3, task="", environment="",
+            snapshot_id="s1",
+            session_id="s1",
+            run_id="r1",
+            created_at="",
+            step=3,
+            total_steps=3,
+            task="",
+            environment="",
             steps=steps,
         )
         replayer = SessionReplayer(snapshot)
@@ -463,13 +480,33 @@ class TestSessionReplayer:
         """Test finding all error steps."""
         steps = [
             StepState(step=0, timestamp="", success=True, reward=0.2, cumulative_reward=0.2),
-            StepState(step=1, timestamp="", success=False, error="fail1", reward=-0.1, cumulative_reward=0.1),
+            StepState(
+                step=1,
+                timestamp="",
+                success=False,
+                error="fail1",
+                reward=-0.1,
+                cumulative_reward=0.1,
+            ),
             StepState(step=2, timestamp="", success=True, reward=0.3, cumulative_reward=0.4),
-            StepState(step=3, timestamp="", success=False, error="fail2", reward=-0.1, cumulative_reward=0.3),
+            StepState(
+                step=3,
+                timestamp="",
+                success=False,
+                error="fail2",
+                reward=-0.1,
+                cumulative_reward=0.3,
+            ),
         ]
         snapshot = SessionSnapshot(
-            snapshot_id="s1", session_id="s1", run_id="r1",
-            created_at="", step=4, total_steps=4, task="", environment="",
+            snapshot_id="s1",
+            session_id="s1",
+            run_id="r1",
+            created_at="",
+            step=4,
+            total_steps=4,
+            task="",
+            environment="",
             steps=steps,
         )
         replayer = SessionReplayer(snapshot)
@@ -595,15 +632,17 @@ class TestSessionComparison:
         cumulative = 0.0
         for i, s in enumerate(steps):
             cumulative += s.get("reward", 0.0)
-            step_states.append(StepState(
-                step=i,
-                timestamp="",
-                action_type=s.get("action_type", "run_python"),
-                action_code=s.get("code", ""),
-                success=s.get("success", True),
-                reward=s.get("reward", 0.0),
-                cumulative_reward=cumulative,
-            ))
+            step_states.append(
+                StepState(
+                    step=i,
+                    timestamp="",
+                    action_type=s.get("action_type", "run_python"),
+                    action_code=s.get("code", ""),
+                    success=s.get("success", True),
+                    reward=s.get("reward", 0.0),
+                    cumulative_reward=cumulative,
+                )
+            )
 
         return SessionSnapshot(
             snapshot_id=f"snap_{session_id}",
@@ -677,12 +716,42 @@ class TestLoadSession:
 
             # Create a simple JSONL file with proper event sequence
             events = [
-                {"event_type": "session_start", "timestamp": "2024-01-15T10:00:00+00:00", "step": 0, "data": {"task": "Test", "environment": "python"}},
-                {"event_type": "step_start", "timestamp": "2024-01-15T10:00:01+00:00", "step": 0, "data": {"step": 0}},
-                {"event_type": "step_action", "timestamp": "2024-01-15T10:00:01+00:00", "step": 0, "data": {"action": {"action": "run_python", "code": "x=1"}}},
-                {"event_type": "step_result", "timestamp": "2024-01-15T10:00:01+00:00", "step": 0, "data": {"observation": {"success": True}, "reward": 0.5, "success": True}},
-                {"event_type": "step_end", "timestamp": "2024-01-15T10:00:01+00:00", "step": 0, "data": {}},
-                {"event_type": "session_end", "timestamp": "2024-01-15T10:00:02+00:00", "step": 1, "data": {"completed": True}},
+                {
+                    "event_type": "session_start",
+                    "timestamp": "2024-01-15T10:00:00+00:00",
+                    "step": 0,
+                    "data": {"task": "Test", "environment": "python"},
+                },
+                {
+                    "event_type": "step_start",
+                    "timestamp": "2024-01-15T10:00:01+00:00",
+                    "step": 0,
+                    "data": {"step": 0},
+                },
+                {
+                    "event_type": "step_action",
+                    "timestamp": "2024-01-15T10:00:01+00:00",
+                    "step": 0,
+                    "data": {"action": {"action": "run_python", "code": "x=1"}},
+                },
+                {
+                    "event_type": "step_result",
+                    "timestamp": "2024-01-15T10:00:01+00:00",
+                    "step": 0,
+                    "data": {"observation": {"success": True}, "reward": 0.5, "success": True},
+                },
+                {
+                    "event_type": "step_end",
+                    "timestamp": "2024-01-15T10:00:01+00:00",
+                    "step": 0,
+                    "data": {},
+                },
+                {
+                    "event_type": "session_end",
+                    "timestamp": "2024-01-15T10:00:02+00:00",
+                    "step": 1,
+                    "data": {"completed": True},
+                },
             ]
 
             with jsonl_path.open("w") as f:

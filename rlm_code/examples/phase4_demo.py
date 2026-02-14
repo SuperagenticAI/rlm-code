@@ -14,13 +14,13 @@ Usage:
 import tempfile
 from pathlib import Path
 
+from rlm_code.mcp.server.tools import RLMTools
 from rlm_code.rlm import (
     # Configuration
     RLMConfig,
     generate_sample_config,
     get_default_config,
 )
-from rlm_code.mcp.server.tools import RLMTools
 
 
 def demo_mcp_tools():
@@ -35,7 +35,7 @@ def demo_mcp_tools():
     for tool in tools:
         print(f"\n[{tool.name}]")
         print(f"  Description: {tool.description[:80]}...")
-        print(f"  Parameters:")
+        print("  Parameters:")
         for param in tool.parameters:
             req = "*" if param.required else " "
             enum_str = f" (enum: {param.enum})" if param.enum else ""

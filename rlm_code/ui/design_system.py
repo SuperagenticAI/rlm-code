@@ -17,10 +17,10 @@ from typing import Sequence
 
 from rich.text import Text
 
-
 # ---------------------------------------------------------------------------
 # Color Palette
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class ColorPalette:
@@ -181,12 +181,10 @@ ICONS = {
     "complete": "✓",
     "error": "✗",
     "pending": "◐",
-
     # Connection
     "connected": "●",
     "disconnected": "○",
     "connecting": "◐",
-
     # Tool kinds
     "read": "↳",
     "write": "↲",
@@ -195,7 +193,6 @@ ICONS = {
     "search": "⌕",
     "mcp": "⬡",
     "lsp": "λ",
-
     # Agents
     "agent": "◈",
     "scout": "⌕",
@@ -204,7 +201,6 @@ ICONS = {
     "fixer": "⟳",
     "tester": "◇",
     "guardian": "▣",
-
     # Misc
     "arrow_right": "→",
     "arrow_left": "←",
@@ -217,6 +213,7 @@ ICONS = {
 # ---------------------------------------------------------------------------
 # Border Characters
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class BorderChars:
@@ -264,7 +261,9 @@ def create_box(
     # Content lines
     for line in lines:
         padded = line.ljust(inner_w)[:inner_w]
-        result.append(f"{border_style}{border.v}{border_end}{padded}{border_style}{border.v}{border_end}")
+        result.append(
+            f"{border_style}{border.v}{border_end}{padded}{border_style}{border.v}{border_end}"
+        )
 
     # Bottom border
     result.append(f"{border_style}{border.tl}{border.h * inner_w}{border.br}{border_end}")
@@ -275,41 +274,44 @@ def create_box(
 # File Icons
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class FileIcons:
     """Emoji-based file type indicators."""
 
-    mapping: dict[str, tuple[str, str]] = field(default_factory=lambda: {
-        ".py": ("\U0001f40d", "#3776ab"),   # snake
-        ".ts": ("\U0001f4a0", "#3178c6"),   # diamond
-        ".tsx": ("\U0001f4a0", "#3178c6"),
-        ".js": ("\u26a1", "#f7df1e"),       # zap
-        ".jsx": ("\u26a1", "#f7df1e"),
-        ".json": ("\U0001f4cb", "#6d6d6d"),
-        ".yaml": ("\u2699\ufe0f", "#cb171e"),
-        ".yml": ("\u2699\ufe0f", "#cb171e"),
-        ".toml": ("\u2699\ufe0f", "#9c4121"),
-        ".md": ("\U0001f4dd", "#083fa1"),
-        ".sh": ("\U0001f4bb", "#4eaa25"),
-        ".bash": ("\U0001f4bb", "#4eaa25"),
-        ".rs": ("\U0001f980", "#dea584"),   # crab
-        ".go": ("\U0001f439", "#00add8"),   # hamster
-        ".rb": ("\U0001f48e", "#cc342d"),   # gem
-        ".java": ("\u2615", "#b07219"),     # coffee
-        ".c": ("\U0001f1e8", "#555555"),
-        ".cpp": ("\U0001f1e8", "#f34b7d"),
-        ".h": ("\U0001f1ed", "#555555"),
-        ".css": ("\U0001f3a8", "#563d7c"),  # palette
-        ".html": ("\U0001f310", "#e34c26"), # globe
-        ".sql": ("\U0001f5c3\ufe0f", "#e38c00"),
-        ".txt": ("\U0001f4c4", "#6d6d6d"),
-        ".csv": ("\U0001f4ca", "#217346"),
-        ".xml": ("\U0001f4c4", "#e44d26"),
-        ".env": ("\U0001f512", "#ecd53f"),  # lock
-        ".lock": ("\U0001f512", "#6d6d6d"),
-        ".dockerfile": ("\U0001f433", "#384d54"),  # whale
-        ".docker": ("\U0001f433", "#384d54"),
-    })
+    mapping: dict[str, tuple[str, str]] = field(
+        default_factory=lambda: {
+            ".py": ("\U0001f40d", "#3776ab"),  # snake
+            ".ts": ("\U0001f4a0", "#3178c6"),  # diamond
+            ".tsx": ("\U0001f4a0", "#3178c6"),
+            ".js": ("\u26a1", "#f7df1e"),  # zap
+            ".jsx": ("\u26a1", "#f7df1e"),
+            ".json": ("\U0001f4cb", "#6d6d6d"),
+            ".yaml": ("\u2699\ufe0f", "#cb171e"),
+            ".yml": ("\u2699\ufe0f", "#cb171e"),
+            ".toml": ("\u2699\ufe0f", "#9c4121"),
+            ".md": ("\U0001f4dd", "#083fa1"),
+            ".sh": ("\U0001f4bb", "#4eaa25"),
+            ".bash": ("\U0001f4bb", "#4eaa25"),
+            ".rs": ("\U0001f980", "#dea584"),  # crab
+            ".go": ("\U0001f439", "#00add8"),  # hamster
+            ".rb": ("\U0001f48e", "#cc342d"),  # gem
+            ".java": ("\u2615", "#b07219"),  # coffee
+            ".c": ("\U0001f1e8", "#555555"),
+            ".cpp": ("\U0001f1e8", "#f34b7d"),
+            ".h": ("\U0001f1ed", "#555555"),
+            ".css": ("\U0001f3a8", "#563d7c"),  # palette
+            ".html": ("\U0001f310", "#e34c26"),  # globe
+            ".sql": ("\U0001f5c3\ufe0f", "#e38c00"),
+            ".txt": ("\U0001f4c4", "#6d6d6d"),
+            ".csv": ("\U0001f4ca", "#217346"),
+            ".xml": ("\U0001f4c4", "#e44d26"),
+            ".env": ("\U0001f512", "#ecd53f"),  # lock
+            ".lock": ("\U0001f512", "#6d6d6d"),
+            ".dockerfile": ("\U0001f433", "#384d54"),  # whale
+            ".docker": ("\U0001f433", "#384d54"),
+        }
+    )
 
     def get(self, suffix: str) -> tuple[str, str]:
         """Return (icon, color) for a file suffix, or a default."""
@@ -323,9 +325,11 @@ FILE_ICONS = FileIcons()
 # Theme System
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class Theme:
     """A named color override that replaces key palette values."""
+
     name: str
     palette: ColorPalette
 
@@ -335,91 +339,167 @@ THEMES: dict[str, Theme] = {
     "tokyo_night": Theme(
         name="Tokyo Night",
         palette=ColorPalette(
-            bg_void="#1a1b26", bg_base="#1a1b26", bg_surface="#1e2030",
-            bg_elevated="#24283b", bg_overlay="#292e42", bg_hover="#2f3549",
-            primary="#7aa2f7", primary_light="#89b4fa", primary_lighter="#b4c4f4",
-            primary_dark="#3d59a1", primary_glow="#7dcfff",
-            secondary="#ff007c", secondary_light="#ff5ea0",
-            accent="#7dcfff", accent_light="#a9d1f5",
-            success="#9ece6a", success_bright="#c3e88d",
-            warning="#e0af68", warning_soft="#f2d88f",
-            error="#f7768e", error_bright="#ff99a8",
-            info="#2ac3de", info_bright="#7dcfff",
-            text_primary="#c0caf5", text_body="#a9b1d6",
-            text_chat="#9aa5ce", text_muted="#565f89",
-            border_default="#3d59a1", border_primary="#7aa2f7",
+            bg_void="#1a1b26",
+            bg_base="#1a1b26",
+            bg_surface="#1e2030",
+            bg_elevated="#24283b",
+            bg_overlay="#292e42",
+            bg_hover="#2f3549",
+            primary="#7aa2f7",
+            primary_light="#89b4fa",
+            primary_lighter="#b4c4f4",
+            primary_dark="#3d59a1",
+            primary_glow="#7dcfff",
+            secondary="#ff007c",
+            secondary_light="#ff5ea0",
+            accent="#7dcfff",
+            accent_light="#a9d1f5",
+            success="#9ece6a",
+            success_bright="#c3e88d",
+            warning="#e0af68",
+            warning_soft="#f2d88f",
+            error="#f7768e",
+            error_bright="#ff99a8",
+            info="#2ac3de",
+            info_bright="#7dcfff",
+            text_primary="#c0caf5",
+            text_body="#a9b1d6",
+            text_chat="#9aa5ce",
+            text_muted="#565f89",
+            border_default="#3d59a1",
+            border_primary="#7aa2f7",
         ),
     ),
     "dracula": Theme(
         name="Dracula",
         palette=ColorPalette(
-            bg_void="#282a36", bg_base="#282a36", bg_surface="#2d303e",
-            bg_elevated="#343746", bg_overlay="#3c3f58",
-            primary="#bd93f9", primary_light="#caa9fa", primary_lighter="#d6bcfa",
-            primary_dark="#6c46b0", primary_glow="#ff79c6",
-            secondary="#ff79c6", secondary_light="#ffa0d2",
-            accent="#8be9fd", accent_light="#aaf0fd",
-            success="#50fa7b", success_bright="#7bffa0",
-            warning="#f1fa8c", warning_soft="#f5fbb4",
-            error="#ff5555", error_bright="#ff8888",
-            info="#8be9fd", info_bright="#b4f0fd",
-            text_primary="#f8f8f2", text_body="#e6e6d1",
-            text_chat="#d4d4c0", text_muted="#6272a4",
-            border_default="#6272a4", border_primary="#bd93f9",
+            bg_void="#282a36",
+            bg_base="#282a36",
+            bg_surface="#2d303e",
+            bg_elevated="#343746",
+            bg_overlay="#3c3f58",
+            primary="#bd93f9",
+            primary_light="#caa9fa",
+            primary_lighter="#d6bcfa",
+            primary_dark="#6c46b0",
+            primary_glow="#ff79c6",
+            secondary="#ff79c6",
+            secondary_light="#ffa0d2",
+            accent="#8be9fd",
+            accent_light="#aaf0fd",
+            success="#50fa7b",
+            success_bright="#7bffa0",
+            warning="#f1fa8c",
+            warning_soft="#f5fbb4",
+            error="#ff5555",
+            error_bright="#ff8888",
+            info="#8be9fd",
+            info_bright="#b4f0fd",
+            text_primary="#f8f8f2",
+            text_body="#e6e6d1",
+            text_chat="#d4d4c0",
+            text_muted="#6272a4",
+            border_default="#6272a4",
+            border_primary="#bd93f9",
         ),
     ),
     "nord": Theme(
         name="Nord",
         palette=ColorPalette(
-            bg_void="#2e3440", bg_base="#2e3440", bg_surface="#3b4252",
-            bg_elevated="#434c5e", bg_overlay="#4c566a",
-            primary="#81a1c1", primary_light="#88c0d0", primary_lighter="#8fbcbb",
-            primary_dark="#5e81ac", primary_glow="#88c0d0",
-            secondary="#b48ead", secondary_light="#c9a4c1",
-            accent="#88c0d0", accent_light="#8fbcbb",
-            success="#a3be8c", success_bright="#b8d4a0",
-            warning="#ebcb8b", warning_soft="#f0d9a8",
-            error="#bf616a", error_bright="#d08770",
-            info="#81a1c1", info_bright="#88c0d0",
-            text_primary="#eceff4", text_body="#e5e9f0",
-            text_chat="#d8dee9", text_muted="#4c566a",
-            border_default="#4c566a", border_primary="#81a1c1",
+            bg_void="#2e3440",
+            bg_base="#2e3440",
+            bg_surface="#3b4252",
+            bg_elevated="#434c5e",
+            bg_overlay="#4c566a",
+            primary="#81a1c1",
+            primary_light="#88c0d0",
+            primary_lighter="#8fbcbb",
+            primary_dark="#5e81ac",
+            primary_glow="#88c0d0",
+            secondary="#b48ead",
+            secondary_light="#c9a4c1",
+            accent="#88c0d0",
+            accent_light="#8fbcbb",
+            success="#a3be8c",
+            success_bright="#b8d4a0",
+            warning="#ebcb8b",
+            warning_soft="#f0d9a8",
+            error="#bf616a",
+            error_bright="#d08770",
+            info="#81a1c1",
+            info_bright="#88c0d0",
+            text_primary="#eceff4",
+            text_body="#e5e9f0",
+            text_chat="#d8dee9",
+            text_muted="#4c566a",
+            border_default="#4c566a",
+            border_primary="#81a1c1",
         ),
     ),
     "monokai": Theme(
         name="Monokai",
         palette=ColorPalette(
-            bg_void="#272822", bg_base="#272822", bg_surface="#2d2e27",
-            bg_elevated="#383830", bg_overlay="#49483e",
-            primary="#ae81ff", primary_light="#c9a5ff", primary_lighter="#d9c2ff",
-            primary_dark="#7b4fbf", primary_glow="#fd971f",
-            secondary="#f92672", secondary_light="#ff5e97",
-            accent="#66d9ef", accent_light="#89e3f4",
-            success="#a6e22e", success_bright="#c4f05e",
-            warning="#e6db74", warning_soft="#eee59f",
-            error="#f92672", error_bright="#ff5e97",
-            info="#66d9ef", info_bright="#89e3f4",
-            text_primary="#f8f8f2", text_body="#e6e6d1",
-            text_chat="#d6d6c0", text_muted="#75715e",
-            border_default="#75715e", border_primary="#ae81ff",
+            bg_void="#272822",
+            bg_base="#272822",
+            bg_surface="#2d2e27",
+            bg_elevated="#383830",
+            bg_overlay="#49483e",
+            primary="#ae81ff",
+            primary_light="#c9a5ff",
+            primary_lighter="#d9c2ff",
+            primary_dark="#7b4fbf",
+            primary_glow="#fd971f",
+            secondary="#f92672",
+            secondary_light="#ff5e97",
+            accent="#66d9ef",
+            accent_light="#89e3f4",
+            success="#a6e22e",
+            success_bright="#c4f05e",
+            warning="#e6db74",
+            warning_soft="#eee59f",
+            error="#f92672",
+            error_bright="#ff5e97",
+            info="#66d9ef",
+            info_bright="#89e3f4",
+            text_primary="#f8f8f2",
+            text_body="#e6e6d1",
+            text_chat="#d6d6c0",
+            text_muted="#75715e",
+            border_default="#75715e",
+            border_primary="#ae81ff",
         ),
     ),
     "gruvbox": Theme(
         name="Gruvbox",
         palette=ColorPalette(
-            bg_void="#282828", bg_base="#282828", bg_surface="#32302f",
-            bg_elevated="#3c3836", bg_overlay="#504945",
-            primary="#d3869b", primary_light="#e0a3b5", primary_lighter="#e8bfcc",
-            primary_dark="#b16286", primary_glow="#d79921",
-            secondary="#fb4934", secondary_light="#fe8019",
-            accent="#83a598", accent_light="#8ec07c",
-            success="#b8bb26", success_bright="#d5d74e",
-            warning="#fabd2f", warning_soft="#fdd56e",
-            error="#fb4934", error_bright="#fe8019",
-            info="#83a598", info_bright="#8ec07c",
-            text_primary="#ebdbb2", text_body="#d5c4a1",
-            text_chat="#bdae93", text_muted="#665c54",
-            border_default="#665c54", border_primary="#d3869b",
+            bg_void="#282828",
+            bg_base="#282828",
+            bg_surface="#32302f",
+            bg_elevated="#3c3836",
+            bg_overlay="#504945",
+            primary="#d3869b",
+            primary_light="#e0a3b5",
+            primary_lighter="#e8bfcc",
+            primary_dark="#b16286",
+            primary_glow="#d79921",
+            secondary="#fb4934",
+            secondary_light="#fe8019",
+            accent="#83a598",
+            accent_light="#8ec07c",
+            success="#b8bb26",
+            success_bright="#d5d74e",
+            warning="#fabd2f",
+            warning_soft="#fdd56e",
+            error="#fb4934",
+            error_bright="#fe8019",
+            info="#83a598",
+            info_bright="#8ec07c",
+            text_primary="#ebdbb2",
+            text_body="#d5c4a1",
+            text_chat="#bdae93",
+            text_muted="#665c54",
+            border_default="#665c54",
+            border_primary="#d3869b",
         ),
     ),
 }
@@ -433,6 +513,7 @@ def get_theme(name: str) -> Theme:
 # ---------------------------------------------------------------------------
 # Render Helpers
 # ---------------------------------------------------------------------------
+
 
 def render_gradient_text(text: str, gradient: Sequence[str] | None = None) -> Text:
     """Render text with characters cycling through a gradient."""

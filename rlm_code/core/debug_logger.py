@@ -5,9 +5,9 @@ Debug logger for enhanced debugging and performance tracking.
 import logging
 import time
 from collections import defaultdict
-from contextlib import contextmanager
-from dataclasses import dataclass, field
 from collections.abc import Generator
+from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import Any
 
 logger = logging.getLogger(__name__)

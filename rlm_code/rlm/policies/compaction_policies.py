@@ -95,11 +95,11 @@ class LLMCompactionPolicy(CompactionPolicy):
 
         # Build prompt
         entries_text = "\n".join(
-            f"Step {i+1}: {e.get('action', 'unknown')} - {e.get('output', '')[:200]}"
+            f"Step {i + 1}: {e.get('action', 'unknown')} - {e.get('output', '')[:200]}"
             for i, e in enumerate(entries)
         )
 
-        prompt = f"""Summarize the following RLM execution history in {config['summary_max_tokens']} tokens or less.
+        prompt = f"""Summarize the following RLM execution history in {config["summary_max_tokens"]} tokens or less.
 Focus on key findings, successful approaches, and important context.
 
 Task: {context.task}
@@ -188,8 +188,8 @@ class DeterministicCompactionPolicy(CompactionPolicy):
                 action = e.get("action", "unknown")
                 action_counts[action] = action_counts.get(action, 0) + 1
             summary_parts.append(
-                f"Previous {len(to_summarize)} steps: " +
-                ", ".join(f"{k}({v})" for k, v in action_counts.items())
+                f"Previous {len(to_summarize)} steps: "
+                + ", ".join(f"{k}({v})" for k, v in action_counts.items())
             )
 
         # Key outputs (truncated)
@@ -313,8 +313,8 @@ class HierarchicalCompactionPolicy(CompactionPolicy):
             old = []
         else:
             recent = history[-recent_n:]
-            medium = history[-(recent_n + medium_n):-recent_n]
-            old = history[:-(recent_n + medium_n)]
+            medium = history[-(recent_n + medium_n) : -recent_n]
+            old = history[: -(recent_n + medium_n)]
 
         result = []
 
@@ -322,30 +322,36 @@ class HierarchicalCompactionPolicy(CompactionPolicy):
         if old:
             old_summary = self._compress_tier(old, detail_level=1)
             self._summaries.append(old_summary)
-            result.append({
-                "type": "summary",
-                "tier": "old",
-                "content": old_summary,
-                "entries_summarized": len(old),
-            })
+            result.append(
+                {
+                    "type": "summary",
+                    "tier": "old",
+                    "content": old_summary,
+                    "entries_summarized": len(old),
+                }
+            )
 
         # Include historical summaries
         if self._summaries:
             combined_history = " | ".join(self._summaries[-3:])  # Keep last 3
-            result.append({
-                "type": "historical_summary",
-                "content": combined_history,
-            })
+            result.append(
+                {
+                    "type": "historical_summary",
+                    "content": combined_history,
+                }
+            )
 
         # Medium tier: partial detail
         if medium:
             medium_summary = self._compress_tier(medium, detail_level=2)
-            result.append({
-                "type": "summary",
-                "tier": "medium",
-                "content": medium_summary,
-                "entries_summarized": len(medium),
-            })
+            result.append(
+                {
+                    "type": "summary",
+                    "tier": "medium",
+                    "content": medium_summary,
+                    "entries_summarized": len(medium),
+                }
+            )
 
         # Recent tier: full detail
         result.extend(recent)

@@ -93,7 +93,7 @@ class PersistentShell:
                 break
 
         marker = f"__DSPY_SHELL_DONE_{uuid.uuid4().hex}__"
-        wrapped = f"{command}\nprintf \"{marker}:%s\\n\" $?\n"
+        wrapped = f'{command}\nprintf "{marker}:%s\\n" $?\n'
 
         with self._write_lock:
             if self._proc.stdin is None:
@@ -150,4 +150,3 @@ class PersistentShell:
                 self._proc.kill()
             except Exception:
                 pass
-

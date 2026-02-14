@@ -13,6 +13,25 @@ Key components:
 - MemoryCompactor: Context window management via summarization
 """
 
+# Approval / HITL Gates
+from .approval import (
+    ApprovalAuditLog,
+    ApprovalGate,
+    ApprovalHandler,
+    ApprovalPolicy,
+    ApprovalRequest,
+    ApprovalResponse,
+    ApprovalStatus,
+    AuditEntry,
+    AutoApproveHandler,
+    AutoDenyHandler,
+    CallbackApprovalHandler,
+    ConsoleApprovalHandler,
+    RiskAssessment,
+    RiskAssessor,
+    ToolRiskLevel,
+)
+from .code_interpreter import CodeInterpreter, CodeResult, LocalInterpreter
 from .comparison import (
     ComparisonResult,
     Paradigm,
@@ -20,6 +39,16 @@ from .comparison import (
     ParadigmResult,
     create_comparison_report,
 )
+from .config_schema import (
+    BenchmarkConfig,
+    MCPServerConfig,
+    RLMConfig,
+    SandboxConfig,
+    TrajectoryConfig,
+    generate_sample_config,
+    get_default_config,
+)
+from .docker_interpreter import DockerPersistentInterpreter
 from .environments import (
     DSPyCodingRLMEnvironment,
     EnvironmentActionResult,
@@ -35,11 +64,25 @@ from .events import (
     RLMRuntimeEvent,
 )
 from .frameworks import (
+    ADKRLMFrameworkAdapter,
+    DeepAgentsFrameworkAdapter,
+    DSPyRLMFrameworkAdapter,
     FrameworkAdapterRegistry,
     FrameworkEpisodeResult,
     FrameworkStepRecord,
     GoogleADKFrameworkAdapter,
     PydanticAIFrameworkAdapter,
+)
+from .leaderboard import (
+    Leaderboard,
+    LeaderboardEntry,
+    LeaderboardFilter,
+    RankingMetric,
+    RankingResult,
+    SortOrder,
+    aggregate_by_field,
+    compute_trend,
+    leaderboard_cli,
 )
 from .memory_compaction import (
     CompactionConfig,
@@ -47,23 +90,6 @@ from .memory_compaction import (
     ConversationMemory,
     MemoryCompactor,
 )
-from .observability import (
-    RLMObservability,
-    RLMObservabilitySink,
-    LocalJSONLSink,
-    MLflowSink,
-    OpenTelemetrySink,
-    LangSmithSink,
-    LangFuseSink,
-    LogfireSink,
-    CompositeSink,
-    create_otel_sink_from_env,
-    create_langsmith_sink_from_env,
-    create_langfuse_sink_from_env,
-    create_logfire_sink_from_env,
-    create_all_sinks_from_env,
-)
-from .code_interpreter import CodeInterpreter, CodeResult, LocalInterpreter
 from .mock_interpreter import MockInterpreter
 from .monty_interpreter import (
     MontyCodeResult,
@@ -71,6 +97,53 @@ from .monty_interpreter import (
     MontyExecutionStats,
     MontyInterpreter,
     create_rlm_monty_interpreter,
+)
+from .observability import (
+    LocalJSONLSink,
+    MLflowSink,
+    RLMObservability,
+    RLMObservabilitySink,
+)
+from .observability_sinks import (
+    CompositeSink,
+    LangFuseSink,
+    LangSmithSink,
+    LogfireSink,
+    OpenTelemetrySink,
+    create_all_sinks_from_env,
+    create_langfuse_sink_from_env,
+    create_langsmith_sink_from_env,
+    create_logfire_sink_from_env,
+    create_otel_sink_from_env,
+)
+
+# Policy Lab - Hot-swappable policies
+from .policies import (
+    ActionSelectionPolicy,
+    BeamSearchActionPolicy,
+    CompactionPolicy,
+    ConfidenceTerminationPolicy,
+    # Reward policies
+    DefaultRewardPolicy,
+    DeterministicCompactionPolicy,
+    # Termination policies
+    FinalPatternTerminationPolicy,
+    # Action policies
+    GreedyActionPolicy,
+    HierarchicalCompactionPolicy,
+    LenientRewardPolicy,
+    # Compaction policies
+    LLMCompactionPolicy,
+    MCTSActionPolicy,
+    Policy,
+    PolicyRegistry,
+    ResearchRewardPolicy,
+    RewardPolicy,
+    RewardThresholdTerminationPolicy,
+    SamplingActionPolicy,
+    SlidingWindowCompactionPolicy,
+    StrictRewardPolicy,
+    TerminationPolicy,
 )
 from .pure_rlm_environment import PureRLMConfig, PureRLMEnvironment
 from .repl_types import (
@@ -83,9 +156,24 @@ from .repl_types import (
 )
 from .runner import (
     RLMBenchmarkComparison,
+    RLMBenchmarkReport,
     RLMBenchmarkResult,
+    RLMJudgeResult,
     RLMRunner,
     RLMRunResult,
+)
+from .session_replay import (
+    SessionComparison,
+    SessionEvent,
+    SessionEventType,
+    SessionRecorder,
+    SessionReplayer,
+    SessionSnapshot,
+    SessionStore,
+    StepState,
+    compare_sessions,
+    create_recorder,
+    load_session,
 )
 from .task_signature import TaskSignature
 from .termination import (
@@ -108,85 +196,6 @@ from .trajectory import (
     TrajectoryViewer,
     compare_trajectories,
     load_trajectory,
-)
-from .config_schema import (
-    RLMConfig,
-    BenchmarkConfig,
-    MCPServerConfig,
-    SandboxConfig,
-    TrajectoryConfig,
-    generate_sample_config,
-    get_default_config,
-)
-from .leaderboard import (
-    Leaderboard,
-    LeaderboardEntry,
-    LeaderboardFilter,
-    RankingMetric,
-    RankingResult,
-    SortOrder,
-    leaderboard_cli,
-    aggregate_by_field,
-    compute_trend,
-)
-from .session_replay import (
-    SessionSnapshot,
-    SessionRecorder,
-    SessionReplayer,
-    SessionStore,
-    SessionEvent,
-    SessionEventType,
-    StepState,
-    SessionComparison,
-    compare_sessions,
-    load_session,
-    create_recorder,
-)
-# Policy Lab - Hot-swappable policies
-from .policies import (
-    Policy,
-    PolicyRegistry,
-    RewardPolicy,
-    ActionSelectionPolicy,
-    CompactionPolicy,
-    TerminationPolicy,
-    # Reward policies
-    DefaultRewardPolicy,
-    StrictRewardPolicy,
-    LenientRewardPolicy,
-    ResearchRewardPolicy,
-    # Action policies
-    GreedyActionPolicy,
-    SamplingActionPolicy,
-    BeamSearchActionPolicy,
-    MCTSActionPolicy,
-    # Compaction policies
-    LLMCompactionPolicy,
-    DeterministicCompactionPolicy,
-    SlidingWindowCompactionPolicy,
-    HierarchicalCompactionPolicy,
-    # Termination policies
-    FinalPatternTerminationPolicy,
-    RewardThresholdTerminationPolicy,
-    ConfidenceTerminationPolicy,
-)
-# Approval / HITL Gates
-from .approval import (
-    ApprovalGate,
-    ApprovalRequest,
-    ApprovalResponse,
-    ApprovalStatus,
-    ApprovalPolicy,
-    RiskAssessor,
-    ToolRiskLevel,
-    RiskAssessment,
-    ApprovalHandler,
-    ConsoleApprovalHandler,
-    AutoApproveHandler,
-    AutoDenyHandler,
-    CallbackApprovalHandler,
-    ApprovalAuditLog,
-    AuditEntry,
 )
 
 __all__ = [
@@ -211,6 +220,7 @@ __all__ = [
     "CodeInterpreter",
     "CodeResult",
     "LocalInterpreter",
+    "DockerPersistentInterpreter",
     "MockInterpreter",
     # Monty Interpreter (sandboxed Rust-based Python)
     "MontyInterpreter",
@@ -251,11 +261,16 @@ __all__ = [
     "FrameworkAdapterRegistry",
     "FrameworkEpisodeResult",
     "FrameworkStepRecord",
+    "DSPyRLMFrameworkAdapter",
+    "ADKRLMFrameworkAdapter",
     "GoogleADKFrameworkAdapter",
     "PydanticAIFrameworkAdapter",
+    "DeepAgentsFrameworkAdapter",
     # Runner
     "RLMBenchmarkComparison",
+    "RLMBenchmarkReport",
     "RLMBenchmarkResult",
+    "RLMJudgeResult",
     "RLMRunResult",
     "RLMRunner",
     # Observability

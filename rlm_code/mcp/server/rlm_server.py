@@ -9,9 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-import sys
-import tempfile
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
@@ -44,7 +42,9 @@ class ToolCallResult:
                 "content": [
                     {
                         "type": "text",
-                        "text": json.dumps(self.content, indent=2) if isinstance(self.content, (dict, list)) else str(self.content),
+                        "text": json.dumps(self.content, indent=2)
+                        if isinstance(self.content, (dict, list))
+                        else str(self.content),
                     }
                 ],
             }
@@ -77,9 +77,9 @@ class RLMServer:
     def _ensure_runner(self) -> Any:
         """Lazily initialize the RLM runner."""
         if self._runner is None:
-            from ...rlm import RLMRunner
             from ...execution import ExecutionEngine
             from ...models.llm_connector import LLMConnector
+            from ...rlm import RLMRunner
 
             # Create minimal connector (will need configuration in practice)
             self._llm_connector = LLMConnector()
@@ -252,9 +252,7 @@ class RLMServer:
                 "traditional": Paradigm.TRADITIONAL,
             }
 
-            selected_paradigms = [
-                paradigm_map[p] for p in paradigms if p in paradigm_map
-            ]
+            selected_paradigms = [paradigm_map[p] for p in paradigms if p in paradigm_map]
 
             if not selected_paradigms:
                 return ToolCallResult(
@@ -304,25 +302,31 @@ class RLMServer:
             return ToolCallResult(success=False, content=None, error="Preset is required")
 
         limit = args.get("limit", 3)
+        mode = args.get("mode", "native")
 
         try:
             runner = self._ensure_runner()
 
             result = runner.run_benchmark(
                 preset=preset,
-                case_limit=limit,
+                mode=mode,
+                limit=limit,
             )
 
             return ToolCallResult(
                 success=True,
                 content={
                     "preset": preset,
-                    "cases_run": result.cases_run,
-                    "cases_completed": result.cases_completed,
-                    "completion_rate": result.completion_rate,
+                    "mode": result.mode,
+                    "benchmark_id": result.benchmark_id,
+                    "summary_path": str(result.summary_path),
+                    "cases_run": result.total_cases,
+                    "cases_completed": result.completed_cases,
+                    "completion_rate": (
+                        (result.completed_cases / result.total_cases) if result.total_cases else 0.0
+                    ),
                     "avg_steps": result.avg_steps,
                     "avg_reward": result.avg_reward,
-                    "total_time_seconds": result.total_time_seconds,
                 },
             )
 
@@ -432,14 +436,14 @@ class RLMServer:
 
         reader = asyncio.StreamReader()
         protocol = asyncio.StreamReaderProtocol(reader)
-        await asyncio.get_event_loop().connect_read_pipe(
-            lambda: protocol, sys.stdin
-        )
+        await asyncio.get_event_loop().connect_read_pipe(lambda: protocol, sys.stdin)
 
         writer_transport, writer_protocol = await asyncio.get_event_loop().connect_write_pipe(
             asyncio.streams.FlowControlMixin, sys.stdout
         )
-        writer = asyncio.StreamWriter(writer_transport, writer_protocol, reader, asyncio.get_event_loop())
+        writer = asyncio.StreamWriter(
+            writer_transport, writer_protocol, reader, asyncio.get_event_loop()
+        )
 
         while True:
             try:

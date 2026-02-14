@@ -41,6 +41,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
 import yaml
 
 
@@ -295,7 +296,7 @@ def get_default_config() -> RLMConfig:
 
 def generate_sample_config() -> str:
     """Generate a sample rlm.yaml configuration file."""
-    return '''# RLM Code Configuration
+    return """# RLM Code Configuration
 # See: https://github.com/anthropics/rlm-code
 
 rlm:
@@ -368,4 +369,4 @@ rlm:
     format: jsonl
     include_prompts: false  # Privacy: don't log full prompts
     include_responses: true
-'''
+"""

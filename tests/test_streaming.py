@@ -3,12 +3,13 @@ Tests for streaming support.
 """
 
 import asyncio
+
 import pytest
 
 from rlm_code.models.streaming import (
     StreamConfig,
-    StreamManager,
     StreamingFallback,
+    StreamManager,
     supports_streaming,
 )
 

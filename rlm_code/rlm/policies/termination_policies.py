@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from .base import TerminationPolicy, ActionResult, PolicyContext
+from .base import ActionResult, PolicyContext, TerminationPolicy
 from .registry import PolicyRegistry
 
 
@@ -207,6 +207,7 @@ class CompositeTerminationPolicy(TerminationPolicy):
         for name in policy_names:
             try:
                 from .registry import PolicyRegistry
+
                 policy = PolicyRegistry.get_termination(name)
                 self._sub_policies.append(policy)
             except ValueError:

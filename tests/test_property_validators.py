@@ -22,25 +22,23 @@ PYTHON_KEYWORDS = set(keyword.kwlist)
 
 # Strategies for generating valid Python identifiers
 valid_identifier_chars = string.ascii_letters + string.digits + "_"
-identifier_strategy = st.text(
-    alphabet=string.ascii_letters + "_",
-    min_size=1,
-    max_size=1
-).flatmap(
-    lambda first: st.text(
-        alphabet=valid_identifier_chars,
-        min_size=0,
-        max_size=20
-    ).map(lambda rest: first + rest)
-).filter(lambda x: x.isidentifier() and not x.startswith("_") and x not in PYTHON_KEYWORDS)
+identifier_strategy = (
+    st.text(alphabet=string.ascii_letters + "_", min_size=1, max_size=1)
+    .flatmap(
+        lambda first: st.text(alphabet=valid_identifier_chars, min_size=0, max_size=20).map(
+            lambda rest: first + rest
+        )
+    )
+    .filter(lambda x: x.isidentifier() and not x.startswith("_") and x not in PYTHON_KEYWORDS)
+)
 
 
 # Strategy for generating field descriptions
-description_strategy = st.text(
-    alphabet=string.ascii_letters + string.digits + " ",
-    min_size=1,
-    max_size=50
-).map(lambda s: s.strip()).filter(lambda s: len(s) > 0)
+description_strategy = (
+    st.text(alphabet=string.ascii_letters + string.digits + " ", min_size=1, max_size=50)
+    .map(lambda s: s.strip())
+    .filter(lambda s: len(s) > 0)
+)
 
 
 class TestSignatureValidatorProperties:
@@ -66,17 +64,17 @@ class TestSignatureValidatorProperties:
     ):
         """
         Property 1: Signature Validator Correctness
-        
+
         For any well-formed DSPy signature (class inheriting from dspy.Signature
         with InputField and OutputField), the signature validator SHALL report no errors.
-        
+
         **Validates: Requirements 2.1**
         """
         # Ensure field names are different
         assume(input_field_name != output_field_name)
         # Ensure class name doesn't conflict with Python keywords
         assume(class_name not in {"Signature", "Module", "InputField", "OutputField"})
-        
+
         # Generate valid signature code
         code = f'''import dspy
 
@@ -86,11 +84,11 @@ class {class_name}(dspy.Signature):
     {input_field_name} = dspy.InputField(desc="{input_desc}")
     {output_field_name} = dspy.OutputField(desc="{output_desc}")
 '''
-        
+
         # Validate the code
         validator = DSPyValidator()
         report = validator.validate_code(code, "test_signature.py")
-        
+
         # Should have no errors (warnings/info are acceptable)
         errors = [issue for issue in report.issues if issue.severity == IssueSeverity.ERROR]
         assert len(errors) == 0, f"Valid signature should have no errors, got: {errors}"
@@ -117,10 +115,10 @@ class TestModuleValidatorProperties:
     ):
         """
         Property 2: Module Validator Correctness
-        
+
         For any well-formed DSPy module (class inheriting from dspy.Module
         with __init__ and forward methods), the module validator SHALL report no errors.
-        
+
         **Validates: Requirements 2.2**
         """
         # Ensure names are different
@@ -128,7 +126,7 @@ class TestModuleValidatorProperties:
         assume(input_field != output_field)
         assume(module_name not in {"Module", "Signature", "Predict"})
         assume(signature_name not in {"Module", "Signature", "Predict"})
-        
+
         # Generate valid module code
         code = f'''import dspy
 
@@ -148,11 +146,11 @@ class {module_name}(dspy.Module):
         """Execute the task."""
         return self.predictor({input_field}={input_field})
 '''
-        
+
         # Validate the code
         validator = DSPyValidator()
         report = validator.validate_code(code, "test_module.py")
-        
+
         # Should have no errors
         errors = [issue for issue in report.issues if issue.severity == IssueSeverity.ERROR]
         assert len(errors) == 0, f"Valid module should have no errors, got: {errors}"
@@ -163,9 +161,7 @@ class TestCodeGeneratorProperties:
 
     # Strategy for multi-word task descriptions
     task_description_strategy = st.lists(
-        st.text(alphabet=string.ascii_letters, min_size=3, max_size=10),
-        min_size=3,
-        max_size=6
+        st.text(alphabet=string.ascii_letters, min_size=3, max_size=10), min_size=3, max_size=6
     ).map(lambda words: " ".join(words))
 
     # **Feature: rlm-code-improvements, Property 3: Code Generator Syntax Validity**
@@ -186,10 +182,10 @@ class TestCodeGeneratorProperties:
     ):
         """
         Property 3: Code Generator Syntax Validity
-        
+
         For any valid TaskDefinition with non-empty input and output fields,
         the code generator SHALL produce Python code that parses without SyntaxError.
-        
+
         **Validates: Requirements 2.3**
         """
         from rlm_code.models.code_generator import CodeGenerator
@@ -198,45 +194,39 @@ class TestCodeGeneratorProperties:
             ReasoningPattern,
             TaskDefinition,
         )
-        
+
         # Ensure field names are different
         assume(input_field_name != output_field_name)
-        
+
         # Create task definition
         task_def = TaskDefinition(
             description=task_description,
             input_fields=[
-                FieldDefinition(
-                    name=input_field_name,
-                    type="str",
-                    description=input_desc
-                )
+                FieldDefinition(name=input_field_name, type="str", description=input_desc)
             ],
             output_fields=[
-                FieldDefinition(
-                    name=output_field_name,
-                    type="str",
-                    description=output_desc
-                )
+                FieldDefinition(name=output_field_name, type="str", description=output_desc)
             ],
             complexity="simple",
-            domain="general"
+            domain="general",
         )
-        
+
         # Create a mock model manager
         class MockModelManager:
             class MockConfigManager:
                 class MockConfig:
                     default_model = None
+
                 config = MockConfig()
+
             config_manager = MockConfigManager()
-        
+
         # Generate code
         generator = CodeGenerator(MockModelManager())
         pattern = ReasoningPattern(type="predict")
-        
+
         program = generator.generate_from_task(task_def, [], pattern)
-        
+
         # Test individual components parse correctly
         # Signature code
         sig_code = "import dspy\n\n" + program.signature_code
@@ -244,7 +234,7 @@ class TestCodeGeneratorProperties:
             ast.parse(sig_code)
         except SyntaxError as e:
             pytest.fail(f"Signature code has syntax error: {e}\n\nCode:\n{sig_code}")
-        
+
         # Module code (needs signature)
         module_code = sig_code + "\n\n" + program.module_code
         try:
@@ -270,17 +260,17 @@ class TestConfigurationProperties:
     ):
         """
         Property 4: Configuration Round-Trip
-        
+
         For any valid ProjectConfig, serializing to YAML and deserializing
         SHALL produce an equivalent configuration.
-        
+
         **Validates: Requirements 2.4**
         """
         import tempfile
         from pathlib import Path
 
         from rlm_code.core.config import GepaConfig, ModelConfig, ProjectConfig
-        
+
         # Create a configuration
         config = ProjectConfig(
             name=project_name,
@@ -289,17 +279,17 @@ class TestConfigurationProperties:
             models=ModelConfig(),
             gepa_config=GepaConfig(),
         )
-        
+
         # Save to temporary file
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             temp_path = Path(f.name)
-        
+
         try:
             config.save_to_file(temp_path)
-            
+
             # Load back
             loaded_config = ProjectConfig.load_from_file(temp_path)
-            
+
             # Verify key fields match
             assert loaded_config.name == config.name
             assert loaded_config.version == config.version
@@ -314,86 +304,90 @@ class TestDocumentationProperties:
     """Property-based tests for documentation coverage."""
 
     # **Feature: rlm-code-improvements, Property 14: Public Method Documentation**
-    @given(st.sampled_from([
-        # Core modules
-        "rlm_code.core.config",
-        "rlm_code.core.debug_logger",
-        # MCP modules
-        "rlm_code.mcp.utils",
-        "rlm_code.mcp.retry",
-        "rlm_code.mcp.client_manager",
-        # Model modules
-        "rlm_code.models.cache",
-        "rlm_code.models.streaming",
-        "rlm_code.models.code_generator",
-        "rlm_code.models.model_manager",
-        # Validation modules
-        "rlm_code.validation.validator",
-        "rlm_code.validation.security",
-        "rlm_code.validation.signature_validator",
-        "rlm_code.validation.module_validator",
-        # Execution modules
-        "rlm_code.execution.engine",
-        # Runtime modules
-        "rlm_code.rlm.runner",
-    ]))
+    @given(
+        st.sampled_from(
+            [
+                # Core modules
+                "rlm_code.core.config",
+                "rlm_code.core.debug_logger",
+                # MCP modules
+                "rlm_code.mcp.utils",
+                "rlm_code.mcp.retry",
+                "rlm_code.mcp.client_manager",
+                # Model modules
+                "rlm_code.models.cache",
+                "rlm_code.models.streaming",
+                "rlm_code.models.code_generator",
+                "rlm_code.models.model_manager",
+                # Validation modules
+                "rlm_code.validation.validator",
+                "rlm_code.validation.security",
+                "rlm_code.validation.signature_validator",
+                "rlm_code.validation.module_validator",
+                # Execution modules
+                "rlm_code.execution.engine",
+                # Runtime modules
+                "rlm_code.rlm.runner",
+            ]
+        )
+    )
     def test_public_methods_have_docstrings(self, module_name: str):
         """
         Property 14: Public Method Documentation
-        
+
         For any public method in the rlm_code package, the method SHALL have
         a non-empty docstring.
-        
+
         **Validates: Requirements 9.2**
         """
         import importlib
         import inspect
-        
+
         # Import the module
         module = importlib.import_module(module_name)
-        
+
         # Get all classes in the module
         classes = inspect.getmembers(module, inspect.isclass)
-        
+
         missing_docstrings = []
-        
+
         for class_name, cls in classes:
             # Skip imported classes (only check classes defined in this module)
             if cls.__module__ != module_name:
                 continue
-            
+
             # Skip private classes
             if class_name.startswith("_"):
                 continue
-            
+
             # Check class docstring
             if not cls.__doc__ or not cls.__doc__.strip():
                 missing_docstrings.append(f"{class_name} (class)")
-            
+
             # Check public methods
             for method_name, method in inspect.getmembers(cls, predicate=inspect.isfunction):
                 # Skip private methods
                 if method_name.startswith("_"):
                     continue
-                
+
                 # Check method docstring
                 if not method.__doc__ or not method.__doc__.strip():
                     missing_docstrings.append(f"{class_name}.{method_name}")
-        
+
         # Also check module-level functions
         functions = inspect.getmembers(module, inspect.isfunction)
         for func_name, func in functions:
             # Skip imported functions
             if func.__module__ != module_name:
                 continue
-            
+
             # Skip private functions
             if func_name.startswith("_"):
                 continue
-            
+
             if not func.__doc__ or not func.__doc__.strip():
                 missing_docstrings.append(f"{func_name} (function)")
-        
+
         assert len(missing_docstrings) == 0, (
             f"Module {module_name} has public methods/classes without docstrings: "
             f"{missing_docstrings}"

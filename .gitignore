@@ -85,8 +85,8 @@ target/
 profile_default/
 ipython_config.py
 
-# pyenv
-.python-version
+# pyenv (kept for uv — do NOT ignore .python-version)
+# .python-version
 
 # pipenv
 Pipfile.lock

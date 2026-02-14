@@ -6,7 +6,7 @@ import hashlib
 import time
 from collections import OrderedDict
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from .code_generator import GeneratedProgram
@@ -125,7 +125,7 @@ class CodeGenerationCache:
             # Move to end (most recently used)
             self._cache.move_to_end(key)
             self._hits += 1
-            return entry.value
+            return cast("GeneratedProgram", entry.value)
 
         self._misses += 1
         return None

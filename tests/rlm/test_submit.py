@@ -5,7 +5,6 @@ import pytest
 from rlm_code.rlm.termination import (
     FINAL,
     SUBMIT,
-    FinalDetection,
     FinalOutput,
     SubmitOutput,
     detect_final_in_code,

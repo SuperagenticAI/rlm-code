@@ -21,10 +21,10 @@ from textual.widget import Widget
 
 from .design_system import PALETTE
 
-
 # ---------------------------------------------------------------------------
 # Horizontal (vertical bar) divider
 # ---------------------------------------------------------------------------
+
 
 class ResizableDivider(Widget):
     """A thin draggable vertical bar placed between two horizontally-adjacent panels.
@@ -103,6 +103,7 @@ class ResizableDivider(Widget):
 # Vertical (horizontal bar) divider
 # ---------------------------------------------------------------------------
 
+
 class VerticalDivider(Widget):
     """A thin draggable horizontal bar placed between two vertically-stacked panels."""
 
@@ -175,6 +176,7 @@ class VerticalDivider(Widget):
 # ---------------------------------------------------------------------------
 # Horizontal split container (left | right)
 # ---------------------------------------------------------------------------
+
 
 class ResizableHorizontalSplit(Container):
     """A horizontal container with two children separated by a draggable divider.
@@ -285,6 +287,7 @@ class ResizableHorizontalSplit(Container):
 # Vertical split container (top / bottom)
 # ---------------------------------------------------------------------------
 
+
 class ResizableVerticalSplit(Container):
     """A vertical container with two children separated by a draggable divider.
 
@@ -380,6 +383,7 @@ class ResizableVerticalSplit(Container):
 # ---------------------------------------------------------------------------
 # Percentage-based split (from SuperQode's SplitView pattern)
 # ---------------------------------------------------------------------------
+
 
 class PercentageSplit(Container):
     """A horizontal split that uses percentage-based positioning.

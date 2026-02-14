@@ -18,30 +18,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
       - name: Install uv
         uses: astral-sh/setup-uv@v4
         with:
           version: "latest"
 
       - name: Install dependencies
-        run: |
-          uv venv
-          uv pip install -e ".[dev]"
+        run: uv sync --locked --dev
 
       - name: Run ruff linter
-        run: |
-          source .venv/bin/activate
-          ruff check rlm_code tests
+        run: uv run ruff check rlm_code tests
 
       - name: Run ruff formatter check
-        run: |
-          source .venv/bin/activate
-          ruff format --check rlm_code tests
+        run: uv run ruff format --check rlm_code tests
 
   typecheck:
     name: Type Check
@@ -49,25 +38,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
       - name: Install uv
         uses: astral-sh/setup-uv@v4
         with:
           version: "latest"
 
       - name: Install dependencies
-        run: |
-          uv venv
-          uv pip install -e ".[dev]"
+        run: uv sync --locked --dev
 
       - name: Run mypy on core modules
         run: |
-          source .venv/bin/activate
-          mypy rlm_code/core/config.py rlm_code/core/debug_logger.py rlm_code/mcp/utils.py rlm_code/mcp/retry.py rlm_code/models/cache.py rlm_code/models/streaming.py rlm_code/validation/security.py --ignore-missing-imports
+          uv run mypy rlm_code/core/config.py rlm_code/core/debug_logger.py rlm_code/mcp/utils.py rlm_code/mcp/retry.py rlm_code/models/cache.py rlm_code/models/streaming.py rlm_code/validation/security.py --ignore-missing-imports
 
   test:
     name: Test - Python ${{ matrix.python-version }} on ${{ matrix.os }}
@@ -76,15 +57,10 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.11", "3.12", "3.13"]
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
@@ -92,14 +68,10 @@ jobs:
           version: "latest"
 
       - name: Install dependencies
-        run: |
-          uv venv
-          uv pip install -e ".[test]"
+        run: uv sync --locked --python ${{ matrix.python-version }} --extra test
 
       - name: Run tests
-        run: |
-          source .venv/bin/activate || .venv\Scripts\activate
-          pytest tests/ -v --cov=rlm_code --cov-report=xml --cov-report=term-missing
+        run: uv run pytest tests/ -v --cov=rlm_code --cov-report=xml --cov-report=term-missing
 
       - name: Upload coverage
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
@@ -115,25 +87,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
       - name: Install uv
         uses: astral-sh/setup-uv@v4
         with:
           version: "latest"
 
       - name: Install dependencies
-        run: |
-          uv venv
-          uv pip install -e ".[test]"
+        run: uv sync --locked --extra test
 
       - name: Run deterministic RLM benchmark gate
         run: |
-          source .venv/bin/activate
-          python scripts/rlm_bench_gate.py \
+          uv run python scripts/rlm_bench_gate.py \
             --baseline tests/fixtures/rlm_ci_baseline_generic_smoke.json \
             --preset generic_smoke \
             --limit 2
@@ -145,27 +109,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
       - name: Install uv
         uses: astral-sh/setup-uv@v4
         with:
           version: "latest"
 
-      - name: Install build dependencies
-        run: |
-          uv pip install --system build hatchling
-
       - name: Build package
-        run: python -m build
+        run: uv build
 
       - name: Check distribution
         run: |
-          uv pip install --system twine
-          twine check dist/*
+          uv tool run twine check dist/*
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4

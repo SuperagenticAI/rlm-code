@@ -1,7 +1,5 @@
 """Tests for CodeInterpreter protocol and LocalInterpreter."""
 
-import pytest
-
 from rlm_code.rlm.code_interpreter import CodeInterpreter, CodeResult, LocalInterpreter
 
 

@@ -602,9 +602,7 @@ def _parse_pack_payload(
     if isinstance(payload, list):
         return _parse_record_rows(payload, path=path)
 
-    raise ValueError(
-        f"Invalid benchmark pack '{path}': expected mapping/list at top level."
-    )
+    raise ValueError(f"Invalid benchmark pack '{path}': expected mapping/list at top level.")
 
 
 def _looks_like_explicit_preset_mapping(payload: dict[str, Any]) -> bool:
@@ -664,11 +662,12 @@ def _parse_dataset_cases_block(
     cases: list[dict[str, Any]] = []
     for index, raw_case in enumerate(raw_cases, start=1):
         if not isinstance(raw_case, dict):
-            raise ValueError(
-                f"Invalid dataset case #{index} in '{path}': expected mapping."
-            )
+            raise ValueError(f"Invalid dataset case #{index} in '{path}': expected mapping.")
         case_id = str(
-            raw_case.get("id") or raw_case.get("case_id") or raw_case.get("name") or f"{preset_name}_{index}"
+            raw_case.get("id")
+            or raw_case.get("case_id")
+            or raw_case.get("name")
+            or f"{preset_name}_{index}"
         ).strip()
         description = str(raw_case.get("description") or raw_case.get("name") or case_id).strip()
         task = _extract_task_from_dataset_case(raw_case)

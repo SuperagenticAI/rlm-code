@@ -11,21 +11,18 @@ Tests the results aggregation and ranking system:
 
 import json
 import tempfile
-from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
 from rlm_code.rlm.leaderboard import (
+    METRIC_HIGHER_IS_BETTER,
     Leaderboard,
     LeaderboardEntry,
     LeaderboardFilter,
     RankingMetric,
-    RankingResult,
-    SortOrder,
     aggregate_by_field,
     compute_trend,
-    METRIC_HIGHER_IS_BETTER,
 )
 
 
@@ -209,16 +206,21 @@ class TestLeaderboardFilter:
         )
 
         entry1 = LeaderboardEntry(
-            entry_id="1", benchmark_id="b1",
-            environment="python", avg_reward=0.8, completion_rate=0.9
+            entry_id="1",
+            benchmark_id="b1",
+            environment="python",
+            avg_reward=0.8,
+            completion_rate=0.9,
         )
         entry2 = LeaderboardEntry(
-            entry_id="2", benchmark_id="b2",
-            environment="python", avg_reward=0.8, completion_rate=0.5
+            entry_id="2",
+            benchmark_id="b2",
+            environment="python",
+            avg_reward=0.8,
+            completion_rate=0.5,
         )
         entry3 = LeaderboardEntry(
-            entry_id="3", benchmark_id="b3",
-            environment="java", avg_reward=0.8, completion_rate=0.9
+            entry_id="3", benchmark_id="b3", environment="java", avg_reward=0.8, completion_rate=0.9
         )
 
         assert filter.matches(entry1) is True
@@ -233,27 +235,47 @@ class TestLeaderboard:
         """Create test entries for leaderboard tests."""
         return [
             LeaderboardEntry(
-                entry_id="entry-1", benchmark_id="b1",
-                environment="python", model="gpt-4",
-                avg_reward=0.9, completion_rate=1.0, avg_steps=3, total_tokens=2000,
+                entry_id="entry-1",
+                benchmark_id="b1",
+                environment="python",
+                model="gpt-4",
+                avg_reward=0.9,
+                completion_rate=1.0,
+                avg_steps=3,
+                total_tokens=2000,
                 timestamp="2024-01-15T10:00:00+00:00",
             ),
             LeaderboardEntry(
-                entry_id="entry-2", benchmark_id="b2",
-                environment="dspy", model="gpt-4",
-                avg_reward=0.7, completion_rate=0.8, avg_steps=5, total_tokens=3000,
+                entry_id="entry-2",
+                benchmark_id="b2",
+                environment="dspy",
+                model="gpt-4",
+                avg_reward=0.7,
+                completion_rate=0.8,
+                avg_steps=5,
+                total_tokens=3000,
                 timestamp="2024-01-15T11:00:00+00:00",
             ),
             LeaderboardEntry(
-                entry_id="entry-3", benchmark_id="b3",
-                environment="python", model="claude",
-                avg_reward=0.8, completion_rate=0.9, avg_steps=4, total_tokens=2500,
+                entry_id="entry-3",
+                benchmark_id="b3",
+                environment="python",
+                model="claude",
+                avg_reward=0.8,
+                completion_rate=0.9,
+                avg_steps=4,
+                total_tokens=2500,
                 timestamp="2024-01-15T12:00:00+00:00",
             ),
             LeaderboardEntry(
-                entry_id="entry-4", benchmark_id="b4",
-                environment="dspy", model="claude",
-                avg_reward=0.6, completion_rate=0.7, avg_steps=6, total_tokens=4000,
+                entry_id="entry-4",
+                benchmark_id="b4",
+                environment="dspy",
+                model="claude",
+                avg_reward=0.6,
+                completion_rate=0.7,
+                avg_steps=6,
+                total_tokens=4000,
                 timestamp="2024-01-15T13:00:00+00:00",
             ),
         ]
@@ -394,16 +416,28 @@ class TestLeaderboardExport:
         """Create a leaderboard with test data."""
         with tempfile.TemporaryDirectory() as tmpdir:
             leaderboard = Leaderboard(workdir=Path(tmpdir), auto_load=False)
-            leaderboard.add_entry(LeaderboardEntry(
-                entry_id="e1", benchmark_id="b1",
-                environment="python", avg_reward=0.9, completion_rate=1.0,
-                avg_steps=3, total_tokens=2000,
-            ))
-            leaderboard.add_entry(LeaderboardEntry(
-                entry_id="e2", benchmark_id="b2",
-                environment="dspy", avg_reward=0.7, completion_rate=0.8,
-                avg_steps=5, total_tokens=3000,
-            ))
+            leaderboard.add_entry(
+                LeaderboardEntry(
+                    entry_id="e1",
+                    benchmark_id="b1",
+                    environment="python",
+                    avg_reward=0.9,
+                    completion_rate=1.0,
+                    avg_steps=3,
+                    total_tokens=2000,
+                )
+            )
+            leaderboard.add_entry(
+                LeaderboardEntry(
+                    entry_id="e2",
+                    benchmark_id="b2",
+                    environment="dspy",
+                    avg_reward=0.7,
+                    completion_rate=0.8,
+                    avg_steps=5,
+                    total_tokens=3000,
+                )
+            )
             return leaderboard
 
     def test_export_to_json(self):
@@ -451,6 +485,7 @@ class TestLeaderboardExport:
 
         # Just verify it returns a Table object
         from rich.table import Table
+
         assert isinstance(table, Table)
 
 
@@ -477,10 +512,30 @@ class TestAggregationUtilities:
     def test_compute_trend(self):
         """Test computing trend over time."""
         entries = [
-            LeaderboardEntry(entry_id="1", benchmark_id="b1", avg_reward=0.5, timestamp="2024-01-01T10:00:00+00:00"),
-            LeaderboardEntry(entry_id="2", benchmark_id="b2", avg_reward=0.6, timestamp="2024-01-02T10:00:00+00:00"),
-            LeaderboardEntry(entry_id="3", benchmark_id="b3", avg_reward=0.7, timestamp="2024-01-03T10:00:00+00:00"),
-            LeaderboardEntry(entry_id="4", benchmark_id="b4", avg_reward=0.8, timestamp="2024-01-04T10:00:00+00:00"),
+            LeaderboardEntry(
+                entry_id="1",
+                benchmark_id="b1",
+                avg_reward=0.5,
+                timestamp="2024-01-01T10:00:00+00:00",
+            ),
+            LeaderboardEntry(
+                entry_id="2",
+                benchmark_id="b2",
+                avg_reward=0.6,
+                timestamp="2024-01-02T10:00:00+00:00",
+            ),
+            LeaderboardEntry(
+                entry_id="3",
+                benchmark_id="b3",
+                avg_reward=0.7,
+                timestamp="2024-01-03T10:00:00+00:00",
+            ),
+            LeaderboardEntry(
+                entry_id="4",
+                benchmark_id="b4",
+                avg_reward=0.8,
+                timestamp="2024-01-04T10:00:00+00:00",
+            ),
         ]
 
         trend = compute_trend(entries, RankingMetric.REWARD, window=2)
@@ -532,8 +587,20 @@ class TestLeaderboardLoadFromFiles:
 
             # Create runs.jsonl
             runs_data = [
-                {"run_id": "run_001", "environment": "python", "completed": True, "total_reward": 0.9, "steps": 3},
-                {"run_id": "run_002", "environment": "dspy", "completed": False, "total_reward": 0.4, "steps": 5},
+                {
+                    "run_id": "run_001",
+                    "environment": "python",
+                    "completed": True,
+                    "total_reward": 0.9,
+                    "steps": 3,
+                },
+                {
+                    "run_id": "run_002",
+                    "environment": "dspy",
+                    "completed": False,
+                    "total_reward": 0.4,
+                    "steps": 5,
+                },
             ]
             with (obs_dir / "runs.jsonl").open("w") as f:
                 for run in runs_data:

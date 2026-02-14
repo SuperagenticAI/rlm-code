@@ -199,7 +199,9 @@ def execute_mcp_demo(config_manager=None):
 
     # Step 2: Show MCP setup
     console.print("[bold]Step 1: Setting Up MCP Filesystem Server[/bold]")
-    console.print("[dim]First, we configure the MCP server in rlm_config.yaml (legacy: dspy_config.yaml)...[/dim]\n")
+    console.print(
+        "[dim]First, we configure the MCP server in rlm_config.yaml (legacy: dspy_config.yaml)...[/dim]\n"
+    )
 
     mcp_config = """# In rlm_config.yaml (legacy: dspy_config.yaml):
 mcp_servers:

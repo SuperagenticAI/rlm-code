@@ -1,6 +1,6 @@
 """Tests for extract fallback in RLMRunner."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from rlm_code.rlm.runner import RLMRunner
 
@@ -35,14 +35,14 @@ class TestExtractFallback:
                 "reward": 0.5,
             },
         ]
-        result = runner._extract_answer_from_trajectory(
-            "What is x?", trajectory, "pure_rlm"
-        )
+        result = runner._extract_answer_from_trajectory("What is x?", trajectory, "pure_rlm")
         assert result == "The answer is 42"
         # Verify LLM was called
         connector.generate_response.assert_called_once()
         call_kwargs = connector.generate_response.call_args
-        assert "ran out of steps" in call_kwargs.kwargs.get("prompt", call_kwargs[1].get("prompt", ""))
+        assert "ran out of steps" in call_kwargs.kwargs.get(
+            "prompt", call_kwargs[1].get("prompt", "")
+        )
 
     def test_returns_none_on_empty_response(self):
         runner, _ = self._make_runner("")
@@ -70,9 +70,7 @@ class TestExtractFallback:
                 "reward": -0.3,
             },
         ]
-        result = runner._extract_answer_from_trajectory(
-            "compute", trajectory, "pure_rlm"
-        )
+        result = runner._extract_answer_from_trajectory("compute", trajectory, "pure_rlm")
         assert result == "Partial answer from errors"
 
 

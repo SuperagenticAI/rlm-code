@@ -25,6 +25,7 @@ from ..core.exceptions import (
 from ..core.logging import get_logger
 from ..execution import ExecutionEngine
 from ..export import ExportImportHandler, PackageBuilder, PackageMetadata
+from ..harness import HarnessRunner
 from ..mcp import MCPClientManager
 from ..models.dspy_reference_loader import DSPyReferenceLoader
 from ..models.llm_connector import LLMConnector
@@ -46,6 +47,9 @@ logger = get_logger(__name__)
 
 class SlashCommandHandler:
     """Handles slash commands in interactive mode."""
+
+    UNSAFE_EXEC_ACK_TOKEN = "I_UNDERSTAND_EXEC_IS_UNSAFE"
+    SANDBOX_PROFILES = {"secure", "dev", "custom"}
 
     ACP_PROVIDER_MAP = {
         "gemini": "gemini",
@@ -111,6 +115,11 @@ class SlashCommandHandler:
             reward_profile=reward_profile,
             benchmark_pack_paths=benchmark_pack_paths,
         )
+        self.harness_runner = HarnessRunner(
+            llm_connector=self.llm_connector,
+            mcp_manager=self.mcp_manager,
+            workdir=Path.cwd(),
+        )
 
         # Store reference to parent session for save/load
         self.parent_session = None
@@ -126,6 +135,7 @@ class SlashCommandHandler:
             "/status": self.cmd_status,
             "/sandbox": self.cmd_sandbox,
             "/rlm": self.cmd_rlm,
+            "/harness": self.cmd_harness,
             "/disconnect": self.cmd_disconnect,
             "/reference": self.cmd_reference,
             "/history": self.cmd_history,
@@ -213,6 +223,39 @@ class SlashCommandHandler:
             show_info_message("Type /help to see available commands")
         return True
 
+    def _refresh_rlm_runner_pure_env(self) -> None:
+        """Reload Pure RLM backend settings from config into the active runner."""
+        if not hasattr(self, "rlm_runner") or self.rlm_runner is None:
+            return
+        configure = getattr(self.rlm_runner, "_configure_pure_rlm_settings", None)
+        build = getattr(self.rlm_runner, "_build_pure_rlm_environment", None)
+        if not callable(configure) or not callable(build):
+            return
+        configure()
+        pure_env = build()
+        self.rlm_runner.environments["pure_rlm"] = pure_env
+        self.rlm_runner.environments["pure-rlm"] = pure_env
+
+    def _rlm_supported_frameworks(self) -> list[str]:
+        """Return framework ids shown to users in /rlm help and usage."""
+        default = ["native", "dspy-rlm", "adk-rlm", "pydantic-ai", "google-adk", "deepagents"]
+        runner = getattr(self, "rlm_runner", None)
+        if runner is None:
+            return default
+        supported = getattr(runner, "supported_frameworks", None)
+        if not callable(supported):
+            return default
+        try:
+            values = [str(item).strip() for item in supported() if str(item).strip()]
+        except Exception:
+            return default
+        if not values:
+            return default
+        return values
+
+    def _rlm_framework_option_text(self) -> str:
+        return "|".join(self._rlm_supported_frameworks())
+
     def cmd_connect(self, args: list):
         """
         Connect to a model.
@@ -240,9 +283,7 @@ class SlashCommandHandler:
             console.print("  /connect anthropic claude-sonnet-4.5 sk-ant-...")
             console.print("  /connect gemini gemini-3")
             console.print("  /connect openrouter openai/gpt-4o-mini")
-            console.print(
-                "  /connect openai-compatible llama3.1:8b local http://localhost:8000/v1"
-            )
+            console.print("  /connect openai-compatible llama3.1:8b local http://localhost:8000/v1")
             return
 
         model_type = args[0].lower()
@@ -289,7 +330,9 @@ class SlashCommandHandler:
                 console.print(f"     /connect {model_type} {model_name} your-key")
             else:
                 console.print("\n[dim]Troubleshooting:[/dim]")
-                console.print("  1. Check provider/API key configuration with [cyan]/models cloud[/cyan]")
+                console.print(
+                    "  1. Check provider/API key configuration with [cyan]/models cloud[/cyan]"
+                )
                 console.print("  2. For local OpenAI-compatible servers, pass a base URL:")
                 console.print(
                     "     [cyan]/connect openai-compatible <model> local http://localhost:8000/v1[/cyan]"
@@ -336,8 +379,12 @@ class SlashCommandHandler:
         if source not in {"local", "ollama", "byok", "cloud", "acp"}:
             console.print()
             console.print("[bold cyan]🧠 Model Selector[/bold cyan]")
-            console.print("  [1] [bold]Local[/bold] (Ollama / LM Studio / vLLM / SGLang / OpenAI-compatible)")
-            console.print("  [2] [bold]BYOK Cloud[/bold] (OpenAI, Anthropic, Gemini, OpenRouter, ...)")
+            console.print(
+                "  [1] [bold]Local[/bold] (Ollama / LM Studio / vLLM / SGLang / OpenAI-compatible)"
+            )
+            console.print(
+                "  [2] [bold]BYOK Cloud[/bold] (OpenAI, Anthropic, Gemini, OpenRouter, ...)"
+            )
             console.print("  [3] [bold]ACP Agents[/bold] (Gemini CLI, Claude Code, Codex, ...)")
             console.print("  [q] Cancel")
             choice = console.input("[cyan]Select source [1/2/3/q]: [/cyan]").strip().lower()
@@ -376,7 +423,9 @@ class SlashCommandHandler:
             console.print("  1. Make sure Ollama is running: [cyan]ollama serve[/cyan]")
             console.print("  2. Start your local OpenAI-compatible server (LM Studio/vLLM/SGLang)")
             console.print("  3. Check endpoints with: [cyan]/models local[/cyan]")
-            console.print("  4. Connect manually: [cyan]/connect <provider> <model> [api-key] [base-url][/cyan]")
+            console.print(
+                "  4. Connect manually: [cyan]/connect <provider> <model> [api-key] [base-url][/cyan]"
+            )
             return
 
         console.print("[bold cyan]🖥️ Local Providers[/bold cyan]")
@@ -403,11 +452,7 @@ class SlashCommandHandler:
 
         console.print()
         selection = (
-            console.input(
-                "[cyan]Choose provider number (or q to cancel): [/cyan]"
-            )
-            .strip()
-            .lower()
+            console.input("[cyan]Choose provider number (or q to cancel): [/cyan]").strip().lower()
         )
 
         if selection in {"q", "quit", "exit"}:
@@ -432,15 +477,14 @@ class SlashCommandHandler:
         model_name = ""
         if models:
             console.print()
-            console.print(f"[bold cyan]Models from {selected.get('display_name', provider_id)}:[/bold cyan]")
+            console.print(
+                f"[bold cyan]Models from {selected.get('display_name', provider_id)}:[/bold cyan]"
+            )
             for i, model in enumerate(models, start=1):
                 console.print(f"  [cyan]{i}.[/cyan] {model}")
-            model_selection = (
-                console.input(
-                    "[cyan]Choose model number (or type a custom model id): [/cyan]"
-                )
-                .strip()
-            )
+            model_selection = console.input(
+                "[cyan]Choose model number (or type a custom model id): [/cyan]"
+            ).strip()
             if model_selection.isdigit():
                 model_index = int(model_selection)
                 if model_index < 1 or model_index > len(models):
@@ -466,7 +510,9 @@ class SlashCommandHandler:
 
         try:
             api_key = "local" if provider_id != "ollama" else None
-            self.llm_connector.connect_to_model(model_name, provider_id, api_key=api_key, base_url=base_url)
+            self.llm_connector.connect_to_model(
+                model_name, provider_id, api_key=api_key, base_url=base_url
+            )
             self.current_context.pop("acp_agent", None)
             show_success_message(f"Connected to {model_name}!")
             console.print()
@@ -479,9 +525,7 @@ class SlashCommandHandler:
             console.print("  1. Confirm local server is running and healthy")
             console.print("  2. Verify the model id exists on that endpoint")
             console.print("  3. Retry with explicit command:")
-            console.print(
-                f"     [cyan]/connect {provider_id} {model_name} local {base_url}[/cyan]"
-            )
+            console.print(f"     [cyan]/connect {provider_id} {model_name} local {base_url}[/cyan]")
 
     def _select_byok_model(self) -> None:
         """Interactive selection for BYOK cloud providers."""
@@ -514,8 +558,10 @@ class SlashCommandHandler:
         table.add_column("Example Models", style="dim")
 
         for idx, provider in enumerate(providers, start=1):
-            status = "✓ Connected" if self.llm_connector.model_type == provider["id"] else (
-                "Configured" if provider["configured"] else "Needs setup"
+            status = (
+                "✓ Connected"
+                if self.llm_connector.model_type == provider["id"]
+                else ("Configured" if provider["configured"] else "Needs setup")
             )
             example_models = self.llm_connector.list_provider_example_models(
                 str(provider["id"]), limit=2
@@ -646,7 +692,9 @@ class SlashCommandHandler:
 
         selected = agents[index - 1]
         if not selected.get("installed"):
-            show_warning_message("Selected ACP agent is not installed locally. Continuing with ACP profile mapping.")
+            show_warning_message(
+                "Selected ACP agent is not installed locally. Continuing with ACP profile mapping."
+            )
 
         agent_id = str(selected.get("agent_id", ""))
         provider_id = self.ACP_PROVIDER_MAP.get(agent_id)
@@ -766,7 +814,9 @@ class SlashCommandHandler:
                         )
                     console.print(table)
                     console.print()
-                    console.print("[dim]Connect with:[/dim] [cyan]/model local[/cyan] or [cyan]/connect <provider> <model>[/cyan]")
+                    console.print(
+                        "[dim]Connect with:[/dim] [cyan]/model local[/cyan] or [cyan]/connect <provider> <model>[/cyan]"
+                    )
                 else:
                     console.print("  [yellow]No local providers found.[/yellow]")
                     console.print()
@@ -894,7 +944,10 @@ class SlashCommandHandler:
                 table.add_row("API Key", api_status)
             acp_agent = self.current_context.get("acp_agent")
             if isinstance(acp_agent, dict):
-                table.add_row("ACP Profile", str(acp_agent.get("display_name", acp_agent.get("agent_id", "-"))))
+                table.add_row(
+                    "ACP Profile",
+                    str(acp_agent.get("display_name", acp_agent.get("agent_id", "-"))),
+                )
 
             console.print(table)
         else:
@@ -1080,7 +1133,12 @@ class SlashCommandHandler:
 
         Usage:
             /sandbox status                  - Show runtime and health checks
-            /sandbox use <runtime>           - Switch runtime (local/docker/apple-container)
+            /sandbox use <runtime>           - Switch runtime (see /sandbox status)
+            /sandbox profile <secure|dev|custom> - Apply or switch sandbox profile preset
+            /sandbox backend <exec|monty|docker> [ack=I_UNDERSTAND_EXEC_IS_UNSAFE] - Set Pure RLM backend
+            /sandbox strict <on|off>         - Toggle pure RLM strict mode
+            /sandbox output-mode <truncate|summarize|metadata> - Set pure RLM output policy
+            /sandbox apple <on|off>          - Enable/disable apple-container runtime gate
             /sandbox doctor                  - Run deep diagnostics with remediation
         """
         action = args[0].lower() if args else "status"
@@ -1088,17 +1146,48 @@ class SlashCommandHandler:
         if action == "status":
             config = self.config_manager.config if self.config_manager else None
             configured_runtime = (
-                getattr(getattr(config, "sandbox", None), "runtime", "local")
-                if config
-                else "local"
+                getattr(getattr(config, "sandbox", None), "runtime", "local") if config else "local"
             )
             active_runtime = self.execution_engine.get_runtime_name()
             health_map = detect_runtime_health()
+            sandbox_cfg = getattr(config, "sandbox", None) if config else None
+            pure_backend = str(getattr(sandbox_cfg, "pure_rlm_backend", "docker") or "docker")
+            pure_allow_exec = bool(getattr(sandbox_cfg, "pure_rlm_allow_unsafe_exec", False))
+            pure_strict = bool(getattr(sandbox_cfg, "pure_rlm_strict", False))
+            pure_output_mode = str(
+                getattr(sandbox_cfg, "pure_rlm_output_mode", "summarize") or "summarize"
+            )
+            superbox_auto_fallback = bool(getattr(sandbox_cfg, "superbox_auto_fallback", True))
+            superbox_fallbacks = list(getattr(sandbox_cfg, "superbox_fallback_runtimes", []) or [])
+            superbox_profile = str(getattr(sandbox_cfg, "superbox_profile", "custom") or "custom")
+            apple_gate = bool(getattr(sandbox_cfg, "apple_container_enabled", False))
 
             console.print()
             console.print("[bold cyan]🧪 Sandbox Runtime[/bold cyan]")
             console.print(f"  Configured: [cyan]{configured_runtime}[/cyan]")
             console.print(f"  Active: [cyan]{active_runtime}[/cyan]")
+            console.print(f"  Pure RLM backend: [cyan]{pure_backend}[/cyan]")
+            console.print(
+                f"  Unsafe exec opt-in: [cyan]{'enabled' if pure_allow_exec else 'disabled'}[/cyan]"
+            )
+            console.print(f"  Pure RLM strict mode: [cyan]{'on' if pure_strict else 'off'}[/cyan]")
+            console.print(f"  Pure RLM output mode: [cyan]{pure_output_mode}[/cyan]")
+            console.print(
+                f"  Superbox fallback: [cyan]{'on' if superbox_auto_fallback else 'off'}[/cyan]"
+            )
+            console.print(f"  Superbox profile: [cyan]{superbox_profile}[/cyan]")
+            console.print(
+                "  Superbox fallback order: "
+                f"[cyan]{superbox_fallbacks if superbox_fallbacks else ['docker', 'apple-container', 'local']}[/cyan]"
+            )
+            console.print(
+                f"  Apple runtime gate: [cyan]{'enabled' if apple_gate else 'disabled'}[/cyan]"
+            )
+            if pure_backend == "exec" and pure_allow_exec:
+                console.print(
+                    "[bold yellow]  ⚠ Unsafe backend active:[/bold yellow] "
+                    "[yellow]exec() runs untrusted code with limited isolation.[/yellow]"
+                )
             console.print()
 
             table = Table(show_header=True, header_style="bold cyan")
@@ -1117,6 +1206,14 @@ class SlashCommandHandler:
             console.print()
             console.print(
                 "[dim]Use [/dim][cyan]/sandbox use <runtime>[/cyan][dim] to switch runtime.[/dim]"
+            )
+            console.print(
+                "[dim]Use [/dim]"
+                "[cyan]/sandbox profile <secure|dev|custom>[/cyan][dim], [/dim]"
+                "[cyan]/sandbox backend <exec|monty|docker> [ack=I_UNDERSTAND_EXEC_IS_UNSAFE][/cyan]"
+                "[dim], [/dim][cyan]/sandbox strict <on|off>[/cyan]"
+                "[dim], and [/dim][cyan]/sandbox output-mode <...>[/cyan]"
+                "[dim] for Pure RLM experiments.[/dim]"
             )
             console.print()
             return
@@ -1155,26 +1252,22 @@ class SlashCommandHandler:
             console.print()
             failures = [check for check in checks if check.status == "fail"]
             if failures:
-                show_warning_message(
-                    f"Sandbox doctor found {len(failures)} blocking issue(s)."
-                )
+                show_warning_message(f"Sandbox doctor found {len(failures)} blocking issue(s).")
             else:
                 show_success_message("Sandbox doctor checks passed.")
             console.print()
             return
 
         if action == "use":
+            supported_runtime_list = "|".join(sorted(SUPPORTED_RUNTIMES))
+            supported_runtime_text = ", ".join(sorted(SUPPORTED_RUNTIMES))
             if len(args) != 2:
-                show_error_message(
-                    "Usage: /sandbox use <local|docker|apple-container>"
-                )
+                show_error_message(f"Usage: /sandbox use <{supported_runtime_list}>")
                 return
 
             runtime_name = args[1].strip().lower()
             if runtime_name not in SUPPORTED_RUNTIMES:
-                show_error_message(
-                    "Unknown runtime. Supported: local, docker, apple-container"
-                )
+                show_error_message(f"Unknown runtime. Supported: {supported_runtime_text}")
                 return
 
             if not self.config_manager:
@@ -1184,50 +1277,417 @@ class SlashCommandHandler:
 
             health_map = detect_runtime_health()
             candidate = health_map.get(runtime_name)
-            if candidate and not candidate.available and runtime_name != "apple-container":
+            if candidate and not candidate.available:
                 show_warning_message(
                     f"{runtime_name} runtime looks unavailable: {candidate.detail}"
                 )
                 show_info_message("Switching anyway. Run /sandbox status to verify after setup.")
 
             self.config_manager.config.sandbox.runtime = runtime_name
+            self.config_manager.config.sandbox.superbox_profile = "custom"
             self.config_manager.save_config()
             self.execution_engine.set_runtime(runtime_name)
             show_success_message(f"Sandbox runtime set to {runtime_name}.")
             return
 
-        show_error_message("Usage: /sandbox [status|doctor|use <runtime>]")
+        if action == "profile":
+            if len(args) != 2:
+                show_error_message("Usage: /sandbox profile <secure|dev|custom>")
+                return
+            profile = args[1].strip().lower()
+            if profile not in self.SANDBOX_PROFILES:
+                show_error_message("Unknown profile. Supported: secure, dev, custom")
+                return
+            if not self.config_manager:
+                show_error_message("Sandbox profile changes require a project config file.")
+                return
+            sandbox_cfg = self.config_manager.config.sandbox
+            if profile == "secure":
+                sandbox_cfg.runtime = "docker"
+                sandbox_cfg.superbox_auto_fallback = True
+                sandbox_cfg.superbox_fallback_runtimes = ["docker", "daytona", "e2b"]
+                sandbox_cfg.pure_rlm_backend = "docker"
+                sandbox_cfg.pure_rlm_allow_unsafe_exec = False
+                sandbox_cfg.pure_rlm_strict = True
+                sandbox_cfg.apple_container_enabled = False
+            elif profile == "dev":
+                sandbox_cfg.runtime = "docker"
+                sandbox_cfg.superbox_auto_fallback = True
+                sandbox_cfg.superbox_fallback_runtimes = ["docker", "apple-container", "local"]
+                sandbox_cfg.pure_rlm_backend = "docker"
+                sandbox_cfg.pure_rlm_allow_unsafe_exec = False
+                sandbox_cfg.pure_rlm_strict = False
+            sandbox_cfg.superbox_profile = profile
+            self.config_manager.save_config()
+            self.execution_engine.set_runtime(sandbox_cfg.runtime)
+            self._refresh_rlm_runner_pure_env()
+            if profile == "custom":
+                show_success_message(
+                    "Sandbox profile set to custom. Use /sandbox use|backend|strict|output-mode|apple for overrides."
+                )
+            else:
+                show_success_message(
+                    f"Sandbox profile '{profile}' applied (runtime={sandbox_cfg.runtime}, pure backend={sandbox_cfg.pure_rlm_backend})."
+                )
+            return
+
+        if action == "backend":
+            allowed = {"exec", "monty", "docker"}
+            if len(args) < 2 or len(args) > 3:
+                show_error_message(
+                    "Usage: /sandbox backend <exec|monty|docker> [ack=I_UNDERSTAND_EXEC_IS_UNSAFE]"
+                )
+                return
+            backend = args[1].strip().lower()
+            if backend not in allowed:
+                show_error_message("Unknown backend. Supported: exec, monty, docker")
+                return
+            if not self.config_manager:
+                show_error_message("Backend changes require a project config file.")
+                return
+
+            ack = args[2].strip() if len(args) == 3 else ""
+            ack_ok = ack == f"ack={self.UNSAFE_EXEC_ACK_TOKEN}"
+            if backend == "exec" and not ack_ok:
+                show_error_message(
+                    "Unsafe exec backend requires explicit acknowledgment: "
+                    f"ack={self.UNSAFE_EXEC_ACK_TOKEN}"
+                )
+                show_info_message(
+                    "Recommended safer backends: monty (pip install pydantic-monty) or docker."
+                )
+                return
+
+            self.config_manager.config.sandbox.pure_rlm_backend = backend
+            self.config_manager.config.sandbox.pure_rlm_allow_unsafe_exec = backend == "exec"
+            self.config_manager.config.sandbox.superbox_profile = "custom"
+            self.config_manager.save_config()
+            self._refresh_rlm_runner_pure_env()
+            if backend == "exec":
+                show_warning_message(
+                    "Pure RLM backend set to exec with unsafe opt-in enabled. "
+                    "Use only for trusted local experiments."
+                )
+            else:
+                show_success_message(f"Pure RLM backend set to {backend}.")
+            return
+
+        if action == "strict":
+            if len(args) != 2:
+                show_error_message("Usage: /sandbox strict <on|off>")
+                return
+            value = args[1].strip().lower()
+            if value not in {"on", "off", "true", "false", "1", "0"}:
+                show_error_message("Use on|off for strict mode.")
+                return
+            enabled = value in {"on", "true", "1"}
+            if not self.config_manager:
+                show_error_message("Strict mode changes require a project config file.")
+                return
+            self.config_manager.config.sandbox.pure_rlm_strict = enabled
+            self.config_manager.config.sandbox.superbox_profile = "custom"
+            self.config_manager.save_config()
+            self._refresh_rlm_runner_pure_env()
+            show_success_message(f"Pure RLM strict mode set to {'on' if enabled else 'off'}.")
+            return
+
+        if action == "output-mode":
+            allowed_modes = {"truncate", "summarize", "metadata"}
+            if len(args) != 2:
+                show_error_message("Usage: /sandbox output-mode <truncate|summarize|metadata>")
+                return
+            mode = args[1].strip().lower()
+            if mode not in allowed_modes:
+                show_error_message("Unknown mode. Supported: truncate, summarize, metadata")
+                return
+            if not self.config_manager:
+                show_error_message("Output mode changes require a project config file.")
+                return
+            self.config_manager.config.sandbox.pure_rlm_output_mode = mode
+            self.config_manager.config.sandbox.superbox_profile = "custom"
+            self.config_manager.save_config()
+            self._refresh_rlm_runner_pure_env()
+            show_success_message(f"Pure RLM output mode set to {mode}.")
+            return
+
+        if action == "apple":
+            if len(args) != 2:
+                show_error_message("Usage: /sandbox apple <on|off>")
+                return
+            value = args[1].strip().lower()
+            if value not in {"on", "off", "true", "false", "1", "0"}:
+                show_error_message("Use on|off for apple runtime gate.")
+                return
+            enabled = value in {"on", "true", "1"}
+            if not self.config_manager:
+                show_error_message("Apple runtime gate changes require a project config file.")
+                return
+            self.config_manager.config.sandbox.apple_container_enabled = enabled
+            self.config_manager.config.sandbox.superbox_profile = "custom"
+            self.config_manager.save_config()
+            state = "enabled" if enabled else "disabled"
+            show_success_message(f"Apple runtime gate {state}.")
+            return
+
+        show_error_message(
+            "Usage: /sandbox [status|doctor|use <runtime>|profile <secure|dev|custom>|backend <exec|monty|docker> "
+            "[ack=I_UNDERSTAND_EXEC_IS_UNSAFE]|strict <on|off>|output-mode "
+            "<truncate|summarize|metadata>|apple <on|off>]"
+        )
+
+    def cmd_harness(self, args: list):
+        """
+        Run coding harness loops with local + MCP tools.
+
+        Usage:
+            /harness tools [mcp=on|off]
+            /harness doctor
+            /harness run <task> [steps=N] [mcp=on|off] [tools=name[,name2]]
+        """
+        if not args or args[0].lower() in {"help", "--help"}:
+            console.print()
+            console.print("[bold cyan]🛠 Harness Commands[/bold cyan]")
+            console.print("  [yellow]/harness tools [mcp=on|off][/yellow]")
+            console.print("  [yellow]/harness doctor[/yellow]")
+            console.print(
+                "  [yellow]/harness run <task> [steps=N] [mcp=on|off] [tools=name[,name2]][/yellow]"
+            )
+            console.print()
+            return
+
+        action = args[0].strip().lower()
+
+        if action == "tools":
+            include_mcp = True
+            for token in args[1:]:
+                lowered = token.lower()
+                if lowered.startswith("mcp="):
+                    value = token.split("=", 1)[1].strip().lower()
+                    include_mcp = value not in {"off", "false", "0", "no"}
+
+            tools = self.harness_runner.list_tools(include_mcp=include_mcp)
+            console.print()
+            console.print("[bold cyan]🧰 Harness Tools[/bold cyan]")
+            console.print()
+            table = Table(show_header=True, header_style="bold cyan")
+            table.add_column("Name", style="cyan")
+            table.add_column("Source", style="magenta")
+            table.add_column("Description", style="dim")
+            for row in tools:
+                table.add_row(
+                    str(row.get("name", "")),
+                    str(row.get("source", "local")),
+                    str(row.get("description", "")),
+                )
+            console.print(table)
+            console.print()
+            show_info_message(
+                f"Listed {len(tools)} tool(s). MCP tools {'included' if include_mcp else 'excluded'}."
+            )
+            console.print()
+            return
+
+        if action == "doctor":
+            tools = self.harness_runner.list_tools(include_mcp=True)
+            names = {str(item.get("name", "")) for item in tools}
+            parity_targets = [
+                "bash",
+                "read",
+                "glob",
+                "grep",
+                "edit",
+                "write",
+                "task",
+                "webfetch",
+                "todowrite",
+                "websearch",
+                "codesearch",
+                "lsp",
+                "batch",
+                "plan_enter",
+                "plan_exit",
+                "apply_patch",
+            ]
+            connected_servers: list[str] = []
+            if self.mcp_manager is not None:
+                try:
+                    servers = asyncio.run(self.mcp_manager.list_servers())
+                    connected_servers = [
+                        str(row.get("name", "")) for row in servers if bool(row.get("connected"))
+                    ]
+                except Exception:
+                    connected_servers = []
+
+            console.print()
+            console.print("[bold cyan]🩺 Harness Doctor[/bold cyan]")
+            console.print()
+            table = Table(show_header=True, header_style="bold cyan")
+            table.add_column("Capability", style="cyan")
+            table.add_column("Ready", justify="center")
+            table.add_column("Details", style="dim")
+            for capability in parity_targets:
+                available = capability in names or any(
+                    name.endswith(f":{capability}") for name in names if name.startswith("mcp:")
+                )
+                status = "[green]yes[/green]" if available else "[yellow]partial[/yellow]"
+                detail = (
+                    "Available locally or via MCP."
+                    if available
+                    else "Connect MCP server exposing this tool for full parity."
+                )
+                table.add_row(capability, status, detail)
+            console.print(table)
+            console.print()
+            if connected_servers:
+                show_info_message(f"MCP connected servers: {', '.join(connected_servers)}")
+            else:
+                show_warning_message(
+                    "No MCP servers connected. Local harness tools still available."
+                )
+            console.print()
+            return
+
+        if action == "run":
+            if not self.llm_connector.current_model:
+                show_error_message("No model connected. Use /connect first.")
+                return
+
+            include_mcp = True
+            max_steps = 10
+            allowlist: list[str] | None = None
+            task_tokens: list[str] = []
+
+            for token in args[1:]:
+                lowered = token.lower()
+                if lowered.startswith("steps="):
+                    try:
+                        max_steps = max(1, int(token.split("=", 1)[1]))
+                    except ValueError:
+                        show_error_message("Invalid steps value. Use steps=<integer>.")
+                        return
+                elif lowered.startswith("mcp="):
+                    value = token.split("=", 1)[1].strip().lower()
+                    include_mcp = value not in {"off", "false", "0", "no"}
+                elif lowered.startswith("tools="):
+                    raw = token.split("=", 1)[1].strip()
+                    parsed = [part.strip() for part in raw.split(",") if part.strip()]
+                    allowlist = parsed or None
+                else:
+                    task_tokens.append(token)
+
+            task = " ".join(task_tokens).strip()
+            if not task:
+                show_error_message(
+                    "Usage: /harness run <task> [steps=N] [mcp=on|off] [tools=name[,name2]]"
+                )
+                return
+
+            console.print()
+            console.print("[bold cyan]🛠 Running Harness[/bold cyan]")
+            console.print(f"  Task: [cyan]{task}[/cyan]")
+            console.print(f"  Max steps: [cyan]{max_steps}[/cyan]")
+            console.print(f"  MCP tools: [cyan]{'on' if include_mcp else 'off'}[/cyan]")
+            if allowlist:
+                console.print(f"  Tool allowlist: [cyan]{', '.join(allowlist)}[/cyan]")
+            console.print()
+
+            result = self.harness_runner.run(
+                task=task,
+                max_steps=max_steps,
+                include_mcp=include_mcp,
+                tool_allowlist=allowlist,
+            )
+
+            self.current_context["harness_last_response"] = result.final_response
+            self.current_context["harness_last_completed"] = result.completed
+            self.current_context["harness_last_steps"] = len(result.steps)
+
+            table = Table(show_header=True, header_style="bold cyan")
+            table.add_column("Step", justify="right")
+            table.add_column("Action", style="cyan")
+            table.add_column("Tool", style="magenta")
+            table.add_column("Success", justify="center")
+            table.add_column("Output Preview", style="dim")
+            for step in result.steps:
+                output_preview = ""
+                success = "-"
+                if step.tool_result is not None:
+                    output_preview = str(step.tool_result.output).replace("\n", " ")
+                    if len(output_preview) > 90:
+                        output_preview = output_preview[:87] + "..."
+                    success = "yes" if step.tool_result.success else "no"
+                table.add_row(
+                    str(step.step),
+                    str(step.action),
+                    str(step.tool or "-"),
+                    success,
+                    output_preview,
+                )
+
+            console.print(table)
+            console.print()
+            if result.completed:
+                show_success_message("Harness completed.")
+            else:
+                show_warning_message("Harness reached max steps without explicit final action.")
+            if result.usage_summary:
+                usage = result.usage_summary
+                console.print(
+                    "[dim]Usage:[/dim] "
+                    f"calls={int(usage.get('total_calls', 0))} "
+                    f"prompt_tokens={int(usage.get('prompt_tokens', 0))} "
+                    f"completion_tokens={int(usage.get('completion_tokens', 0))}"
+                )
+            console.print(
+                Panel(
+                    result.final_response or "_No final response_",
+                    title="[bold green]Harness Final[/bold green]"
+                    if result.completed
+                    else "[bold yellow]Harness Partial[/bold yellow]",
+                    border_style="green" if result.completed else "yellow",
+                    padding=(1, 2),
+                )
+            )
+            console.print()
+            return
+
+        show_error_message("Usage: /harness <tools|doctor|run>")
 
     def cmd_rlm(self, args: list):
         """
         Manage RLM runs.
 
         Usage:
-            /rlm run <task> [steps=N] [timeout=N] [branch=N] [depth=N] [children=N] [parallel=N] [budget=N] [framework=native|dspy|pydantic-ai|google-adk] [env=generic|dspy] [sub=provider/model]
-            /rlm bench [list|preset=name] [pack=path[,path2]] [limit=N] [steps=N] [timeout=N] [branch=N] [framework=native|dspy|pydantic-ai|google-adk] [env=generic|dspy] [sub=provider/model]
+            /rlm run <task> [steps=N] [timeout=N] [branch=N] [depth=N] [children=N] [parallel=N] [budget=N] [framework=<see /rlm frameworks>] [env=generic|dspy|pure_rlm] [sub=provider/model]
+            /rlm bench [list|preset=name] [mode=native|harness|direct-llm] [pack=path[,path2]] [limit=N] [steps=N] [timeout=N] [branch=N] [framework=<see /rlm frameworks>] [env=generic|dspy|pure_rlm] [sub=provider/model]
             /rlm bench compare [candidate=<id|path|latest>] [baseline=<id|path|previous>] [min_reward_delta=N] [min_completion_delta=N] [max_steps_increase=N]
             /rlm bench validate [candidate=<id|path|latest>] [baseline=<id|path|previous>] [min_reward_delta=N] [min_completion_delta=N] [max_steps_increase=N] [--json]
+            /rlm bench report [candidate=<id|path|latest>] [baseline=<id|path|previous>] [format=markdown|csv|json] [output=path]
             /rlm import-evals pack=path[,path2] [limit=N]
+            /rlm judge pred=<predictions.jsonl> ref=<reference.json> [judge=provider/model] [output=path] [limit=N] [resume=on|off] [--json]
+            /rlm frameworks
             /rlm viz [run_id|latest] [depth=N] [children=on|off] [--json]
             /rlm status [run_id]
             /rlm replay <run_id>
-            /rlm doctor [env=generic|dspy] [--json]
-            /rlm chat <message> [session=name] [env=generic|dspy] [branch=N] [depth=N] [children=N] [parallel=N] [budget=N] [framework=native|dspy|pydantic-ai|google-adk] [sub=provider/model]
+            /rlm doctor [env=generic|dspy|pure_rlm] [--json]
+            /rlm chat <message> [session=name] [env=generic|dspy|pure_rlm] [branch=N] [depth=N] [children=N] [parallel=N] [budget=N] [framework=<see /rlm frameworks>] [sub=provider/model]
             /rlm chat status [session=name]
             /rlm chat reset [session=name]
             /rlm observability
         """
+        framework_opts = self._rlm_framework_option_text()
         if not args or args[0] in {"help", "--help"}:
             console.print()
             console.print("[bold cyan]🧠 RLM Commands[/bold cyan]")
             console.print(
                 "  [yellow]/rlm run <task> [steps=N] [timeout=N] [branch=N] [depth=N] [children=N] "
-                "[parallel=N] [budget=N] [framework=native|dspy|pydantic-ai|google-adk] [env=generic|dspy] "
+                f"[parallel=N] [budget=N] [framework={framework_opts}] [env=generic|dspy|pure_rlm] "
                 "[sub=provider/model][/yellow]"
             )
             console.print(
-                "  [yellow]/rlm bench [list|preset=name] [pack=path[,path2]] [limit=N] [steps=N] "
-                "[timeout=N] [branch=N] [framework=native|dspy|pydantic-ai|google-adk] [env=generic|dspy] [sub=provider/model][/yellow]"
+                "  [yellow]/rlm bench [list|preset=name] [mode=native|harness|direct-llm] "
+                "[pack=path[,path2]] [limit=N] [steps=N] "
+                f"[timeout=N] [branch=N] [framework={framework_opts}] [env=generic|dspy|pure_rlm] [sub=provider/model][/yellow]"
             )
             console.print(
                 "  [yellow]/rlm bench compare [candidate=<id|path|latest>] [baseline=<id|path|previous>] "
@@ -1237,16 +1697,25 @@ class SlashCommandHandler:
                 "  [yellow]/rlm bench validate [candidate=<id|path|latest>] [baseline=<id|path|previous>] "
                 "[min_reward_delta=N] [min_completion_delta=N] [max_steps_increase=N] [--json][/yellow]"
             )
+            console.print(
+                "  [yellow]/rlm bench report [candidate=<id|path|latest>] [baseline=<id|path|previous>] "
+                "[format=markdown|csv|json] [output=path][/yellow]"
+            )
             console.print("  [yellow]/rlm import-evals pack=path[,path2] [limit=N][/yellow]")
+            console.print(
+                "  [yellow]/rlm judge pred=<predictions.jsonl> ref=<reference.json> [judge=provider/model] "
+                "[output=path] [limit=N] [resume=on|off] [--json][/yellow]"
+            )
+            console.print("  [yellow]/rlm frameworks[/yellow]")
             console.print(
                 "  [yellow]/rlm viz [run_id|latest] [depth=N] [children=on|off] [--json][/yellow]"
             )
             console.print("  [yellow]/rlm status [run_id][/yellow]")
             console.print("  [yellow]/rlm replay <run_id>[/yellow]")
-            console.print("  [yellow]/rlm doctor [env=generic|dspy] [--json][/yellow]")
+            console.print("  [yellow]/rlm doctor [env=generic|dspy|pure_rlm] [--json][/yellow]")
             console.print(
-                "  [yellow]/rlm chat <message> [session=name] [env=generic|dspy] [branch=N] [depth=N] "
-                "[children=N] [parallel=N] [budget=N] [framework=native|dspy|pydantic-ai|google-adk] "
+                "  [yellow]/rlm chat <message> [session=name] [env=generic|dspy|pure_rlm] [branch=N] [depth=N] "
+                f"[children=N] [parallel=N] [budget=N] [framework={framework_opts}] "
                 "[sub=provider/model][/yellow]"
             )
             console.print("  [yellow]/rlm chat status [session=name][/yellow]")
@@ -1256,6 +1725,51 @@ class SlashCommandHandler:
             return
 
         action = args[0].lower()
+
+        if action == "frameworks":
+            registry = getattr(self.rlm_runner, "framework_registry", None)
+            if registry is None:
+                show_error_message("Framework registry is unavailable in this session.")
+                return
+
+            console.print()
+            console.print("[bold cyan]🧩 RLM Framework Adapters[/bold cyan]")
+            console.print()
+
+            table = Table(show_header=True, header_style="bold cyan")
+            table.add_column("Framework", style="cyan", width=16)
+            table.add_column("Mode", style="magenta", width=12)
+            table.add_column("Ready", width=7)
+            table.add_column("Details", style="dim")
+            table.add_column("Reference", style="dim")
+
+            # Native rows (always available from runner)
+            table.add_row(
+                "native",
+                "built-in",
+                "[green]yes[/green]",
+                "RLM native planner loop",
+                "rlm_code/rlm/runner.py",
+            )
+
+            doctor_rows = registry.doctor()
+            for row in doctor_rows:
+                framework_id = str(row.get("framework", ""))
+                ready = bool(row.get("ok", False))
+                detail = str(row.get("detail", ""))
+                mode = str(row.get("mode", "adapter"))
+                reference = str(row.get("reference", ""))
+                status = "[green]yes[/green]" if ready else "[red]no[/red]"
+                table.add_row(framework_id, mode, status, detail, reference)
+
+            console.print(table)
+            console.print()
+            show_info_message(
+                "Use framework=<id> in /rlm run, /rlm bench, or /rlm chat. "
+                f"Supported ids: {', '.join(self._rlm_supported_frameworks())}"
+            )
+            console.print()
+            return
 
         if action == "import-evals":
             pack_paths: list[str] = []
@@ -1281,9 +1795,7 @@ class SlashCommandHandler:
                 elif "=" not in token:
                     pack_paths.append(token)
                 else:
-                    show_error_message(
-                        "Usage: /rlm import-evals pack=<path[,path2]> [limit=N]"
-                    )
+                    show_error_message("Usage: /rlm import-evals pack=<path[,path2]> [limit=N]")
                     return
 
             deduped_paths = [item for item in dict.fromkeys(pack_paths) if str(item).strip()]
@@ -1357,6 +1869,155 @@ class SlashCommandHandler:
                 "Run one preset with: /rlm bench preset=<name> pack=<path[,path2]> "
                 "(example: pack=eval/packs/pydantic_time_range_v1.yaml)"
             )
+            console.print()
+            return
+
+        if action == "judge":
+            usage = (
+                "Usage: /rlm judge pred=<predictions.jsonl> ref=<reference.json> "
+                "[judge=provider/model] [output=path] [limit=N] [resume=on|off] [--json]"
+            )
+            predictions_path: str | None = None
+            reference_path: str | None = None
+            output_path: str | None = None
+            judge_model: str | None = None
+            judge_provider: str | None = None
+            limit: int | None = None
+            resume = True
+            output_json = False
+            positional: list[str] = []
+
+            for token in args[1:]:
+                lowered = token.lower()
+                if lowered.startswith("pred=") or lowered.startswith("predictions="):
+                    predictions_path = token.split("=", 1)[1].strip() or None
+                elif lowered.startswith("ref=") or lowered.startswith("reference="):
+                    reference_path = token.split("=", 1)[1].strip() or None
+                elif lowered.startswith("judge=") or lowered.startswith("model="):
+                    judge_model = token.split("=", 1)[1].strip() or None
+                elif lowered.startswith("provider=") or lowered.startswith("judge_provider="):
+                    judge_provider = token.split("=", 1)[1].strip().lower() or None
+                elif lowered.startswith("output=") or lowered.startswith("out="):
+                    output_path = token.split("=", 1)[1].strip() or None
+                elif lowered.startswith("limit="):
+                    try:
+                        limit = max(1, int(token.split("=", 1)[1]))
+                    except ValueError:
+                        show_error_message("Invalid limit value. Use limit=<integer>.")
+                        return
+                elif lowered.startswith("resume="):
+                    value = token.split("=", 1)[1].strip().lower()
+                    if value in {"on", "true", "1", "yes"}:
+                        resume = True
+                    elif value in {"off", "false", "0", "no"}:
+                        resume = False
+                    else:
+                        show_error_message("Invalid resume value. Use resume=on|off.")
+                        return
+                elif lowered in {"--json", "format=json", "output=json"}:
+                    output_json = True
+                elif "=" not in token:
+                    positional.append(token.strip())
+                else:
+                    show_error_message(usage)
+                    return
+
+            if positional:
+                if predictions_path is None:
+                    predictions_path = positional[0] or None
+                if len(positional) >= 2 and reference_path is None:
+                    reference_path = positional[1] or None
+                if len(positional) >= 3 and output_path is None:
+                    output_path = positional[2] or None
+                if len(positional) > 3:
+                    show_error_message(usage)
+                    return
+
+            if not predictions_path or not reference_path:
+                show_error_message(usage)
+                return
+            if not self.llm_connector.current_model and not judge_model:
+                show_error_message(
+                    "No model connected. Use /connect first or pass judge=<provider/model>."
+                )
+                return
+
+            try:
+                result = self.rlm_runner.judge_predictions(
+                    predictions_path=predictions_path,
+                    reference_path=reference_path,
+                    output_path=output_path,
+                    judge_model=judge_model,
+                    judge_provider=judge_provider,
+                    limit=limit,
+                    resume=resume,
+                )
+            except ValueError as exc:
+                show_error_message(str(exc))
+                return
+
+            self.current_context["rlm_last_judge_path"] = str(result.result_path)
+            self.current_context["rlm_last_judge_model"] = result.judge_model
+            self.current_context["rlm_last_judge_accuracy"] = float(result.accuracy)
+            self.current_context["rlm_last_judge_total"] = int(result.judged_total)
+            self.current_context["rlm_last_judge_correct"] = int(result.correct_total)
+
+            if output_json:
+                payload = {
+                    "command": "rlm_judge",
+                    "judge_model": result.judge_model,
+                    "predictions_path": str(result.predictions_path),
+                    "reference_path": str(result.reference_path),
+                    "result_path": str(result.result_path),
+                    "total_predictions": int(result.total_predictions),
+                    "eligible_predictions": int(result.eligible_predictions),
+                    "newly_judged": int(result.newly_judged),
+                    "judged_total": int(result.judged_total),
+                    "correct_total": int(result.correct_total),
+                    "accuracy": float(result.accuracy),
+                    "by_type": result.by_type,
+                }
+                console.print(json.dumps(payload, indent=2, ensure_ascii=False))
+                return
+
+            show_success_message("RLM judge completed.")
+            console.print()
+            console.print(
+                f"[dim]Judge:[/dim] {result.judge_model}  "
+                f"[dim]Accuracy:[/dim] {result.accuracy * 100.0:.2f}%  "
+                f"[dim]Correct:[/dim] {result.correct_total}/{result.judged_total}"
+            )
+            console.print(f"[dim]Results:[/dim] {result.result_path}")
+            summary = Table(show_header=True, header_style="bold cyan")
+            summary.add_column("Total preds", justify="right")
+            summary.add_column("Eligible", justify="right")
+            summary.add_column("Newly judged", justify="right")
+            summary.add_column("Judged total", justify="right")
+            summary.add_column("Correct", justify="right")
+            summary.add_row(
+                str(int(result.total_predictions)),
+                str(int(result.eligible_predictions)),
+                str(int(result.newly_judged)),
+                str(int(result.judged_total)),
+                str(int(result.correct_total)),
+            )
+            console.print(summary)
+            if result.by_type:
+                by_type_table = Table(
+                    title="Accuracy by Question Type", show_header=True, header_style="bold cyan"
+                )
+                by_type_table.add_column("Type", style="cyan")
+                by_type_table.add_column("Correct", justify="right")
+                by_type_table.add_column("Total", justify="right")
+                by_type_table.add_column("Accuracy", justify="right")
+                for qtype, stats in sorted(result.by_type.items(), key=lambda item: str(item[0])):
+                    by_type_table.add_row(
+                        str(qtype),
+                        str(int(stats.get("correct", 0) or 0)),
+                        str(int(stats.get("total", 0) or 0)),
+                        f"{float(stats.get('accuracy', 0.0) or 0.0) * 100.0:.2f}%",
+                    )
+                console.print(by_type_table)
             console.print()
             return
 
@@ -1445,9 +2106,9 @@ class SlashCommandHandler:
             task = " ".join(task_tokens).strip()
             if not task:
                 show_error_message(
-                    "Usage: /rlm run <task> [steps=N] [timeout=N] [env=generic|dspy] "
+                    "Usage: /rlm run <task> [steps=N] [timeout=N] [env=generic|dspy|pure_rlm] "
                     "[depth=N] [children=N] [parallel=N] [budget=N] "
-                    "[framework=native|dspy|pydantic-ai|google-adk] "
+                    f"[framework={framework_opts}] "
                     "[branch=N] [sub=provider/model]"
                 )
                 return
@@ -1469,7 +2130,9 @@ class SlashCommandHandler:
             if sub_model:
                 sub_display = f"{sub_provider}/{sub_model}" if sub_provider else sub_model
                 console.print(f"  Sub-model route: [cyan]{sub_display}[/cyan]")
-            console.print(f"  Sandbox runtime: [cyan]{self.execution_engine.get_runtime_name()}[/cyan]")
+            console.print(
+                f"  Sandbox runtime: [cyan]{self.execution_engine.get_runtime_name()}[/cyan]"
+            )
             console.print()
 
             run_kwargs = {
@@ -1526,6 +2189,120 @@ class SlashCommandHandler:
                 cfg_default = getattr(cfg_rlm, "default_benchmark_preset", None)
                 if isinstance(cfg_default, str) and cfg_default.strip():
                     default_preset = cfg_default.strip().lower()
+
+            mode_aliases = {
+                "native": "native",
+                "rlm": "native",
+                "harness": "harness",
+                "direct": "direct-llm",
+                "direct-llm": "direct-llm",
+            }
+
+            if len(args) >= 2 and args[1].lower() == "report":
+                candidate_ref = "latest"
+                baseline_ref = "previous"
+                report_format = "markdown"
+                output_path: str | None = None
+                min_reward_delta = 0.0
+                min_completion_delta = 0.0
+                max_steps_increase = 0.0
+                fail_on_completion_regression = True
+                positional_refs: list[str] = []
+
+                for token in args[2:]:
+                    lowered = token.lower()
+                    if lowered.startswith("candidate="):
+                        candidate_ref = token.split("=", 1)[1].strip() or "latest"
+                    elif lowered.startswith("baseline="):
+                        baseline_ref = token.split("=", 1)[1].strip() or "previous"
+                    elif lowered.startswith("format="):
+                        report_format = token.split("=", 1)[1].strip().lower() or "markdown"
+                    elif lowered.startswith("output=") or lowered.startswith("out="):
+                        output_path = token.split("=", 1)[1].strip() or None
+                    elif lowered.startswith("min_reward_delta="):
+                        try:
+                            min_reward_delta = float(token.split("=", 1)[1])
+                        except ValueError:
+                            show_error_message(
+                                "Invalid min_reward_delta value. Use min_reward_delta=<number>."
+                            )
+                            return
+                    elif lowered.startswith("min_completion_delta="):
+                        try:
+                            min_completion_delta = float(token.split("=", 1)[1])
+                        except ValueError:
+                            show_error_message(
+                                "Invalid min_completion_delta value. Use min_completion_delta=<number>."
+                            )
+                            return
+                    elif lowered.startswith("max_steps_increase="):
+                        try:
+                            max_steps_increase = float(token.split("=", 1)[1])
+                        except ValueError:
+                            show_error_message(
+                                "Invalid max_steps_increase value. Use max_steps_increase=<number>."
+                            )
+                            return
+                    elif lowered.startswith("fail_on_completion_regression="):
+                        value = token.split("=", 1)[1].strip().lower()
+                        if value in {"on", "true", "1", "yes"}:
+                            fail_on_completion_regression = True
+                        elif value in {"off", "false", "0", "no"}:
+                            fail_on_completion_regression = False
+                        else:
+                            show_error_message(
+                                "Invalid fail_on_completion_regression value. Use on|off."
+                            )
+                            return
+                    elif "=" not in token:
+                        positional_refs.append(token)
+                    else:
+                        show_error_message(
+                            "Usage: /rlm bench report [candidate=<id|path|latest>] "
+                            "[baseline=<id|path|previous>] [format=markdown|csv|json] "
+                            "[output=path]"
+                        )
+                        return
+
+                if positional_refs:
+                    candidate_ref = positional_refs[0]
+                if len(positional_refs) >= 2:
+                    baseline_ref = positional_refs[1]
+                if len(positional_refs) > 2:
+                    show_error_message(
+                        "Usage: /rlm bench report [candidate=<id|path|latest>] "
+                        "[baseline=<id|path|previous>] [format=markdown|csv|json] "
+                        "[output=path]"
+                    )
+                    return
+
+                try:
+                    report = self.rlm_runner.export_benchmark_report(
+                        candidate=candidate_ref,
+                        baseline=baseline_ref,
+                        report_format=report_format,
+                        output_path=output_path,
+                        min_reward_delta=min_reward_delta,
+                        min_completion_delta=min_completion_delta,
+                        max_steps_increase=max_steps_increase,
+                        fail_on_completion_regression=fail_on_completion_regression,
+                    )
+                except ValueError as exc:
+                    show_error_message(str(exc))
+                    return
+
+                self.current_context["rlm_last_benchmark_report_path"] = str(report.report_path)
+                self.current_context["rlm_last_benchmark_report_format"] = report.report_format
+                self.current_context["rlm_last_benchmark_report_candidate"] = report.candidate_id
+                self.current_context["rlm_last_benchmark_report_baseline"] = report.baseline_id
+
+                show_success_message("Benchmark report exported.")
+                console.print(
+                    f"[dim]Report:[/dim] {report.report_path}  "
+                    f"[dim]Format:[/dim] {report.report_format}"
+                )
+                console.print()
+                return
 
             if len(args) >= 2 and args[1].lower() in {"compare", "validate"}:
                 bench_mode = args[1].lower()
@@ -1617,13 +2394,25 @@ class SlashCommandHandler:
                     return
 
                 if bench_mode == "compare":
-                    self.current_context["rlm_last_benchmark_compare_candidate"] = comparison.candidate_id
-                    self.current_context["rlm_last_benchmark_compare_baseline"] = comparison.baseline_id
-                    self.current_context["rlm_last_benchmark_compare_passed"] = bool(comparison.passed)
+                    self.current_context["rlm_last_benchmark_compare_candidate"] = (
+                        comparison.candidate_id
+                    )
+                    self.current_context["rlm_last_benchmark_compare_baseline"] = (
+                        comparison.baseline_id
+                    )
+                    self.current_context["rlm_last_benchmark_compare_passed"] = bool(
+                        comparison.passed
+                    )
                 else:
-                    self.current_context["rlm_last_benchmark_validate_candidate"] = comparison.candidate_id
-                    self.current_context["rlm_last_benchmark_validate_baseline"] = comparison.baseline_id
-                    self.current_context["rlm_last_benchmark_validate_passed"] = bool(comparison.passed)
+                    self.current_context["rlm_last_benchmark_validate_candidate"] = (
+                        comparison.candidate_id
+                    )
+                    self.current_context["rlm_last_benchmark_validate_baseline"] = (
+                        comparison.baseline_id
+                    )
+                    self.current_context["rlm_last_benchmark_validate_passed"] = bool(
+                        comparison.passed
+                    )
                     self.current_context["rlm_last_benchmark_validate_exit_code"] = (
                         0 if comparison.passed else 1
                     )
@@ -1720,6 +2509,7 @@ class SlashCommandHandler:
 
             preset = default_preset
             list_only = False
+            mode = "native"
             pack_paths_override: list[str] | None = None
             limit: int | None = None
             max_steps: int | None = None
@@ -1736,6 +2526,15 @@ class SlashCommandHandler:
                     list_only = True
                 elif lowered.startswith("preset="):
                     preset = token.split("=", 1)[1].strip().lower() or default_preset
+                elif lowered.startswith("mode="):
+                    mode_token = token.split("=", 1)[1].strip().lower().replace("_", "-")
+                    resolved_mode = mode_aliases.get(mode_token)
+                    if resolved_mode is None:
+                        show_error_message(
+                            "Invalid mode value. Use mode=native|harness|direct-llm."
+                        )
+                        return
+                    mode = resolved_mode
                 elif lowered.startswith("pack="):
                     raw_paths = token.split("=", 1)[1].strip()
                     if not raw_paths:
@@ -1791,10 +2590,13 @@ class SlashCommandHandler:
                     preset = lowered
                 else:
                     show_error_message(
-                        "Usage: /rlm bench [list|preset=name] [pack=path[,path2]] [limit=N] "
-                        "[steps=N] [timeout=N] [branch=N] [framework=native|dspy|pydantic-ai|google-adk] [env=generic|dspy] [sub=provider/model]\n"
+                        "Usage: /rlm bench [list|preset=name] [mode=native|harness|direct-llm] "
+                        "[pack=path[,path2]] [limit=N] "
+                        f"[steps=N] [timeout=N] [branch=N] [framework={framework_opts}] [env=generic|dspy|pure_rlm] [sub=provider/model]\n"
                         "       /rlm bench compare [candidate=<id|path|latest>] [baseline=<id|path|previous>] ...\n"
-                        "       /rlm bench validate [candidate=<id|path|latest>] [baseline=<id|path|previous>] ..."
+                        "       /rlm bench validate [candidate=<id|path|latest>] [baseline=<id|path|previous>] ...\n"
+                        "       /rlm bench report [candidate=<id|path|latest>] [baseline=<id|path|previous>] "
+                        "[format=markdown|csv|json] [output=path]"
                     )
                     return
 
@@ -1805,7 +2607,9 @@ class SlashCommandHandler:
                     show_error_message(str(exc))
                     return
                 console.print()
-                table = Table(title="RLM Benchmark Presets", show_header=True, header_style="bold cyan")
+                table = Table(
+                    title="RLM Benchmark Presets", show_header=True, header_style="bold cyan"
+                )
                 table.add_column("Preset", style="cyan")
                 table.add_column("Source", style="dim")
                 table.add_column("Cases", justify="right")
@@ -1839,6 +2643,7 @@ class SlashCommandHandler:
                     )
                     recent_table.add_column("Benchmark", style="cyan")
                     recent_table.add_column("Preset", style="dim")
+                    recent_table.add_column("Mode", style="magenta")
                     recent_table.add_column("Source", style="dim")
                     recent_table.add_column("Completion", justify="right")
                     recent_table.add_column("Reward", justify="right")
@@ -1848,6 +2653,7 @@ class SlashCommandHandler:
                         recent_table.add_row(
                             str(item.get("benchmark_id", "")),
                             str(item.get("preset", "")),
+                            str(item.get("mode", "native")),
                             str(item.get("source", "builtin")),
                             f"{float(item.get('completion_rate', 0.0)) * 100.0:.0f}%",
                             f"{float(item.get('avg_reward', 0.0)):.2f}",
@@ -1865,6 +2671,7 @@ class SlashCommandHandler:
             console.print()
             console.print("[bold cyan]📊 RLM Benchmark[/bold cyan]")
             console.print(f"  Preset: [cyan]{preset}[/cyan]")
+            console.print(f"  Mode: [cyan]{mode}[/cyan]")
             if limit is not None:
                 console.print(f"  Limit: [cyan]{limit}[/cyan]")
             if max_steps is not None:
@@ -1886,6 +2693,7 @@ class SlashCommandHandler:
             try:
                 benchmark = self.rlm_runner.run_benchmark(
                     preset=preset,
+                    mode=mode,
                     limit=limit,
                     environment=environment,
                     framework=framework,
@@ -1903,12 +2711,14 @@ class SlashCommandHandler:
             self.current_context["rlm_last_benchmark_id"] = benchmark.benchmark_id
             self.current_context["rlm_last_benchmark_path"] = str(benchmark.summary_path)
             self.current_context["rlm_last_benchmark_preset"] = benchmark.preset
+            self.current_context["rlm_last_benchmark_mode"] = benchmark.mode
 
             show_success_message(
                 f"RLM benchmark complete: {benchmark.completed_cases}/{benchmark.total_cases} completed"
             )
             console.print(
                 f"[dim]Benchmark:[/dim] {benchmark.benchmark_id}  "
+                f"[dim]Mode:[/dim] {benchmark.mode}  "
                 f"[dim]Avg reward:[/dim] {benchmark.avg_reward:.2f}  "
                 f"[dim]Avg steps:[/dim] {benchmark.avg_steps:.2f}"
             )
@@ -1917,6 +2727,7 @@ class SlashCommandHandler:
 
             case_table = Table(show_header=True, header_style="bold cyan")
             case_table.add_column("Case", style="cyan")
+            case_table.add_column("Mode", style="magenta")
             case_table.add_column("Run", style="dim")
             case_table.add_column("Done", justify="center")
             case_table.add_column("Reward", justify="right")
@@ -1924,6 +2735,7 @@ class SlashCommandHandler:
             for case in benchmark.case_results:
                 case_table.add_row(
                     str(case.get("case_id", "")),
+                    str(case.get("mode", benchmark.mode)),
                     str(case.get("run_id") or "-"),
                     "yes" if bool(case.get("completed")) else "no",
                     f"{float(case.get('total_reward', 0.0)):.2f}",
@@ -1981,7 +2793,9 @@ class SlashCommandHandler:
 
             self.current_context["rlm_last_viz_run_id"] = str(summary.get("run_id", run_ref))
             self.current_context["rlm_last_viz_run_path"] = str(summary.get("run_path", ""))
-            self.current_context["rlm_last_viz_total_reward"] = float(summary.get("total_reward", 0.0))
+            self.current_context["rlm_last_viz_total_reward"] = float(
+                summary.get("total_reward", 0.0)
+            )
             self.current_context["rlm_last_viz_failures"] = len(summary.get("failures", []))
 
             if output_json:
@@ -2025,10 +2839,14 @@ class SlashCommandHandler:
 
             action_counts = summary.get("action_counts") or {}
             if isinstance(action_counts, dict) and action_counts:
-                action_table = Table(title="Action Counts", show_header=True, header_style="bold cyan")
+                action_table = Table(
+                    title="Action Counts", show_header=True, header_style="bold cyan"
+                )
                 action_table.add_column("Action", style="cyan")
                 action_table.add_column("Count", justify="right")
-                for action_name, count in sorted(action_counts.items(), key=lambda item: str(item[0])):
+                for action_name, count in sorted(
+                    action_counts.items(), key=lambda item: str(item[0])
+                ):
                     action_table.add_row(str(action_name), str(count))
                 console.print(action_table)
 
@@ -2048,7 +2866,9 @@ class SlashCommandHandler:
 
             changes = summary.get("changes") or []
             if isinstance(changes, list) and changes:
-                change_table = Table(title="File Changes", show_header=True, header_style="bold magenta")
+                change_table = Table(
+                    title="File Changes", show_header=True, header_style="bold magenta"
+                )
                 change_table.add_column("Step", justify="right")
                 change_table.add_column("Action", style="cyan")
                 change_table.add_column("Path", style="dim")
@@ -2222,7 +3042,9 @@ class SlashCommandHandler:
                             "status": str(check.status).lower(),
                             "detail": str(check.detail),
                             "recommendation": (
-                                str(check.recommendation) if check.recommendation is not None else None
+                                str(check.recommendation)
+                                if check.recommendation is not None
+                                else None
                             ),
                         }
                         for check in checks
@@ -2298,7 +3120,9 @@ class SlashCommandHandler:
                         show_warning_message(f"RLM chat session '{session_id}' not found.")
                         return
                     console.print()
-                    table = Table(title="RLM Chat Session", show_header=True, header_style="bold cyan")
+                    table = Table(
+                        title="RLM Chat Session", show_header=True, header_style="bold cyan"
+                    )
                     table.add_column("Session", style="cyan")
                     table.add_column("Env", justify="center")
                     table.add_column("Contexts", justify="right")
@@ -2417,9 +3241,9 @@ class SlashCommandHandler:
             message = " ".join(message_tokens).strip()
             if not message:
                 show_error_message(
-                    "Usage: /rlm chat <message> [session=name] [env=generic|dspy] [branch=N] "
+                    "Usage: /rlm chat <message> [session=name] [env=generic|dspy|pure_rlm] [branch=N] "
                     "[depth=N] [children=N] [parallel=N] [budget=N] "
-                    "[framework=native|dspy|pydantic-ai|google-adk] "
+                    f"[framework={framework_opts}] "
                     "[sub=provider/model]"
                 )
                 return
@@ -2513,7 +3337,7 @@ class SlashCommandHandler:
             return
 
         show_error_message(
-            "Usage: /rlm <run|bench|import-evals|viz|status|replay|doctor|chat|observability>"
+            "Usage: /rlm <run|bench|import-evals|judge|frameworks|viz|status|replay|doctor|chat|observability>"
         )
 
     def cmd_save(self, args: list):
@@ -3511,7 +4335,7 @@ class SlashCommandHandler:
   [yellow]/connect[/yellow] <provider> <model> [api-key] [base-url] - Connect to local/cloud model
   [yellow]/models[/yellow] [filter]                   - List available models
   [yellow]/status[/yellow]                            - Show connection status
-  [yellow]/sandbox[/yellow] [status|doctor|use <runtime>] - Manage execution runtime (local/docker)
+  [yellow]/sandbox[/yellow] [status|doctor|use <runtime>|profile <secure|dev|custom>|backend <exec|monty|docker> [ack=I_UNDERSTAND_EXEC_IS_UNSAFE]|strict <on|off>|output-mode <mode>|apple <on|off>] - Manage execution/runtime backend settings
   [yellow]/disconnect[/yellow]                        - Disconnect from model
 
 [bold magenta]MCP (Model Context Protocol):[/bold magenta]
@@ -3531,19 +4355,25 @@ class SlashCommandHandler:
   [yellow]/test[/yellow] [file]                       - Run tests on generated code
 
 [bold magenta]RLM Workflows:[/bold magenta]
-  [yellow]/rlm run[/yellow] <task> [steps=N] [timeout=N] [branch=N] [depth=N] [children=N] [parallel=N] [budget=N] [framework=native|dspy|pydantic-ai|google-adk] [env=generic|dspy] [sub=provider/model] - Run an RLM coding episode
-  [yellow]/rlm bench[/yellow] [list|preset=name] [pack=path[,path2]] [limit=N] [steps=N] [timeout=N] [branch=N] [framework=native|dspy|pydantic-ai|google-adk] [env=generic|dspy] [sub=provider/model] - Run benchmark preset
+  [yellow]/rlm run[/yellow] <task> [steps=N] [timeout=N] [branch=N] [depth=N] [children=N] [parallel=N] [budget=N] [framework=native|dspy-rlm|adk-rlm|pydantic-ai|google-adk|deepagents] [env=generic|dspy|pure_rlm] [sub=provider/model] - Run an RLM coding episode
+  [yellow]/rlm bench[/yellow] [list|preset=name] [mode=native|harness|direct-llm] [pack=path[,path2]] [limit=N] [steps=N] [timeout=N] [branch=N] [framework=native|dspy-rlm|adk-rlm|pydantic-ai|google-adk|deepagents] [env=generic|dspy|pure_rlm] [sub=provider/model] - Run benchmark preset
   [yellow]/rlm bench compare[/yellow] [candidate=<id|path|latest>] [baseline=<id|path|previous>] [min_reward_delta=N] [min_completion_delta=N] [max_steps_increase=N] - Gate regressions
   [yellow]/rlm bench validate[/yellow] [candidate=<id|path|latest>] [baseline=<id|path|previous>] [min_reward_delta=N] [min_completion_delta=N] [max_steps_increase=N] [--json] - CI-style gate output
+  [yellow]/rlm bench report[/yellow] [candidate=<id|path|latest>] [baseline=<id|path|previous>] [format=markdown|csv|json] [output=path] - Export compare report
   [yellow]/rlm import-evals[/yellow] pack=path[,path2] [limit=N] - Preview imported eval packs before benchmarking
+  [yellow]/rlm judge[/yellow] pred=<predictions.jsonl> ref=<reference.json> [judge=provider/model] [output=path] [limit=N] [resume=on|off] [--json] - LLM-judge prediction files and write labels
+  [yellow]/rlm frameworks[/yellow]                    - Show adapter readiness and framework IDs
   [yellow]/rlm viz[/yellow] [run_id|latest] [depth=N] [children=on|off] [--json] - Visualize trajectory tree, failures, and changes
   [yellow]/rlm status[/yellow] [run_id]                - Show latest/specific run status
   [yellow]/rlm replay[/yellow] <run_id>                - Replay stored trajectory
-  [yellow]/rlm doctor[/yellow] [env=generic|dspy] [--json] - Validate RLM environment readiness
-  [yellow]/rlm chat[/yellow] <message> [session=name] [env=generic|dspy] [branch=N] [depth=N] [children=N] [parallel=N] [budget=N] [framework=native|dspy|pydantic-ai|google-adk] [sub=provider/model] - Persistent RLM chat turn
+  [yellow]/rlm doctor[/yellow] [env=generic|dspy|pure_rlm] [--json] - Validate RLM environment readiness
+  [yellow]/rlm chat[/yellow] <message> [session=name] [env=generic|dspy|pure_rlm] [branch=N] [depth=N] [children=N] [parallel=N] [budget=N] [framework=native|dspy-rlm|adk-rlm|pydantic-ai|google-adk|deepagents] [sub=provider/model] - Persistent RLM chat turn
   [yellow]/rlm chat status[/yellow] [session=name]      - Show persistent chat memory stats
   [yellow]/rlm chat reset[/yellow] [session=name]       - Clear persistent chat memory
   [yellow]/rlm observability[/yellow]                   - Show local/MLflow observability sink status
+  [yellow]/harness tools[/yellow] [mcp=on|off]         - List coding harness tools (local + MCP)
+  [yellow]/harness doctor[/yellow]                     - Show OpenCode-parity coverage report
+  [yellow]/harness run[/yellow] <task> [steps=N] [mcp=on|off] [tools=name[,name2]] - Run tool-using coding harness
 
 [bold magenta]Optimization (GEPA):[/bold magenta]
   [yellow]/optimize-start[/yellow] [budget]           - Start GEPA optimization workflow
@@ -3624,9 +4454,7 @@ a model gives you much better, context-aware code generation![/dim]
         console.print(
             "[bold cyan]═══════════════════════════════════════════════════════════════[/bold cyan]"
         )
-        console.print(
-            "[bold cyan]          🚀 Welcome to RLM Code - Complete Guide 🚀[/bold cyan]"
-        )
+        console.print("[bold cyan]          🚀 Welcome to RLM Code - Complete Guide 🚀[/bold cyan]")
         console.print(
             "[bold cyan]═══════════════════════════════════════════════════════════════[/bold cyan]"
         )
@@ -3728,7 +4556,7 @@ RLM Code is your AI-powered assistant for building agent systems. It helps you:
 • [yellow]/connect[/yellow] - Connect to LLM
 • [yellow]/models[/yellow] - List models
 • [yellow]/status[/yellow] - Connection status
-• [yellow]/sandbox[/yellow] - Choose local/docker runtime
+• [yellow]/sandbox[/yellow] - Choose execution runtime
 • [yellow]/disconnect[/yellow] - Disconnect
 
 [bold cyan]Code Quality:[/bold cyan]

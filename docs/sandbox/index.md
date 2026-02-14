@@ -1,285 +1,167 @@
 # Sandbox Runtimes
 
-RLM Code executes agent-generated code inside **sandbox runtimes** -- pluggable
-backends that range from a zero-config local subprocess to fully isolated cloud
-environments. Every runtime implements the same `SandboxRuntime` protocol, so
-switching between them is a one-line configuration change.
+RLM Code executes generated code through a sandbox layer with pluggable runtimes.
+The runtime selector is **Superbox** (`rlm_code.sandbox.superbox.Superbox`), which applies policy-based selection and fallback.
 
 ---
 
-## Architecture Overview
+## Runtime Architecture
 
-```
-                     create_runtime()
-                          |
-        +---------+-------+-------+---------+
-        |         |       |       |         |
-      Local    Monty   Docker  Apple    Cloud
-      (dev)   (sandbox) (iso)  (macOS)  (Modal, E2B, Daytona)
+```mermaid
+graph TD
+    Exec[ExecutionSandbox.execute] --> SB[Superbox.resolve_runtime]
+    SB --> R1[local]
+    SB --> R2[docker]
+    SB --> R3[apple-container]
+    SB --> R4[modal]
+    SB --> R5[e2b]
+    SB --> R6[daytona]
 ```
 
-The traditional backends live under `rlm_code.sandbox.runtimes` and share the
-same request/result data classes. The [Monty Interpreter](monty.md) provides an
-alternative sandboxed execution path via `rlm_code.rlm.monty_interpreter`.
+Execution flow:
+
+1. `ExecutionSandbox` builds request (`code_file`, timeout, workdir, env).
+2. `Superbox` resolves runtime from configured runtime + fallback policy.
+3. Runtime executes code and returns normalized result.
+4. Runtime policy checks enforce mount and docker flag restrictions.
 
 ---
 
-## Supported Backends
+## Supported Runtime IDs
 
-| Backend            | Module                                              | Isolation | Requires          | Best For                        |
-|--------------------|-----------------------------------------------------|-----------|-------------------|---------------------------------|
-| **Local**          | `rlm_code.sandbox.runtimes.local_runtime`           | None      | Python on PATH    | Development, fast iteration     |
-| **Monty**          | `rlm_code.rlm.monty_interpreter`                    | Rust VM   | `pydantic-monty`  | Sandboxed RLM REPL execution    |
-| **Docker**         | `rlm_code.sandbox.runtimes.docker_runtime`          | Container | Docker Engine     | Reproducible isolation          |
-| **Apple Container**| `rlm_code.sandbox.runtimes.apple_container_runtime` | Container | macOS `container` CLI | macOS-native sandboxing    |
-| **Modal**          | `rlm_code.sandbox.runtimes.cloud.modal_runtime`     | VM        | `modal` SDK       | Serverless, scalable compute    |
-| **E2B**            | `rlm_code.sandbox.runtimes.cloud.e2b_runtime`       | VM        | `e2b-code-interpreter` SDK | Strong isolation, fast startup |
-| **Daytona**        | `rlm_code.sandbox.runtimes.cloud.daytona_runtime`   | Workspace | Daytona CLI or SDK | Development environments       |
+| Runtime | Isolation | Notes |
+|---|---|---|
+| `local` | none | Fastest; development only |
+| `docker` | container | Recommended default for secure local execution |
+| `apple-container` | container | macOS-only, behind enable gate |
+| `modal` | remote | Requires Modal SDK/auth |
+| `e2b` | remote | Requires E2B SDK/auth |
+| `daytona` | remote workspace | Requires Daytona CLI/SDK |
 
----
-
-## The `SandboxRuntime` Protocol
-
-Every backend implements this protocol, defined in
-`rlm_code.sandbox.runtimes.base`:
-
-```python
-class SandboxRuntime(Protocol):
-    """Runtime contract for sandbox execution backends."""
-
-    name: str
-
-    def execute(self, request: RuntimeExecutionRequest) -> RuntimeExecutionResult:
-        """Execute request and return process result."""
-```
-
-Because it is a `Protocol`, any class that structurally matches the interface
-can be used -- no explicit inheritance required.
+`SUPPORTED_RUNTIMES` is defined in `rlm_code.sandbox.runtimes.registry`.
 
 ---
 
-## `RuntimeExecutionRequest`
+## Superbox Profiles
 
-A frozen dataclass carrying everything a backend needs to run user code.
+Use `/sandbox profile` to apply runtime policy presets:
 
-```python
-@dataclass(slots=True)
-class RuntimeExecutionRequest:
-    code_file: Path            # Path to the Python file to execute
-    workdir: Path              # Working directory for the execution
-    timeout_seconds: int       # Maximum wall-clock seconds
-    python_executable: Path    # Python interpreter to invoke
-    env: dict[str, str]        # Environment variables passed to the process
-```
+| Profile | Runtime | Fallback order | Pure RLM defaults |
+|---|---|---|---|
+| `secure` | `docker` | `docker -> daytona -> e2b` | `backend=docker`, strict on, unsafe exec off |
+| `dev` | `docker` | `docker -> apple-container -> local` | `backend=docker`, strict off |
+| `custom` | unchanged | user-defined | user-defined |
 
-| Field                | Type              | Description                                     |
-|----------------------|-------------------|-------------------------------------------------|
-| `code_file`          | `Path`            | Absolute path to the `.py` file to run          |
-| `workdir`            | `Path`            | CWD during execution                            |
-| `timeout_seconds`    | `int`             | Hard timeout; raises `TimeoutExpired` on breach |
-| `python_executable`  | `Path`            | Interpreter binary (e.g., `/usr/bin/python3`)   |
-| `env`                | `dict[str, str]`  | Env vars forwarded into the sandbox             |
+Manual runtime/backend changes automatically mark profile as `custom`.
 
 ---
 
-## `RuntimeExecutionResult`
+## `/sandbox` Commands
 
-A frozen dataclass returned by every backend.
-
-```python
-@dataclass(slots=True)
-class RuntimeExecutionResult:
-    return_code: int   # 0 = success, non-zero = failure
-    stdout: str        # Captured standard output
-    stderr: str        # Captured standard error
+```text
+/sandbox status
+/sandbox doctor
+/sandbox use <runtime>
+/sandbox profile <secure|dev|custom>
+/sandbox backend <exec|monty|docker> [ack=I_UNDERSTAND_EXEC_IS_UNSAFE]
+/sandbox strict <on|off>
+/sandbox output-mode <truncate|summarize|metadata>
+/sandbox apple <on|off>
 ```
 
-| Field          | Type   | Description                              |
-|----------------|--------|------------------------------------------|
-| `return_code`  | `int`  | Process exit code (`0` is success)       |
-| `stdout`       | `str`  | Everything the code wrote to stdout      |
-| `stderr`       | `str`  | Everything the code wrote to stderr      |
+### Recommended setup
 
----
-
-## `create_runtime()` Factory
-
-The primary entry point for obtaining a configured runtime instance.
-
-```python
-from rlm_code.sandbox.runtimes.registry import create_runtime
-
-runtime = create_runtime("docker", sandbox_config=my_config)
-result = runtime.execute(request)
+```text
+/sandbox profile secure
+/sandbox status
+/rlm doctor env=pure_rlm
 ```
 
-**Signature:**
+### Unsafe exec opt-in
 
-```python
-def create_runtime(
-    runtime_name: str,
-    sandbox_config: Any = None,
-) -> SandboxRuntime:
-```
+`/sandbox backend exec` is blocked unless you pass:
 
-**Behaviour:**
-
-1. Normalizes `runtime_name` to lowercase (defaults to `"local"` when `None`).
-2. Validates that the name is in `SUPPORTED_RUNTIMES`.
-3. For Docker, applies **dangerous flag detection** on `extra_args`.
-4. For cloud runtimes, checks that the optional SDK is installed.
-5. Returns a fully configured runtime instance.
-
-!!! warning "Dangerous Docker flags are blocked"
-    If any entry in `sandbox.docker.extra_args` matches a blocked flag, a
-    `ConfigurationError` is raised immediately. See [Docker Runtime](docker.md)
-    for details.
-
-**Supported runtime names:**
-
-```
-local | docker | apple-container | modal | e2b | daytona
+```text
+ack=I_UNDERSTAND_EXEC_IS_UNSAFE
 ```
 
 ---
 
-## `detect_runtime_health()`
+## Config Keys (`rlm_config.yaml`)
 
-Probes every known backend and returns availability information.
+```yaml
+sandbox:
+  runtime: docker
+  superbox_profile: secure
+  superbox_auto_fallback: true
+  superbox_fallback_runtimes: [docker, daytona, e2b]
 
-```python
-from rlm_code.sandbox.runtimes.registry import detect_runtime_health
+  pure_rlm_backend: docker
+  pure_rlm_allow_unsafe_exec: false
+  pure_rlm_strict: true
+  pure_rlm_output_mode: summarize
 
-health = detect_runtime_health()
-for name, entry in health.items():
-    print(f"{name}: available={entry.available}  detail={entry.detail}")
-```
+  default_timeout_seconds: 30
+  memory_limit_mb: 512
+  allowed_mount_roots: [".", "/tmp", "/var/folders"]
+  env_allowlist: []
 
-**Returns** `dict[str, RuntimeHealth]` where:
+  docker:
+    image: python:3.11-slim
+    network_enabled: false
+    extra_args: []
 
-```python
-@dataclass(slots=True)
-class RuntimeHealth:
-    runtime: str       # Runtime name (e.g., "docker")
-    available: bool    # True if ready to use
-    detail: str        # Human-readable status message
-```
-
-!!! info "Cloud SDK detection"
-    Cloud runtimes report `available=False` with an install hint when their
-    SDK is not installed, e.g., `"SDK not installed (pip install modal)"`.
-
----
-
-## `run_runtime_doctor()`
-
-Runs detailed, multi-check diagnostics for the currently configured sandbox.
-This powers the `/sandbox doctor` TUI command.
-
-```python
-from rlm_code.sandbox.runtimes.registry import run_runtime_doctor
-
-checks = run_runtime_doctor(sandbox_config=cfg, project_root=Path.cwd())
-for check in checks:
-    print(f"[{check.status}] {check.name}: {check.detail}")
-    if check.recommendation:
-        print(f"         -> {check.recommendation}")
-```
-
-**Returns** `list[RuntimeDoctorCheck]`:
-
-```python
-@dataclass(slots=True)
-class RuntimeDoctorCheck:
-    name: str                          # Check identifier
-    status: str                        # "pass" | "warn" | "fail"
-    detail: str                        # What was found
-    recommendation: str | None = None  # Fix suggestion (only on warn/fail)
-```
-
-**Checks performed (when runtime is `docker`):**
-
-| Check Name              | What It Verifies                                      |
-|-------------------------|-------------------------------------------------------|
-| `configured_runtime`    | Runtime name is valid                                 |
-| `env_allowlist`         | Host env vars forwarded are kept minimal              |
-| `docker_cli`            | `docker` binary exists on `$PATH`                     |
-| `docker_daemon`         | Docker daemon is reachable and responds               |
-| `docker_image`          | Configured image is available locally                 |
-| `docker_network_policy` | Networking is disabled (warns if enabled)             |
-| `docker_extra_args`     | No blocked flags in `extra_args`                      |
-| `mount_policy`          | Temp directory is in `allowed_mount_roots`            |
-| `temp_write_access`     | Temp directory is writable                            |
-
----
-
-## Dangerous Docker Flag Detection
-
-The registry maintains a blocklist of Docker flags that would weaken sandbox
-isolation:
-
-```python
-_DANGEROUS_DOCKER_FLAGS = {
-    "--privileged",
-    "--pid=host",
-    "--network=host",
-    "--ipc=host",
-    "--uts=host",
-    "--cap-add=ALL",
-    "--volume",
-    "-v",
-    "--mount",
-}
-```
-
-Both `create_runtime()` and `run_runtime_doctor()` check every entry in
-`sandbox.docker.extra_args` against this set. Flags that start with
-`--volume=` or `--mount=` are also blocked.
-
-!!! danger "Blocked at creation time"
-    If a dangerous flag is detected, `create_runtime()` raises a
-    `ConfigurationError` **before** any container is started. This is a
-    defence-in-depth measure that prevents accidental privilege escalation.
-
-```python
-# This will raise ConfigurationError:
-create_runtime("docker", sandbox_config_with_privileged_flag)
-
-# ConfigurationError: Docker extra arg '--privileged' is blocked by sandbox policy.
+  apple_container_enabled: false
 ```
 
 ---
 
-## Quick Example
+## Health and Doctor
 
-```python
-from pathlib import Path
-from rlm_code.sandbox.runtimes.base import RuntimeExecutionRequest
-from rlm_code.sandbox.runtimes.registry import create_runtime
+### `detect_runtime_health()`
 
-# Create a local runtime (no isolation, fastest)
-runtime = create_runtime("local")
+Returns `dict[str, RuntimeHealth]` for all runtime IDs.
 
-# Build a request
-request = RuntimeExecutionRequest(
-    code_file=Path("/tmp/agent_step.py"),
-    workdir=Path("/tmp/workspace"),
-    timeout_seconds=30,
-    python_executable=Path("/usr/bin/python3"),
-    env={"PYTHONPATH": "/tmp/workspace"},
-)
+### `run_runtime_doctor()`
 
-# Execute
-result = runtime.execute(request)
-print(f"Exit code: {result.return_code}")
-print(f"Output: {result.stdout}")
-```
+Performs deeper checks used by `/sandbox doctor`:
+
+- runtime validity
+- Docker CLI/daemon/image status
+- mount policy safety
+- env allowlist hygiene
+- blocked docker flags
+- temporary directory writeability
 
 ---
 
-## Next Steps
+## Docker Flag Safety
 
-- [Local Runtime](local.md) -- zero-config development sandbox
-- [Monty Interpreter](monty.md) -- Rust-based sandboxed Python for RLM REPL
-- [Docker Runtime](docker.md) -- containerized isolation with policy checks
-- [Cloud Runtimes](cloud.md) -- Modal, E2B, Daytona, and Apple Container
+Blocked flags include:
+
+- `--privileged`
+- `--pid=host`
+- `--network=host`
+- `--ipc=host`
+- `--uts=host`
+- `--cap-add=ALL`
+- `--volume`, `-v`, `--mount`
+
+If configured in `sandbox.docker.extra_args`, runtime creation fails with `ConfigurationError`.
+
+---
+
+## Monty and Pure RLM Backend
+
+Monty is used as a **pure RLM interpreter backend** (`/sandbox backend monty`), not a general `sandbox.runtime` ID.
+
+Use it when you want secure in-process pure RLM execution without Docker.
+
+---
+
+## Next
+
+- [Docker Runtime](docker.md)
+- [Local Runtime](local.md)
+- [Monty Interpreter](monty.md)
+- [Cloud Runtimes](cloud.md)

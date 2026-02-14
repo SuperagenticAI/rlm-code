@@ -12,7 +12,8 @@ from pathlib import Path
 from typing import Any
 
 from ..core.logging import get_logger
-from ..sandbox.runtimes import RuntimeExecutionRequest, create_runtime
+from ..sandbox.runtimes import RuntimeExecutionRequest
+from ..sandbox.superbox import Superbox
 
 logger = get_logger(__name__)
 
@@ -33,8 +34,12 @@ class ExecutionSandbox:
         configured_memory = memory_limit_mb
         sandbox_config = self._get_sandbox_config()
         if sandbox_config:
-            configured_timeout = int(getattr(sandbox_config, "default_timeout_seconds", timeout) or timeout)
-            configured_memory = int(getattr(sandbox_config, "memory_limit_mb", memory_limit_mb) or memory_limit_mb)
+            configured_timeout = int(
+                getattr(sandbox_config, "default_timeout_seconds", timeout) or timeout
+            )
+            configured_memory = int(
+                getattr(sandbox_config, "memory_limit_mb", memory_limit_mb) or memory_limit_mb
+            )
 
         self.timeout = configured_timeout
         self.memory_limit_mb = configured_memory
@@ -101,14 +106,19 @@ class ExecutionSandbox:
                 else:
                     logger.debug(f"Using project venv Python: {python_exe}")
 
-                runtime_name = self.get_runtime_name()
                 sandbox_config = self._get_sandbox_config()
+                superbox = Superbox(
+                    sandbox_config=sandbox_config,
+                    runtime_override=self.runtime_override,
+                )
+                resolution = superbox.resolve_runtime()
+                runtime_name = resolution.runtime_name
                 self._enforce_runtime_policy(
                     runtime_name=runtime_name,
                     workdir=self.temp_dir,
                     sandbox_config=sandbox_config,
                 )
-                runtime = create_runtime(runtime_name, sandbox_config)
+                runtime = resolution.runtime
 
                 request = RuntimeExecutionRequest(
                     code_file=code_file,
@@ -189,7 +199,9 @@ class ExecutionSandbox:
 
         return safe_env
 
-    def _enforce_runtime_policy(self, runtime_name: str, workdir: Path, sandbox_config: Any) -> None:
+    def _enforce_runtime_policy(
+        self, runtime_name: str, workdir: Path, sandbox_config: Any
+    ) -> None:
         """Validate runtime guardrails before execution."""
         if runtime_name not in {"docker", "apple-container"}:
             return
@@ -199,8 +211,7 @@ class ExecutionSandbox:
         if not any(resolved_workdir.is_relative_to(root) for root in allowed_roots):
             roots = ", ".join(str(root) for root in allowed_roots) or "(none)"
             raise ValueError(
-                f"Sandbox mount policy blocked workdir '{resolved_workdir}'. "
-                f"Allowed roots: {roots}"
+                f"Sandbox mount policy blocked workdir '{resolved_workdir}'. Allowed roots: {roots}"
             )
 
     def _resolve_allowed_mount_roots(self, sandbox_config: Any) -> list[Path]:

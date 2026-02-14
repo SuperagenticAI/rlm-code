@@ -69,8 +69,9 @@ RLM Code is organized into the following top-level packages. Each module is docu
 | Module | Description | Docs |
 |---|---|---|
 | `rlm_code.sandbox.runtimes` | Runtime registry, factory, health detection, and doctor checks | [Sandbox Runtimes](../sandbox/index.md) |
-| `rlm_code.sandbox.runtimes.local` | Local (no-isolation) sandbox runtime | [Local Runtime](../sandbox/local.md) |
-| `rlm_code.sandbox.runtimes.docker` | Docker sandbox runtime with security policy enforcement | [Docker Runtime](../sandbox/docker.md) |
+| `rlm_code.sandbox.superbox` | Policy-driven runtime resolution and fallback orchestration | [Sandbox Runtimes](../sandbox/index.md) |
+| `rlm_code.sandbox.runtimes.local_runtime` | Local (no-isolation) sandbox runtime | [Local Runtime](../sandbox/local.md) |
+| `rlm_code.sandbox.runtimes.docker_runtime` | Docker sandbox runtime with security policy enforcement | [Docker Runtime](../sandbox/docker.md) |
 | `rlm_code.sandbox.runtimes.cloud` | Modal, E2B, Daytona, and Apple Container cloud runtimes | [Cloud Runtimes](../sandbox/cloud.md) |
 
 ---
@@ -91,6 +92,7 @@ RLM Code is organized into the following top-level packages. Each module is docu
 | `rlm_code.models` | 12+ LLM provider adapters with unified interface | [LLM Providers](../integrations/llm-providers.md) |
 | `rlm_code.mcp` | MCP server exposing all capabilities via Model Context Protocol | [MCP Server](../integrations/mcp.md) |
 | `rlm_code.rlm.frameworks` | Framework adapters for DSPy and other agent frameworks | [Framework Adapters](../integrations/frameworks.md) |
+| `rlm_code.harness` | Tool-using coding harness runner and registry (`/harness`) | [CLI Reference](../getting-started/cli.md) |
 
 ---
 
@@ -98,6 +100,7 @@ RLM Code is organized into the following top-level packages. Each module is docu
 
 | Module | Description | Docs |
 |---|---|---|
+| `rlm_code.core.config` | Primary project configuration schema (`rlm_config.yaml`) and manager | [Configuration](../getting-started/configuration.md) |
 | `rlm_code.rlm.config_schema` | RLMConfig, PureRLMConfig, SandboxConfig, and related schemas | [Configuration](../getting-started/configuration.md) |
 
 ---

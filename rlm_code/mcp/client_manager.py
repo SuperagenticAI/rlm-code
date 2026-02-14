@@ -174,14 +174,15 @@ class MCPClientManager:
 
         if use_retry:
             import logging
+
             logger = logging.getLogger(__name__)
-            
+
             def on_retry(attempt: int, error: Exception, delay: float) -> None:
                 logger.info(
                     f"MCP connection to '{server_name}' failed (attempt {attempt}). "
                     f"Retrying in {delay:.1f}s..."
                 )
-            
+
             return await self._retry_controller.execute_with_retry(
                 lambda: self._connect_internal(server_name, config),
                 operation_name=f"connect({server_name})",
@@ -190,7 +191,9 @@ class MCPClientManager:
         else:
             return await self._connect_internal(server_name, config)
 
-    async def _connect_internal(self, server_name: str, config: MCPServerConfig) -> MCPSessionWrapper:
+    async def _connect_internal(
+        self, server_name: str, config: MCPServerConfig
+    ) -> MCPSessionWrapper:
         """
         Internal connection logic without retry.
 

@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import io
 import sys
-import time
 import traceback
 from dataclasses import dataclass, field
 from typing import Any, Callable, Protocol, runtime_checkable
@@ -69,14 +68,16 @@ class CodeInterpreter(Protocol):
 
 
 # Built-in names that should not appear in the user-variable snapshot
-_INTERNAL_NAMES = frozenset({
-    "__builtins__",
-    "__name__",
-    "__doc__",
-    "__package__",
-    "__loader__",
-    "__spec__",
-})
+_INTERNAL_NAMES = frozenset(
+    {
+        "__builtins__",
+        "__name__",
+        "__doc__",
+        "__package__",
+        "__loader__",
+        "__spec__",
+    }
+)
 
 
 class LocalInterpreter:

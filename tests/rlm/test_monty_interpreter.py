@@ -22,6 +22,7 @@ import pytest
 # ── Skip if pydantic-monty not installed ──────────────────────────────────
 try:
     import pydantic_monty  # noqa: F401
+
     HAS_MONTY = True
 except ImportError:
     HAS_MONTY = False
@@ -29,17 +30,16 @@ except ImportError:
 pytestmark = pytest.mark.skipif(not HAS_MONTY, reason="pydantic-monty not installed")
 
 from rlm_code.rlm.monty_interpreter import (
-    MontyCodeResult,
     MontyCodeValidator,
     MontyInterpreter,
     _extract_assigned_names,
     _extract_referenced_names,
 )
 
-
 # ═══════════════════════════════════════════════════════════════════════════
 # AST helpers
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestExtractAssignedNames:
     """Tests for _extract_assigned_names."""
@@ -87,6 +87,7 @@ class TestExtractReferencedNames:
 # ═══════════════════════════════════════════════════════════════════════════
 # MontyInterpreter -- Basic execution
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestMontyInterpreterBasic:
     """Basic execution tests."""
@@ -136,6 +137,7 @@ result = add(3, 4)
 # ═══════════════════════════════════════════════════════════════════════════
 # Variable persistence across REPL steps
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestMontyVariablePersistence:
     """Variables should persist across multiple execute() calls."""
@@ -202,6 +204,7 @@ class TestMontyVariablePersistence:
 # Print capture
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 class TestMontyPrintCapture:
     """stdout from print() should be captured."""
 
@@ -229,6 +232,7 @@ class TestMontyPrintCapture:
 # ═══════════════════════════════════════════════════════════════════════════
 # External function dispatch
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestMontyExternalFunctions:
     """External functions should dispatch to host-side handlers."""
@@ -302,6 +306,7 @@ except ValueError:
 # FINAL / FINAL_VAR / SUBMIT dispatch
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 class TestMontyTermination:
     """RLM termination patterns via external function dispatch."""
 
@@ -354,11 +359,13 @@ class TestMontyTermination:
 # llm_query simulation
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 class TestMontyLlmQuery:
     """Simulate the RLM llm_query() pattern with Monty external functions."""
 
     def test_llm_query_basic(self):
         """Simulate llm_query calling a mock LLM."""
+
         def mock_llm_query(prompt, model=None):
             return f"Mock response to: {prompt}"
 
@@ -397,6 +404,7 @@ total = len(results)
 
     def test_llm_query_with_context_variable(self):
         """Full RLM pattern: context as variable + llm_query."""
+
         def mock_llm_query(prompt, model=None):
             if "summarize" in prompt.lower():
                 return "This is a summary."
@@ -419,7 +427,7 @@ summary = llm_query("Summarize: " + chunk)
         assert interp.get_variable("summary") == "This is a summary."
 
         # Step 3: LLM calls FINAL
-        result = interp.execute('FINAL(summary)')
+        result = interp.execute("FINAL(summary)")
         assert result.final_output is not None
         assert result.final_output["answer"] == "This is a summary."
 
@@ -427,6 +435,7 @@ summary = llm_query("Summarize: " + chunk)
 # ═══════════════════════════════════════════════════════════════════════════
 # Error handling
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestMontyErrorHandling:
     """Error handling and edge cases."""
@@ -477,13 +486,12 @@ class TestMontyErrorHandling:
 # Resource limits
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 class TestMontyResourceLimits:
     """Resource limit enforcement."""
 
     def test_timeout_enforcement(self):
-        interp = MontyInterpreter(
-            resource_limits={"max_duration_secs": 0.1}
-        )
+        interp = MontyInterpreter(resource_limits={"max_duration_secs": 0.1})
         interp.start()
 
         # This should time out
@@ -507,6 +515,7 @@ while True:
 # ═══════════════════════════════════════════════════════════════════════════
 # Checkpoint / restore
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestMontyCheckpoint:
     """Session serialization."""
@@ -540,6 +549,7 @@ class TestMontyCheckpoint:
 # ═══════════════════════════════════════════════════════════════════════════
 # MontyCodeValidator
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestMontyCodeValidator:
     """Standalone code validation."""
@@ -578,6 +588,7 @@ class TestMontyCodeValidator:
 # Execution stats
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 class TestMontyStats:
     """Execution statistics tracking."""
 
@@ -611,6 +622,7 @@ class TestMontyStats:
 # Integration: Full RLM-style session
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 class TestMontyFullRLMSession:
     """End-to-end RLM-style execution session."""
 
@@ -630,9 +642,7 @@ class TestMontyFullRLMSession:
                 return "42"
             return "I don't know"
 
-        interp = MontyInterpreter(
-            resource_limits={"max_duration_secs": 10.0}
-        )
+        interp = MontyInterpreter(resource_limits={"max_duration_secs": 10.0})
         interp.start()
         interp.register_external("llm_query", mock_llm_query)
         interp.register_external("FINAL", lambda answer: None)

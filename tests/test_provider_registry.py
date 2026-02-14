@@ -119,7 +119,7 @@ def test_opencode_keyless_generation_uses_cli_when_available(tmp_path: Path, mon
     class _Proc:
         def __init__(self):
             self.returncode = 0
-            self.stdout = '\n'.join(
+            self.stdout = "\n".join(
                 [
                     '{"type":"text","part":{"text":"hello "}}',
                     '{"type":"text","part":{"text":"from cli"}}',

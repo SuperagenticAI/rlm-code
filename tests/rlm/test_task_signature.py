@@ -12,9 +12,7 @@ class TestFromString:
         assert sig.output_fields == {"answer": str}
 
     def test_multiple_outputs(self):
-        sig = TaskSignature.from_string(
-            "context: str -> answer: str, confidence: float"
-        )
+        sig = TaskSignature.from_string("context: str -> answer: str, confidence: float")
         assert sig.output_fields == {"answer": str, "confidence": float}
 
     def test_all_supported_types(self):
@@ -42,15 +40,11 @@ class TestFromString:
             TaskSignature.from_string("context: foobar -> answer: str")
 
     def test_with_instructions(self):
-        sig = TaskSignature.from_string(
-            "q: str -> a: str", instructions="Answer the question"
-        )
+        sig = TaskSignature.from_string("q: str -> a: str", instructions="Answer the question")
         assert sig.instructions == "Answer the question"
 
     def test_type_aliases(self):
-        sig = TaskSignature.from_string(
-            "a: string, b: integer, c: number, d: boolean -> out: str"
-        )
+        sig = TaskSignature.from_string("a: string, b: integer, c: number, d: boolean -> out: str")
         assert sig.input_fields["a"] is str
         assert sig.input_fields["b"] is int
         assert sig.input_fields["c"] is float
@@ -59,10 +53,12 @@ class TestFromString:
 
 class TestFromDict:
     def test_basic(self):
-        sig = TaskSignature.from_dict({
-            "inputs": {"context": "str"},
-            "outputs": {"answer": "str"},
-        })
+        sig = TaskSignature.from_dict(
+            {
+                "inputs": {"context": "str"},
+                "outputs": {"answer": "str"},
+            }
+        )
         assert sig.input_fields == {"context": str}
         assert sig.output_fields == {"answer": str}
 
@@ -109,9 +105,7 @@ class TestValidation:
 
 class TestPromptHelpers:
     def test_prompt_description(self):
-        sig = TaskSignature.from_string(
-            "q: str -> a: str", instructions="Answer the question"
-        )
+        sig = TaskSignature.from_string("q: str -> a: str", instructions="Answer the question")
         desc = sig.prompt_description()
         assert "Task: Answer the question" in desc
         assert "q: str" in desc
@@ -125,9 +119,7 @@ class TestPromptHelpers:
         assert "confidence=0.0" in template
 
     def test_submit_template_all_types(self):
-        sig = TaskSignature.from_string(
-            "-> a: str, b: int, c: float, d: bool, e: list, f: dict"
-        )
+        sig = TaskSignature.from_string("-> a: str, b: int, c: float, d: bool, e: list, f: dict")
         template = sig.submit_template()
         assert 'a="..."' in template
         assert "b=0" in template

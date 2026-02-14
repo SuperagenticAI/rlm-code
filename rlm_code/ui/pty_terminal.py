@@ -12,19 +12,15 @@ key->sequence mapping, force color env vars, line buffering).
 
 from __future__ import annotations
 
-import asyncio
-import codecs
 import os
 import re
 import select
-import shutil
 import signal
 import struct
-import subprocess
 import sys
 from pathlib import Path
-from threading import Lock, Thread
-from typing import Any, Callable
+from threading import Lock
+from typing import Any
 
 from rich.text import Text
 
@@ -37,6 +33,9 @@ _HAS_PTY = hasattr(os, "openpty")
 # ---- ANSI escape code stripper (for plain-text fallback) ----
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]|\x1b\].*?\x07|\x1b\[.*?[a-zA-Z]")
+_TERM_CONTROL_RE = re.compile(
+    r"\x1b\[\d*[ABCDJKHG]|\x1b\[\d*;\d*[Hf]|\x1b\[\??\d*[hl]|\x1b\[[\d;]*r|\r"
+)
 
 
 def strip_ansi(text: str) -> str:
@@ -47,17 +46,41 @@ def strip_ansi(text: str) -> str:
 # ---- Simple ANSI-to-Rich color mapping ----
 
 _SGR_FG_MAP: dict[int, str] = {
-    30: "#1a1a1a", 31: "#cc0000", 32: "#4e9a06", 33: "#c4a000",
-    34: "#3465a4", 35: "#75507b", 36: "#06989a", 37: "#d3d7cf",
-    90: "#555753", 91: "#ef2929", 92: "#8ae234", 93: "#fce94f",
-    94: "#729fcf", 95: "#ad7fa8", 96: "#34e2e2", 97: "#eeeeec",
+    30: "#1a1a1a",
+    31: "#cc0000",
+    32: "#4e9a06",
+    33: "#c4a000",
+    34: "#3465a4",
+    35: "#75507b",
+    36: "#06989a",
+    37: "#d3d7cf",
+    90: "#555753",
+    91: "#ef2929",
+    92: "#8ae234",
+    93: "#fce94f",
+    94: "#729fcf",
+    95: "#ad7fa8",
+    96: "#34e2e2",
+    97: "#eeeeec",
 }
 
 _SGR_BG_MAP: dict[int, str] = {
-    40: "#1a1a1a", 41: "#cc0000", 42: "#4e9a06", 43: "#c4a000",
-    44: "#3465a4", 45: "#75507b", 46: "#06989a", 47: "#d3d7cf",
-    100: "#555753", 101: "#ef2929", 102: "#8ae234", 103: "#fce94f",
-    104: "#729fcf", 105: "#ad7fa8", 106: "#34e2e2", 107: "#eeeeec",
+    40: "#1a1a1a",
+    41: "#cc0000",
+    42: "#4e9a06",
+    43: "#c4a000",
+    44: "#3465a4",
+    45: "#75507b",
+    46: "#06989a",
+    47: "#d3d7cf",
+    100: "#555753",
+    101: "#ef2929",
+    102: "#8ae234",
+    103: "#fce94f",
+    104: "#729fcf",
+    105: "#ad7fa8",
+    106: "#34e2e2",
+    107: "#eeeeec",
 }
 
 # Key event to terminal escape sequence mapping (from SuperQode).
@@ -191,6 +214,7 @@ class PTYProcess:
         winsize = struct.pack("HHHH", rows, cols, 0, 0)
         import fcntl
         import termios
+
         fcntl.ioctl(slave_fd, termios.TIOCSWINSZ, winsize)
 
         pid = os.fork()
@@ -231,6 +255,7 @@ class PTYProcess:
 
             # Set non-blocking reads on master (from Toad).
             import fcntl as _fcntl
+
             flags = _fcntl.fcntl(master_fd, _fcntl.F_GETFL)
             _fcntl.fcntl(master_fd, _fcntl.F_SETFL, flags | os.O_NONBLOCK)
 
@@ -294,6 +319,7 @@ class PTYProcess:
         try:
             import fcntl
             import termios
+
             winsize = struct.pack("HHHH", rows, cols, 0, 0)
             fcntl.ioctl(self._master_fd, termios.TIOCSWINSZ, winsize)
         except (OSError, ImportError):
@@ -333,6 +359,7 @@ class PTYProcess:
 # ---------------------------------------------------------------------------
 # Shell Manager (from SuperQode's pty_shell.py pattern)
 # ---------------------------------------------------------------------------
+
 
 class ShellManager:
     """Manages multiple PTY shell sessions.
@@ -403,7 +430,6 @@ try:
     from textual import events
     from textual.app import ComposeResult
     from textual.binding import Binding
-    from textual.containers import Vertical
     from textual.reactive import reactive
     from textual.timer import Timer
     from textual.widget import Widget
@@ -460,7 +486,9 @@ if _HAS_TEXTUAL:
         is_running: reactive[bool] = reactive(False)
 
         _POLL_INTERVAL = 0.05  # 50ms — responsive without burning CPU.
-        _MAX_LINES = 5000      # Scrollback limit.
+        _ACTIVE_POLL_INTERVAL = 0.03
+        _IDLE_POLL_INTERVAL = 0.14
+        _MAX_LINES = 5000  # Scrollback limit.
         _ESC_DOUBLE_TAP = 0.3  # Seconds between Esc presses to blur.
 
         def __init__(self, cwd: Path | None = None, **kwargs: Any) -> None:
@@ -472,6 +500,8 @@ if _HAS_TEXTUAL:
             self._status: Static | None = None
             self._line_count = 0
             self._last_esc: float = 0.0
+            self._idle_ticks = 0
+            self._poll_interval_current = self._POLL_INTERVAL
 
         def compose(self) -> ComposeResult:
             yield RichLog(id="term_output", wrap=True, markup=False)
@@ -481,6 +511,14 @@ if _HAS_TEXTUAL:
             self._output = self.query_one("#term_output", RichLog)
             self._status = self.query_one("#term_status", Static)
             self._start_shell()
+
+        def _set_poll_interval(self, interval: float) -> None:
+            if abs(interval - self._poll_interval_current) < 1e-6 and self._poll_timer is not None:
+                return
+            if self._poll_timer is not None:
+                self._poll_timer.stop()
+            self._poll_timer = self.set_interval(interval, self._poll_output, pause=False)
+            self._poll_interval_current = interval
 
         def _start_shell(self) -> None:
             """Spawn the PTY shell and begin polling."""
@@ -498,19 +536,15 @@ if _HAS_TEXTUAL:
                 pty.start(rows=rows, cols=cols)
             except Exception as exc:
                 if self._output:
-                    self._output.write(
-                        Text(f"Failed to start shell: {exc}", style="bold red")
-                    )
+                    self._output.write(Text(f"Failed to start shell: {exc}", style="bold red"))
                 self.is_running = False
                 return
 
             self._pty = pty
             self.is_running = True
             self._update_status()
-            # Start polling for output.
-            self._poll_timer = self.set_interval(
-                self._POLL_INTERVAL, self._poll_output, pause=False
-            )
+            self._idle_ticks = 0
+            self._set_poll_interval(self._POLL_INTERVAL)
 
         def _terminal_size(self) -> tuple[int, int]:
             """Return (rows, cols) based on current widget size."""
@@ -536,27 +570,26 @@ if _HAS_TEXTUAL:
                 chunks.append(data)
 
             if not chunks:
+                self._idle_ticks += 1
+                if self._idle_ticks >= 8:
+                    self._set_poll_interval(self._IDLE_POLL_INTERVAL)
                 return
 
+            self._idle_ticks = 0
+            self._set_poll_interval(self._ACTIVE_POLL_INTERVAL)
             raw = "".join(chunks)
             out = self._output
             if out is None:
                 return
 
-            # Split into lines and render with ANSI colors.
             # Strip cursor movement / screen clear codes but keep SGR colors.
-            cleaned = re.sub(
-                r"\x1b\[\d*[ABCDJKHG]|\x1b\[\d*;\d*[Hf]|\x1b\[\??\d*[hl]|\x1b\[[\d;]*r|\r",
-                "",
-                raw,
+            cleaned = _TERM_CONTROL_RE.sub("", raw)
+            if not cleaned:
+                return
+            out.write(ansi_to_rich_text(cleaned))
+            self._line_count += cleaned.count("\n") + (
+                1 if cleaned and not cleaned.endswith("\n") else 0
             )
-            lines = cleaned.split("\n")
-            for line in lines:
-                if not line:
-                    out.write("")
-                else:
-                    out.write(ansi_to_rich_text(line))
-                self._line_count += 1
 
             # Trim scrollback.
             if self._line_count > self._MAX_LINES:
@@ -569,18 +602,13 @@ if _HAS_TEXTUAL:
             if st is None:
                 return
             if self.is_running:
-                shell_name = Path(
-                    self._pty.shell if self._pty else "shell"
-                ).name
+                shell_name = Path(self._pty.shell if self._pty else "shell").name
                 st.update(
                     f" [bold #a78bfa]$[/] {shell_name}  "
                     f"[dim]Esc×2 blur  Ctrl+C interrupt  Ctrl+D exit[/]"
                 )
             else:
-                st.update(
-                    " [dim]Shell exited.[/]  "
-                    "[bold #a78bfa]Press Enter to restart[/]"
-                )
+                st.update(" [dim]Shell exited.[/]  [bold #a78bfa]Press Enter to restart[/]")
 
         def on_resize(self, event: events.Resize) -> None:
             """Resize the PTY to match the widget."""

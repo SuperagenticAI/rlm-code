@@ -69,7 +69,9 @@ class LazyFileContext:
             refs.append(ContextRef(path=rel))
         return refs
 
-    def render(self, refs: list[ContextRef], *, max_chars: int = 8000, max_chars_per_ref: int = 1600) -> str:
+    def render(
+        self, refs: list[ContextRef], *, max_chars: int = 8000, max_chars_per_ref: int = 1600
+    ) -> str:
         budget = max(0, int(max_chars))
         if budget <= 0:
             return ""

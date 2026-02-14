@@ -146,7 +146,7 @@ Step-through controls for **time-travel debugging** of any RLM run.
 
 ### How It Populates
 
-Run `/rlm replay` or `/rlm replay <run_id>` and the TUI automatically switches
+Run `/rlm status` to get a run id, then `/rlm replay <run_id>`. The TUI automatically switches
 to Research → Replay and loads the session:
 
 ```python
@@ -222,7 +222,7 @@ The Research tab auto-updates when you run RLM commands in the Chat tab:
 | `/rlm run "..."` | 📊 Dashboard + 📈 Trajectory + 📡 Events |
 | `/rlm bench preset=...` | 📊 Dashboard + 📈 Trajectory + 🏆 Benchmarks + 📡 Events |
 | `/rlm replay` | ⏪ Replay (auto-switches to Replay sub-tab) |
-| `/leaderboard` | 🏆 Benchmarks |
+| `/rlm bench compare ...` | 🏆 Benchmarks + compare summary |
 
 ---
 

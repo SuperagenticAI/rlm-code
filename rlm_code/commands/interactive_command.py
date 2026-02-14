@@ -857,7 +857,9 @@ Your AI-powered DSPy development assistant. Build, optimize, and learn DSPy with
             console.print("  [cyan]/connect openai gpt-4[/cyan]")
             console.print("  [cyan]/connect anthropic claude-3-sonnet[/cyan]")
             console.print()
-            console.print("[dim]Or configure a default model in rlm_config.yaml (legacy: dspy_config.yaml)[/dim]")
+            console.print(
+                "[dim]Or configure a default model in rlm_config.yaml (legacy: dspy_config.yaml)[/dim]"
+            )
             return
 
         # Generate signature code using connected model
@@ -910,7 +912,9 @@ Your AI-powered DSPy development assistant. Build, optimize, and learn DSPy with
             console.print("  [cyan]/connect openai gpt-4[/cyan]")
             console.print("  [cyan]/connect anthropic claude-3-sonnet[/cyan]")
             console.print()
-            console.print("[dim]Or configure a default model in rlm_config.yaml (legacy: dspy_config.yaml)[/dim]")
+            console.print(
+                "[dim]Or configure a default model in rlm_config.yaml (legacy: dspy_config.yaml)[/dim]"
+            )
             return
 
         # Generate module code using connected model
@@ -985,7 +989,9 @@ Your AI-powered DSPy development assistant. Build, optimize, and learn DSPy with
             console.print("  [cyan]/connect openai gpt-4[/cyan]")
             console.print("  [cyan]/connect anthropic claude-3-sonnet[/cyan]")
             console.print()
-            console.print("[dim]Or configure a default model in rlm_config.yaml (legacy: dspy_config.yaml)[/dim]")
+            console.print(
+                "[dim]Or configure a default model in rlm_config.yaml (legacy: dspy_config.yaml)[/dim]"
+            )
             return
 
         with EnhancedThinkingAnimation(message_type="code", update_interval=1.5):
@@ -1894,7 +1900,9 @@ Be conversational, helpful, and use the context to provide accurate information.
             f"[dim]⏱️  That took {generation_time:.1f}s. "
             "[dim]To reduce latency, use a smaller local model or reduce prompt/context size.[/dim]"
         )
-        console.print("[dim]   You can also clear long chat history with [cyan]/clear[/cyan].[/dim]")
+        console.print(
+            "[dim]   You can also clear long chat history with [cyan]/clear[/cyan].[/dim]"
+        )
         console.print()
 
         self._performance_tip_shown = True
@@ -3238,7 +3246,9 @@ def _show_welcome_screen(console, context, config_manager):
     status_table.add_row("Workspace", str(Path.cwd()))
     status_table.add_row(
         "Model",
-        f"[green]{model_name}[/green]" if model_name != "Not configured" else "[yellow]Not configured[/yellow]",
+        f"[green]{model_name}[/green]"
+        if model_name != "Not configured"
+        else "[yellow]Not configured[/yellow]",
     )
     status_table.add_row("Mode", "[green]Direct model mode[/green]")
 

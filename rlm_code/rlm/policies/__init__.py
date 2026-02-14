@@ -29,36 +29,36 @@ Usage:
     )
 """
 
+from .action_policies import (
+    BeamSearchActionPolicy,
+    GreedyActionPolicy,
+    MCTSActionPolicy,
+    SamplingActionPolicy,
+)
 from .base import (
-    Policy,
-    RewardPolicy,
     ActionSelectionPolicy,
     CompactionPolicy,
+    Policy,
+    RewardPolicy,
     TerminationPolicy,
+)
+from .compaction_policies import (
+    DeterministicCompactionPolicy,
+    HierarchicalCompactionPolicy,
+    LLMCompactionPolicy,
+    SlidingWindowCompactionPolicy,
 )
 from .registry import PolicyRegistry
 from .reward_policies import (
     DefaultRewardPolicy,
-    StrictRewardPolicy,
     LenientRewardPolicy,
     ResearchRewardPolicy,
-)
-from .action_policies import (
-    GreedyActionPolicy,
-    SamplingActionPolicy,
-    BeamSearchActionPolicy,
-    MCTSActionPolicy,
-)
-from .compaction_policies import (
-    LLMCompactionPolicy,
-    DeterministicCompactionPolicy,
-    SlidingWindowCompactionPolicy,
-    HierarchicalCompactionPolicy,
+    StrictRewardPolicy,
 )
 from .termination_policies import (
+    ConfidenceTerminationPolicy,
     FinalPatternTerminationPolicy,
     RewardThresholdTerminationPolicy,
-    ConfidenceTerminationPolicy,
 )
 
 __all__ = [

@@ -17,6 +17,8 @@ class PydanticAIFrameworkAdapter:
 
     workdir: str
     framework_id: str = "pydantic-ai"
+    adapter_mode: str = "agent_loop"
+    reference_impl: str = "pydantic_ai.Agent (installed package)"
 
     def doctor(self) -> tuple[bool, str]:
         try:
@@ -48,11 +50,15 @@ class PydanticAIFrameworkAdapter:
             ) from exc
 
         model_name = (sub_model or getattr(llm_connector, "current_model", None) or "").strip()
-        provider = (sub_provider or getattr(llm_connector, "model_type", None) or "").strip().lower()
+        provider = (
+            (sub_provider or getattr(llm_connector, "model_type", None) or "").strip().lower()
+        )
         if not model_name:
             raise RuntimeError("No active model. Connect a model first with /connect.")
 
-        resolved_model = self._resolve_model(provider=provider, model_name=model_name, llm_connector=llm_connector)
+        resolved_model = self._resolve_model(
+            provider=provider, model_name=model_name, llm_connector=llm_connector
+        )
         instructions = (
             "You are a pragmatic engineering assistant.\n"
             f"Working directory: {workdir}\n"
@@ -105,7 +111,14 @@ class PydanticAIFrameworkAdapter:
 
         if normalized_provider in {"gemini", "google", "google-genai"}:
             normalized_provider = "google-gla"
-        elif normalized_provider in {"lmstudio", "vllm", "sglang", "tgi", "openai-compatible", "opencode"}:
+        elif normalized_provider in {
+            "lmstudio",
+            "vllm",
+            "sglang",
+            "tgi",
+            "openai-compatible",
+            "opencode",
+        }:
             normalized_provider = "openai"
             base_url = str(getattr(llm_connector, "base_url", "") or "").strip()
             if base_url:

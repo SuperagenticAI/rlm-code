@@ -14,14 +14,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 from time import time
-from typing import Sequence
 
 from rich.console import Console, ConsoleOptions, RenderResult
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from .design_system import PALETTE, ICONS, SPINNER_FRAMES
+from .design_system import ICONS, PALETTE, SPINNER_FRAMES
 
 
 class AgentState(Enum):
@@ -48,6 +47,7 @@ STATE_SYMBOLS: dict[AgentState, tuple[str, str]] = {
 @dataclass(frozen=True)
 class AgentRole:
     """A predefined role with icon and color."""
+
     icon: str
     label: str
     color: str
@@ -92,9 +92,10 @@ class AgentNode:
     @property
     def role_info(self) -> AgentRole:
         """Return the role metadata, falling back to a default."""
-        return AGENT_ROLES.get(self.role.lower(), AgentRole(
-            icon=ICONS["agent"], label=self.role or "Agent", color=PALETTE.text_muted
-        ))
+        return AGENT_ROLES.get(
+            self.role.lower(),
+            AgentRole(icon=ICONS["agent"], label=self.role or "Agent", color=PALETTE.text_muted),
+        )
 
 
 @dataclass
@@ -201,9 +202,7 @@ class PipelineRenderable:
         self.pipeline = pipeline
         self.title = title
 
-    def __rich_console__(
-        self, console: Console, options: ConsoleOptions
-    ) -> RenderResult:
+    def __rich_console__(self, console: Console, options: ConsoleOptions) -> RenderResult:
         table = Table(
             show_header=True,
             header_style=f"bold {PALETTE.primary_lighter}",
@@ -251,7 +250,11 @@ class PipelineRenderable:
 
             task_text = Text()
             if node.current_task:
-                truncated = node.current_task[:20] + "..." if len(node.current_task) > 23 else node.current_task
+                truncated = (
+                    node.current_task[:20] + "..."
+                    if len(node.current_task) > 23
+                    else node.current_task
+                )
                 task_text = Text(truncated, style=PALETTE.text_hint)
 
             table.add_row(
@@ -330,7 +333,8 @@ def create_pipeline_from_events(events: list[dict]) -> AgentPipeline:
                     pipeline.add_agent(to_name, role="delegate")
                 pipeline.set_state(to_name, AgentState.PENDING)
                 pipeline.add_handoff(
-                    from_name, to_name,
+                    from_name,
+                    to_name,
                     ev.get("message", ""),
                     ev.get("issue_count", 0),
                 )

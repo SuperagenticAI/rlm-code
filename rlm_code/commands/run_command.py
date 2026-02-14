@@ -43,7 +43,9 @@ def execute(
     # Check if we're in a DSPy project
     config_manager = ConfigManager()
     if not config_manager.is_project_initialized():
-        console.print("[red]Error:[/red] No rlm_config.yaml (or legacy dspy_config.yaml) found in current directory.")
+        console.print(
+            "[red]Error:[/red] No rlm_config.yaml (or legacy dspy_config.yaml) found in current directory."
+        )
         console.print("Run 'rlm-code init' (or 'rlm-code init') to create a configuration file.")
         return
 

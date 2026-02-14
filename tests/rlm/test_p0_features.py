@@ -11,55 +11,44 @@ Tests for:
 - Audit logging
 """
 
-import asyncio
 import tempfile
 from pathlib import Path
 
 import pytest
 
-from rlm_code.rlm.policies import (
-    PolicyRegistry,
-    RewardPolicy,
-    ActionSelectionPolicy,
-    CompactionPolicy,
-    TerminationPolicy,
-    # Reward policies
-    DefaultRewardPolicy,
-    StrictRewardPolicy,
-    LenientRewardPolicy,
-    ResearchRewardPolicy,
-    # Action policies
-    GreedyActionPolicy,
-    SamplingActionPolicy,
-    BeamSearchActionPolicy,
-    MCTSActionPolicy,
-    # Compaction policies
-    LLMCompactionPolicy,
-    DeterministicCompactionPolicy,
-    SlidingWindowCompactionPolicy,
-    HierarchicalCompactionPolicy,
-    # Termination policies
-    FinalPatternTerminationPolicy,
-    RewardThresholdTerminationPolicy,
-    ConfidenceTerminationPolicy,
-)
-from rlm_code.rlm.policies.base import (
-    PolicyContext,
-    ActionResult,
-    RewardSignal,
-)
 from rlm_code.rlm.approval import (
+    ApprovalAuditLog,
     ApprovalGate,
-    ApprovalRequest,
-    ApprovalResponse,
-    ApprovalStatus,
     ApprovalPolicy,
-    RiskAssessor,
-    ToolRiskLevel,
-    RiskAssessment,
+    ApprovalStatus,
     AutoApproveHandler,
     AutoDenyHandler,
-    ApprovalAuditLog,
+    RiskAssessor,
+    ToolRiskLevel,
+)
+from rlm_code.rlm.policies import (
+    BeamSearchActionPolicy,
+    ConfidenceTerminationPolicy,
+    DefaultRewardPolicy,
+    # Compaction policies
+    DeterministicCompactionPolicy,
+    # Termination policies
+    FinalPatternTerminationPolicy,
+    # Action policies
+    GreedyActionPolicy,
+    HierarchicalCompactionPolicy,
+    LenientRewardPolicy,
+    MCTSActionPolicy,
+    PolicyRegistry,
+    ResearchRewardPolicy,
+    RewardThresholdTerminationPolicy,
+    SamplingActionPolicy,
+    SlidingWindowCompactionPolicy,
+    StrictRewardPolicy,
+)
+from rlm_code.rlm.policies.base import (
+    ActionResult,
+    PolicyContext,
 )
 
 
@@ -306,9 +295,7 @@ class TestCompactionPolicies:
         """Test sliding window keeps only recent entries."""
         policy = SlidingWindowCompactionPolicy(config={"window_size": 3})
 
-        history = [
-            {"step": i, "action": f"action_{i}"} for i in range(10)
-        ]
+        history = [{"step": i, "action": f"action_{i}"} for i in range(10)]
         context = PolicyContext(task="test", step=10, history=history)
 
         assert policy.should_compact(context) is True
@@ -323,10 +310,7 @@ class TestCompactionPolicies:
         """Test deterministic compaction."""
         policy = DeterministicCompactionPolicy(config={"max_entries": 5})
 
-        history = [
-            {"step": i, "action": "run_python", "output": f"output {i}"}
-            for i in range(10)
-        ]
+        history = [{"step": i, "action": "run_python", "output": f"output {i}"} for i in range(10)]
         context = PolicyContext(task="test", step=10, history=history)
 
         assert policy.should_compact(context) is True
@@ -338,15 +322,15 @@ class TestCompactionPolicies:
 
     def test_hierarchical_compaction(self):
         """Test hierarchical multi-level compaction."""
-        policy = HierarchicalCompactionPolicy(config={
-            "recent_window": 2,
-            "medium_window": 3,
-            "compress_threshold": 6,
-        })
+        policy = HierarchicalCompactionPolicy(
+            config={
+                "recent_window": 2,
+                "medium_window": 3,
+                "compress_threshold": 6,
+            }
+        )
 
-        history = [
-            {"step": i, "action": "run_python"} for i in range(10)
-        ]
+        history = [{"step": i, "action": "run_python"} for i in range(10)]
         context = PolicyContext(task="test", step=10, history=history)
 
         assert policy.should_compact(context) is True
@@ -394,9 +378,11 @@ class TestTerminationPolicies:
 
     def test_reward_threshold_termination(self):
         """Test reward threshold termination."""
-        policy = RewardThresholdTerminationPolicy(config={
-            "min_reward_threshold": 0.5,
-        })
+        policy = RewardThresholdTerminationPolicy(
+            config={
+                "min_reward_threshold": 0.5,
+            }
+        )
 
         result = ActionResult(action_type="run_python", success=True)
         context = PolicyContext(
@@ -411,10 +397,12 @@ class TestTerminationPolicies:
 
     def test_confidence_termination(self):
         """Test confidence-based termination."""
-        policy = ConfidenceTerminationPolicy(config={
-            "confidence_threshold": 0.9,
-            "min_steps_before_termination": 1,
-        })
+        policy = ConfidenceTerminationPolicy(
+            config={
+                "confidence_threshold": 0.9,
+                "min_steps_before_termination": 1,
+            }
+        )
 
         result = ActionResult(
             action_type="run_python",

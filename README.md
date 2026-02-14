@@ -99,16 +99,18 @@ See all available benchmarks:
 
 ### 5. View results
 
-```
-/leaderboard
-```
+Use the **Research** tab (`Ctrl+5`) for live benchmark and trajectory views.  
+After at least two benchmark runs, export a compare report:
 
-Shows a table of all your benchmark runs ranked by reward score.
+```
+/rlm bench report candidate=latest baseline=previous format=markdown
+```
 
 ### 6. Replay a session step-by-step
 
 ```
-/rlm replay
+/rlm status
+/rlm replay <run_id>
 ```
 
 Walk through the last run one step at a time — see what code the LLM wrote, what output it got, and what it did next.
@@ -134,10 +136,12 @@ This means the LLM can handle documents much larger than its context window, bec
 | `/connect <provider> <model>` | Connect to an LLM |
 | `/model` | Interactive model picker |
 | `/status` | Show connection status |
+| `/sandbox profile secure` | Apply secure sandbox defaults (Docker-first + strict pure RLM) |
 | `/rlm run "<task>"` | Run a task through the RLM loop |
 | `/rlm bench preset=<name>` | Run a benchmark preset |
 | `/rlm bench list` | List available benchmarks |
-| `/leaderboard` | View benchmark results |
+| `/rlm bench compare` | Compare latest benchmark run with previous run |
+| `/harness run "<task>"` | Run tool-using coding harness loop |
 | `/rlm replay` | Step through the last run |
 | `/rlm chat "<question>"` | Ask the LLM a question about your project |
 | `/help` | Show all available commands |
@@ -164,18 +168,26 @@ This means the LLM can handle documents much larger than its context window, bec
 Create an `rlm_config.yaml` in your project directory to customize settings:
 
 ```yaml
+name: my-project
+
+models:
+  openai_api_key: null
+  openai_model: gpt-5.3-codex
+
+default_model: gpt-5.3-codex
+
+sandbox:
+  runtime: docker
+  superbox_profile: secure
+  superbox_auto_fallback: true
+  superbox_fallback_runtimes: [docker, daytona, e2b]
+  pure_rlm_backend: docker
+  pure_rlm_strict: true
+  pure_rlm_allow_unsafe_exec: false
+
 rlm:
-  paradigm: pure_rlm       # pure_rlm, codeact, or traditional
-  max_steps: 30             # max REPL iterations per run
-  timeout: 60               # seconds
-
-  sandbox:
-    runtime: local          # local, docker, modal, e2b, daytona
-
-  mcp_server:
-    enabled: false
-    transport: stdio
-    port: 8765
+  default_benchmark_preset: dspy_quick
+  benchmark_pack_paths: []
 ```
 
 Or generate a full sample config:
@@ -202,7 +214,7 @@ rlm_code/
   mcp/              # MCP server for tool integration
   models/           # LLM provider adapters
   sandbox/          # Sandboxed code execution
-  observability/    # MLflow, OpenTelemetry, LangSmith, LangFuse
+  harness/          # Tool-using coding harness (/harness)
 ```
 
 ## Documentation

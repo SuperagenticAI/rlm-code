@@ -42,12 +42,19 @@ def test_local_jsonl_sink_records_run_and_steps(tmp_path):
     )
     sink.on_step(
         "run_1",
-        event={"step": 1, "reward": 0.4, "action": {"action": "run_python"}, "observation": {"success": True}},
+        event={
+            "step": 1,
+            "reward": 0.4,
+            "action": {"action": "run_python"},
+            "observation": {"success": True},
+        },
         cumulative_reward=0.4,
     )
     sink.on_run_end(
         "run_1",
-        result=SimpleNamespace(completed=True, steps=1, total_reward=0.4, finished_at="now", task="demo"),
+        result=SimpleNamespace(
+            completed=True, steps=1, total_reward=0.4, finished_at="now", task="demo"
+        ),
         run_path=tmp_path / "trace.jsonl",
     )
 

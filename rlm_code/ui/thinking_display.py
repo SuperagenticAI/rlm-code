@@ -14,7 +14,6 @@ import re
 from dataclasses import dataclass, field
 from enum import Enum
 from time import time
-from typing import Sequence
 
 from rich.console import Console, ConsoleOptions, RenderResult
 from rich.panel import Panel
@@ -181,9 +180,7 @@ class ThinkingRenderable:
         self.title = title
         self.chunks = build_thought_chunks(text)
 
-    def __rich_console__(
-        self, console: Console, options: ConsoleOptions
-    ) -> RenderResult:
+    def __rich_console__(self, console: Console, options: ConsoleOptions) -> RenderResult:
         if self.collapsed:
             summary = self._summary_line()
             yield Panel(
@@ -231,9 +228,11 @@ class ThinkingRenderable:
 # Streaming Support
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ThinkingStats:
     """Statistics for a completed thinking session."""
+
     source: str = ""
     thought_count: int = 0
     token_count: int = 0
@@ -383,6 +382,7 @@ class UnifiedThinkingManager:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def format_thinking_for_chat(
     text: str,

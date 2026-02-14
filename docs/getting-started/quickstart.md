@@ -1,6 +1,6 @@
 # Quick Start
 
-This guide walks you through launching RLM Code, connecting to an LLM, running your first benchmark, viewing the leaderboard, and exploring the Research Tab — all in under 10 minutes.
+This guide walks you through launching RLM Code, connecting to an LLM, running your first benchmark, validating results, and exploring the Research tab — all in under 10 minutes.
 
 ---
 
@@ -164,34 +164,16 @@ Supported formats include explicit preset mappings, Pydantic-style dataset cases
 
 ---
 
-## Step 5: View the Leaderboard
+## Step 5: Inspect Benchmark Results
 
-After running benchmarks, view aggregated results on the leaderboard:
-
-```
-/leaderboard
-```
-
-The leaderboard displays a Rich table ranked by reward, showing:
-
-- Entry ID
-- Environment
-- Model
-- Average Reward
-- Completion Rate
-- Steps
-- Tokens
-- Efficiency (reward per 1000 tokens)
-
-### Leaderboard Options
+After running benchmarks, inspect the Research tab and (after at least two runs) use compare/report commands:
 
 ```
-/leaderboard metric=completion_rate limit=20
-/leaderboard metric=efficiency
-/leaderboard metric=tokens
+/rlm bench compare candidate=latest baseline=previous
+/rlm bench report candidate=latest baseline=previous format=markdown
 ```
 
-Available ranking metrics: `reward`, `completion_rate`, `steps`, `tokens`, `cost`, `duration`, `efficiency`.
+The **Research -> Benchmarks** panel updates automatically after `/rlm bench`.
 
 ---
 
@@ -208,7 +190,7 @@ This runs document summarization, information extraction, and multi-hop reasonin
 Use the comparison command for direct A/B analysis:
 
 ```
-/rlm bench compare preset=paradigm_comparison
+/rlm bench compare candidate=latest baseline=previous
 ```
 
 ---
@@ -220,7 +202,8 @@ Every RLM run generates a trajectory that can be replayed step by step.
 ### Load a Session for Replay
 
 ```
-/rlm replay
+/rlm status
+/rlm replay <run_id>
 ```
 
 This loads the most recent run and enters replay mode with forward/backward navigation:
@@ -231,13 +214,7 @@ This loads the most recent run and enters replay mode with forward/backward navi
 - **Find errors**: Jump to steps that produced errors
 - **View summary**: See session-level statistics
 
-### Replay from a Specific File
-
-```
-/rlm replay path=.rlm_code/rlm/runs/run_abc12345.jsonl
-```
-
-Session replay supports both JSONL trajectory files and JSON snapshot files.
+Use the `run_id` printed by `/rlm status` (or from the Research tab).
 
 ---
 
@@ -260,7 +237,15 @@ RLM Code has 50+ slash commands. Here are the most useful ones to explore next:
 ```
 /sandbox status
 /sandbox doctor
+/sandbox profile secure
 /sandbox use docker
+```
+
+### Harness Commands
+
+```
+/harness tools
+/harness run "fix failing tests" steps=8 mcp=on
 ```
 
 ### File and Layout Commands
@@ -337,8 +322,11 @@ rlm-code
 # Run the Pure RLM smoke test
 /rlm bench preset=pure_rlm_smoke
 
-# View results on the leaderboard
-/leaderboard
+# Compare the latest run with previous baseline
+/rlm bench compare candidate=latest baseline=previous
+
+# Export a benchmark report
+/rlm bench report candidate=latest baseline=previous format=markdown
 
 # Run a more comprehensive benchmark
 /rlm bench preset=dspy_extended
@@ -347,7 +335,8 @@ rlm-code
 /rlm bench preset=paradigm_comparison
 
 # Replay the last session
-/rlm replay
+/rlm status
+/rlm replay <run_id>
 
 # Check observability sinks
 /rlm observability
@@ -371,4 +360,4 @@ rlm-code
 - **[Core Engine](../core/index.md)**: RLM Runner, Environments, and Event System
 - **[Research Tab](../tui/research.md)**: Deep dive into the experiment tracking interface
 - **[Observability](../observability/index.md)**: MLflow, OpenTelemetry, LangSmith, LangFuse, Logfire
-- **[Sandbox Runtimes](../sandbox/index.md)**: Docker, Modal, E2B for isolated code execution
+- **[Sandbox Runtimes](../sandbox/index.md)**: Superbox runtime selection, Docker/Monty/cloud guidance

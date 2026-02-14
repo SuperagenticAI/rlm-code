@@ -6,10 +6,12 @@ from rlm_code.rlm.mock_interpreter import MockInterpreter
 
 class TestMockInterpreter:
     def test_returns_scripted_responses(self):
-        mock = MockInterpreter(responses=[
-            CodeResult(output="first"),
-            CodeResult(output="second"),
-        ])
+        mock = MockInterpreter(
+            responses=[
+                CodeResult(output="first"),
+                CodeResult(output="second"),
+            ]
+        )
         mock.start()
         assert mock.execute("code1").output == "first"
         assert mock.execute("code2").output == "second"
@@ -39,10 +41,12 @@ class TestMockInterpreter:
         assert result.output == "default"
 
     def test_call_log(self):
-        mock = MockInterpreter(responses=[
-            CodeResult(output="a"),
-            CodeResult(output="b"),
-        ])
+        mock = MockInterpreter(
+            responses=[
+                CodeResult(output="a"),
+                CodeResult(output="b"),
+            ]
+        )
         mock.start()
         mock.execute("code_a")
         mock.execute("code_b")
@@ -64,9 +68,11 @@ class TestMockInterpreter:
         assert not mock._started
 
     def test_variables_in_results(self):
-        mock = MockInterpreter(responses=[
-            CodeResult(output="ok", variables={"x": "42", "y": "'hello'"}),
-        ])
+        mock = MockInterpreter(
+            responses=[
+                CodeResult(output="ok", variables={"x": "42", "y": "'hello'"}),
+            ]
+        )
         mock.start()
         result = mock.execute("whatever")
         assert result.variables == {"x": "42", "y": "'hello'"}

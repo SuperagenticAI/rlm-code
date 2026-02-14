@@ -107,12 +107,10 @@ class TaskSignature:
         raw_inputs = mapping.get("inputs") or {}
         raw_outputs = mapping.get("outputs") or {}
         input_fields = {
-            name: cls._resolve_type(type_name)
-            for name, type_name in raw_inputs.items()
+            name: cls._resolve_type(type_name) for name, type_name in raw_inputs.items()
         }
         output_fields = {
-            name: cls._resolve_type(type_name)
-            for name, type_name in raw_outputs.items()
+            name: cls._resolve_type(type_name) for name, type_name in raw_outputs.items()
         }
         if not output_fields:
             raise ValueError("Signature must declare at least one output field.")
@@ -206,9 +204,7 @@ class TaskSignature:
         normalized = str(type_name).strip().lower()
         resolved = _TYPE_MAP.get(normalized)
         if resolved is None:
-            raise ValueError(
-                f"Unknown type '{type_name}'. Supported: {sorted(_TYPE_MAP.keys())}"
-            )
+            raise ValueError(f"Unknown type '{type_name}'. Supported: {sorted(_TYPE_MAP.keys())}")
         return resolved
 
     @staticmethod

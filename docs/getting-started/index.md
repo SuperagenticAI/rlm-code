@@ -37,9 +37,9 @@ pip install rlm-code
 rlm-code
 
 # Connect to a model and run a benchmark
-/connect anthropic claude-sonnet-4-20250514
+/connect anthropic claude-opus-4-6
 /rlm bench preset=dspy_quick
-/leaderboard
+/rlm bench compare candidate=latest baseline=previous
 ```
 
 !!! tip "🆕 First Time?"

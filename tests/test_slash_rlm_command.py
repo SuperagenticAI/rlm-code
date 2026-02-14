@@ -19,8 +19,29 @@ class _FakeRunner:
         self.last_benchmark_kwargs = {}
         self.last_benchmark_list_pack_paths = None
         self.last_import_preview_kwargs = {}
+        self.last_judge_kwargs = {}
         self.last_compare_kwargs = {}
+        self.last_report_kwargs = {}
         self.last_viz_kwargs = {}
+        self.framework_registry = SimpleNamespace(
+            doctor=lambda: [
+                {
+                    "framework": "dspy-rlm",
+                    "ok": True,
+                    "detail": "ok",
+                    "mode": "native_rlm",
+                    "reference": "dspy.RLM (installed package)",
+                },
+                {
+                    "framework": "adk-rlm",
+                    "ok": False,
+                    "detail": "missing adk_rlm",
+                    "mode": "native_rlm",
+                    "reference": "adk_rlm/main.py (vendored sample package)",
+                },
+            ],
+            get=lambda _framework_id: None,
+        )
 
     def run_task(
         self,
@@ -197,11 +218,16 @@ class _FakeRunner:
             "google_adk_memory_eval": "eval/packs/google_adk_memory_eval.json",
         }
 
+    @staticmethod
+    def supported_frameworks():
+        return ["native", "dspy-rlm", "adk-rlm", "pydantic-ai", "google-adk", "deepagents"]
+
     def list_benchmark_runs(self, limit: int = 20):
         return [
             {
                 "benchmark_id": "bench_latest",
                 "preset": "dspy_quick",
+                "mode": "native",
                 "completion_rate": 1.0,
                 "avg_reward": 0.9,
                 "avg_steps": 1.0,
@@ -213,6 +239,7 @@ class _FakeRunner:
         self,
         *,
         preset: str = "dspy_quick",
+        mode: str = "native",
         limit: int | None = None,
         environment: str | None = None,
         framework: str | None = None,
@@ -225,6 +252,7 @@ class _FakeRunner:
     ):
         self.last_benchmark_kwargs = {
             "preset": preset,
+            "mode": mode,
             "limit": limit,
             "environment": environment,
             "framework": framework,
@@ -239,6 +267,7 @@ class _FakeRunner:
             benchmark_id="bench_test",
             summary_path=Path("/tmp/bench_test.json"),
             preset=preset,
+            mode=mode,
             total_cases=1,
             completed_cases=1,
             avg_reward=0.9,
@@ -246,6 +275,7 @@ class _FakeRunner:
             case_results=[
                 {
                     "case_id": "sig_essay",
+                    "mode": mode,
                     "run_id": "run_test",
                     "completed": True,
                     "total_reward": 0.9,
@@ -281,8 +311,42 @@ class _FakeRunner:
             baseline_metrics={"avg_reward": 0.9, "completion_rate": 1.0, "avg_steps": 1.2},
             deltas={"avg_reward": 0.1, "completion_rate": 0.0, "avg_steps_increase": -0.2},
             case_summary={"completion_regressions": 0, "reward_regressions": 0, "common_cases": 1},
-            gates={"reward": True, "completion": True, "steps": True, "completion_regressions": True},
+            gates={
+                "reward": True,
+                "completion": True,
+                "steps": True,
+                "completion_regressions": True,
+            },
             passed=True,
+        )
+
+    def export_benchmark_report(
+        self,
+        *,
+        candidate: str = "latest",
+        baseline: str = "previous",
+        report_format: str = "markdown",
+        output_path: str | Path | None = None,
+        min_reward_delta: float = 0.0,
+        min_completion_delta: float = 0.0,
+        max_steps_increase: float = 0.0,
+        fail_on_completion_regression: bool = True,
+    ):
+        self.last_report_kwargs = {
+            "candidate": candidate,
+            "baseline": baseline,
+            "report_format": report_format,
+            "output_path": str(output_path) if output_path is not None else None,
+            "min_reward_delta": min_reward_delta,
+            "min_completion_delta": min_completion_delta,
+            "max_steps_increase": max_steps_increase,
+            "fail_on_completion_regression": fail_on_completion_regression,
+        }
+        return SimpleNamespace(
+            report_path=Path(output_path or "/tmp/bench_report.md"),
+            report_format=report_format,
+            candidate_id="bench_new",
+            baseline_id="bench_old",
         )
 
     def import_benchmark_pack_preview(self, *, pack_paths, per_preset_limit: int = 5):
@@ -308,6 +372,40 @@ class _FakeRunner:
                 ],
             }
         ]
+
+    def judge_predictions(
+        self,
+        *,
+        predictions_path,
+        reference_path,
+        output_path=None,
+        judge_model=None,
+        judge_provider=None,
+        limit=None,
+        resume=True,
+    ):
+        self.last_judge_kwargs = {
+            "predictions_path": str(predictions_path),
+            "reference_path": str(reference_path),
+            "output_path": str(output_path) if output_path is not None else None,
+            "judge_model": judge_model,
+            "judge_provider": judge_provider,
+            "limit": limit,
+            "resume": resume,
+        }
+        return SimpleNamespace(
+            result_path=Path(output_path or "/tmp/eval-results.jsonl"),
+            judge_model=judge_model or "test-model",
+            predictions_path=Path(predictions_path),
+            reference_path=Path(reference_path),
+            total_predictions=3,
+            eligible_predictions=2,
+            newly_judged=2,
+            judged_total=2,
+            correct_total=1,
+            accuracy=0.5,
+            by_type={"factoid": {"total": 2, "correct": 1, "accuracy": 0.5}},
+        )
 
     def visualize_run(
         self,
@@ -338,7 +436,9 @@ class _FakeRunner:
             "timeline": [],
             "reward_curve": [],
             "failures": [{"step": 1, "action": "run_python", "error": "boom"}],
-            "changes": [{"step": 2, "action": "patch_file", "path": "a.py", "diff_preview": "- a | + b"}],
+            "changes": [
+                {"step": 2, "action": "patch_file", "path": "a.py", "diff_preview": "- a | + b"}
+            ],
             "child_refs": [{"run_id": "run_child", "parent_step": 2}],
             "children": [
                 {
@@ -549,6 +649,13 @@ def test_rlm_bench_passes_framework_option():
     assert handler.rlm_runner.last_benchmark_kwargs["framework"] == "pydantic-ai"
 
 
+def test_rlm_bench_passes_mode_option():
+    handler = _build_handler()
+    handler.cmd_rlm(["bench", "preset=dspy_quick", "mode=harness"])
+    assert handler.rlm_runner.last_benchmark_kwargs["mode"] == "harness"
+    assert handler.current_context["rlm_last_benchmark_mode"] == "harness"
+
+
 def test_rlm_bench_pack_paths_are_forwarded():
     handler = _build_handler()
     handler.cmd_rlm(["bench", "preset=dspy_quick", "pack=rlm_benchmarks.yaml,bench/custom.yaml"])
@@ -620,6 +727,25 @@ def test_rlm_bench_compare_works_without_connected_model():
     assert handler.current_context["rlm_last_benchmark_compare_passed"] is True
 
 
+def test_rlm_bench_report_updates_context():
+    handler = _build_handler()
+    handler.cmd_rlm(
+        [
+            "bench",
+            "report",
+            "candidate=bench_new",
+            "baseline=bench_old",
+            "format=csv",
+            "output=/tmp/bench.csv",
+        ]
+    )
+    assert handler.rlm_runner.last_report_kwargs["candidate"] == "bench_new"
+    assert handler.rlm_runner.last_report_kwargs["baseline"] == "bench_old"
+    assert handler.rlm_runner.last_report_kwargs["report_format"] == "csv"
+    assert handler.current_context["rlm_last_benchmark_report_format"] == "csv"
+    assert handler.current_context["rlm_last_benchmark_report_path"] == "/tmp/bench.csv"
+
+
 def test_rlm_import_evals_forwards_pack_paths_and_limit():
     handler = _build_handler()
     handler.cmd_rlm(["import-evals", "pack=a.yaml,b.json", "limit=3"])
@@ -634,3 +760,54 @@ def test_rlm_import_evals_works_without_connected_model():
     handler.llm_connector.current_model = None
     handler.cmd_rlm(["import-evals", "pack=adk_eval.json"])
     assert handler.rlm_runner.last_import_preview_kwargs["pack_paths"] == ["adk_eval.json"]
+
+
+def test_rlm_judge_forwards_options_and_updates_context():
+    handler = _build_handler()
+    handler.cmd_rlm(
+        [
+            "judge",
+            "pred=predictions.jsonl",
+            "ref=reference.json",
+            "judge=openai/gpt-4o-mini",
+            "output=/tmp/judged.jsonl",
+            "limit=5",
+            "resume=off",
+        ]
+    )
+    assert handler.rlm_runner.last_judge_kwargs["predictions_path"] == "predictions.jsonl"
+    assert handler.rlm_runner.last_judge_kwargs["reference_path"] == "reference.json"
+    assert handler.rlm_runner.last_judge_kwargs["judge_model"] == "openai/gpt-4o-mini"
+    assert handler.rlm_runner.last_judge_kwargs["output_path"] == "/tmp/judged.jsonl"
+    assert handler.rlm_runner.last_judge_kwargs["limit"] == 5
+    assert handler.rlm_runner.last_judge_kwargs["resume"] is False
+    assert handler.current_context["rlm_last_judge_accuracy"] == 0.5
+    assert handler.current_context["rlm_last_judge_total"] == 2
+    assert handler.current_context["rlm_last_judge_correct"] == 1
+
+
+def test_rlm_judge_json_output(monkeypatch):
+    handler = _build_handler()
+    output = io.StringIO()
+    test_console = Console(file=output, force_terminal=False, color_system=None, width=120)
+    monkeypatch.setattr("rlm_code.commands.slash_commands.console", test_console)
+
+    handler.cmd_rlm(["judge", "pred=predictions.jsonl", "ref=reference.json", "--json"])
+
+    payload = json.loads(output.getvalue())
+    assert payload["command"] == "rlm_judge"
+    assert payload["judged_total"] == 2
+    assert payload["correct_total"] == 1
+    assert payload["accuracy"] == 0.5
+
+
+def test_rlm_judge_requires_model_when_no_override():
+    handler = _build_handler()
+    handler.llm_connector.current_model = None
+    handler.cmd_rlm(["judge", "pred=predictions.jsonl", "ref=reference.json"])
+    assert handler.rlm_runner.last_judge_kwargs == {}
+
+
+def test_rlm_frameworks_command_does_not_fail():
+    handler = _build_handler()
+    handler.cmd_rlm(["frameworks"])

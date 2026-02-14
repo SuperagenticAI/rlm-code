@@ -92,7 +92,7 @@ class SecurityValidator:
         for compiled_pattern, pattern_info in self._compiled_patterns:
             for match in compiled_pattern.finditer(code):
                 # Calculate line number
-                line_num = code[:match.start()].count("\n") + 1
+                line_num = code[: match.start()].count("\n") + 1
 
                 # Get the actual line content for context
                 line_content = lines[line_num - 1] if line_num <= len(lines) else ""
@@ -103,7 +103,7 @@ class SecurityValidator:
                     continue
 
                 # Skip if it's in a string (basic check)
-                before_match = code[:match.start()]
+                before_match = code[: match.start()]
                 if self._is_in_string(before_match):
                     continue
 

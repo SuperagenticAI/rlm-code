@@ -11,6 +11,7 @@ from enum import Enum
 
 class ThemeMode(Enum):
     """Available theme modes."""
+
     DARK = "dark"
     MIDNIGHT = "midnight"
     PURPLE = "purple"
@@ -21,9 +22,9 @@ class ColorPalette:
     """Color palette for the Research TUI."""
 
     # Backgrounds
-    bg_pure: str = "#000000"       # Pure black
-    bg_surface: str = "#0d1117"    # Slightly lighter for panels
-    bg_elevated: str = "#161b22"   # Code blocks, elevated surfaces
+    bg_pure: str = "#000000"  # Pure black
+    bg_surface: str = "#0d1117"  # Slightly lighter for panels
+    bg_elevated: str = "#161b22"  # Code blocks, elevated surfaces
     bg_highlight: str = "#21262d"  # Hover/selection
 
     # Borders
@@ -69,14 +70,14 @@ class ColorPalette:
     text_dim: str = "#484f58"
 
     # Syntax highlighting (Dracula-inspired)
-    syntax_keyword: str = "#ff79c6"    # Pink
-    syntax_string: str = "#f1fa8c"     # Yellow
-    syntax_number: str = "#bd93f9"     # Purple
-    syntax_function: str = "#50fa7b"   # Green
-    syntax_comment: str = "#6272a4"    # Gray-blue
-    syntax_class: str = "#8be9fd"      # Cyan
-    syntax_operator: str = "#ff79c6"   # Pink
-    syntax_variable: str = "#f8f8f2"   # White
+    syntax_keyword: str = "#ff79c6"  # Pink
+    syntax_string: str = "#f1fa8c"  # Yellow
+    syntax_number: str = "#bd93f9"  # Purple
+    syntax_function: str = "#50fa7b"  # Green
+    syntax_comment: str = "#6272a4"  # Gray-blue
+    syntax_class: str = "#8be9fd"  # Cyan
+    syntax_operator: str = "#ff79c6"  # Pink
+    syntax_variable: str = "#f8f8f2"  # White
 
 
 # Default palette instance
@@ -85,8 +86,14 @@ COLORS = ColorPalette()
 
 # Gradient colors for animations
 THINKING_GRADIENT = [
-    "#6d28d9", "#7c3aed", "#8b5cf6", "#a78bfa",
-    "#c4b5fd", "#a78bfa", "#8b5cf6", "#7c3aed",
+    "#6d28d9",
+    "#7c3aed",
+    "#8b5cf6",
+    "#a78bfa",
+    "#c4b5fd",
+    "#a78bfa",
+    "#8b5cf6",
+    "#7c3aed",
 ]
 
 REWARD_POSITIVE_GRADIENT = ["#166534", "#22c55e", "#4ade80", "#86efac"]
@@ -94,8 +101,14 @@ REWARD_NEGATIVE_GRADIENT = ["#991b1b", "#ef4444", "#f87171", "#fca5a5"]
 
 # Rainbow gradient for special effects
 RAINBOW_GRADIENT = [
-    "#ff6b6b", "#feca57", "#48dbfb", "#1dd1a1",
-    "#5f27cd", "#ff9ff3", "#54a0ff", "#00d2d3",
+    "#ff6b6b",
+    "#feca57",
+    "#48dbfb",
+    "#1dd1a1",
+    "#5f27cd",
+    "#ff9ff3",
+    "#54a0ff",
+    "#00d2d3",
 ]
 
 
@@ -259,7 +272,7 @@ def progress_bar(progress: float, width: int = 20, style: str = "smooth") -> str
 
 
 # CSS Template for the TUI
-RESEARCH_TUI_CSS = '''
+RESEARCH_TUI_CSS = """
 /* Research TUI - Dark Theme */
 
 Screen {
@@ -532,4 +545,4 @@ ScrollBar {
     scrollbar-color-hover: #484f58;
     scrollbar-color-active: #6e7681;
 }
-'''
+"""

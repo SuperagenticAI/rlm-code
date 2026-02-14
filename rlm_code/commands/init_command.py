@@ -182,7 +182,9 @@ def _copy_example_config(project_dir: Path) -> None:
             Path(__file__).parent.parent / "templates" / "dspy_config_example.yaml"
         )
         example_env_source = Path(__file__).parent.parent / "templates" / ".env.example"
-        example_bench_source = Path(__file__).parent.parent / "templates" / "rlm_benchmarks_example.yaml"
+        example_bench_source = (
+            Path(__file__).parent.parent / "templates" / "rlm_benchmarks_example.yaml"
+        )
 
     # Copy config example
     if example_config_source.exists():
@@ -437,7 +439,9 @@ def _show_next_steps(project_name: str, fresh: bool = False) -> None:
     console.print("   [cyan]rlm-code create[/cyan]")
 
     console.print("\n3. Test model connectivity:")
-    console.print("   [cyan]rlm-code models test <model-name>[/cyan] (legacy: rlm-code models test)")
+    console.print(
+        "   [cyan]rlm-code models test <model-name>[/cyan] (legacy: rlm-code models test)"
+    )
 
     if fresh:
         console.print("\n4. Explore the project structure:")

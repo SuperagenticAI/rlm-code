@@ -20,9 +20,8 @@ from pathlib import Path
 
 from rlm_code.rlm import (
     PureRLMEnvironment,
-    PureRLMConfig,
-    REPLVariable,
     REPLHistory,
+    REPLVariable,
 )
 
 
@@ -33,7 +32,8 @@ def demo_repl_variable():
     print("=" * 60)
 
     # Simulate a large document
-    large_document = """
+    large_document = (
+        """
     Machine Learning in Healthcare: A Comprehensive Review
 
     Abstract:
@@ -45,7 +45,9 @@ def demo_repl_variable():
     1. Introduction
     Healthcare is undergoing a digital transformation with the integration
     of artificial intelligence and machine learning technologies...
-    """ * 50  # Repeat to make it larger
+    """
+        * 50
+    )  # Repeat to make it larger
 
     # Create REPLVariable - extracts metadata WITHOUT storing full content
     var = REPLVariable.from_value(
@@ -69,7 +71,7 @@ def demo_pure_rlm_environment():
     print("=" * 60)
 
     # Create environment
-    env = PureRLMEnvironment(workdir=Path.cwd())
+    env = PureRLMEnvironment(workdir=Path.cwd(), allow_unsafe_exec=True)
 
     # Initialize with context
     sample_context = """
@@ -114,7 +116,7 @@ def demo_code_execution():
     print("DEMO 3: Code Execution - Accessing Context via Code")
     print("=" * 60)
 
-    env = PureRLMEnvironment(workdir=Path.cwd())
+    env = PureRLMEnvironment(workdir=Path.cwd(), allow_unsafe_exec=True)
     env.initialize_context("Hello World! This is a test context for RLM.")
 
     print("\n--- Executing: print(context) ---")
@@ -142,7 +144,7 @@ def demo_final_termination():
     print("DEMO 4: FINAL/FINAL_VAR - Clean Termination Patterns")
     print("=" * 60)
 
-    env = PureRLMEnvironment(workdir=Path.cwd())
+    env = PureRLMEnvironment(workdir=Path.cwd(), allow_unsafe_exec=True)
     env.initialize_context("Sample context for analysis")
 
     print("\n--- FINAL(answer) - Direct answer ---")
@@ -150,7 +152,7 @@ def demo_final_termination():
     print(f"final_output: {result.final_output}")
 
     # Reset for next demo
-    env = PureRLMEnvironment(workdir=Path.cwd())
+    env = PureRLMEnvironment(workdir=Path.cwd(), allow_unsafe_exec=True)
     env.initialize_context("Sample context")
 
     print("\n--- FINAL_VAR(variable_name) - Variable reference ---")

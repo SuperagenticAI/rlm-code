@@ -17,14 +17,14 @@ from __future__ import annotations
 import inspect
 import io
 import json
-import os
 import re
 import sys
 import threading
 import time
 import traceback
+import warnings
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
@@ -32,7 +32,6 @@ from ..core.logging import get_logger
 from .environments import (
     EnvironmentActionResult,
     EnvironmentDoctorCheck,
-    RLMEnvironment,
     RLMRewardProfile,
 )
 from .repl_types import REPLHistory, REPLResult, REPLVariable
@@ -42,7 +41,6 @@ from .termination import (
     SUBMIT,
     FinalOutput,
     SubmitOutput,
-    detect_final_in_code,
     detect_final_in_text,
     extract_code_blocks,
     format_final_answer,
@@ -108,11 +106,22 @@ SAFE_BUILTINS = {
     "all": all,
     "any": any,
     "slice": slice,
-    # IO (limited)
+    # IO (limited — open() injected per-instance via safe_open in initialize_context)
     "print": print,
-    "open": open,  # Allow file access
-    # Import (required for standard library)
-    "__import__": __import__,
+    # Pre-loaded safe standard library modules (no dynamic __import__)
+    "json": __import__("json"),
+    "math": __import__("math"),
+    "re": __import__("re"),
+    "collections": __import__("collections"),
+    "itertools": __import__("itertools"),
+    "functools": __import__("functools"),
+    "string": __import__("string"),
+    "datetime": __import__("datetime"),
+    "copy": __import__("copy"),
+    "statistics": __import__("statistics"),
+    "random": __import__("random"),
+    "operator": __import__("operator"),
+    "textwrap": __import__("textwrap"),
     # Exceptions
     "Exception": Exception,
     "ValueError": ValueError,
@@ -122,8 +131,55 @@ SAFE_BUILTINS = {
     "AttributeError": AttributeError,
     "RuntimeError": RuntimeError,
     "StopIteration": StopIteration,
-    # BLOCKED: eval, exec, compile, input, globals, locals
+    "PermissionError": PermissionError,
+    # BLOCKED: eval, exec, compile, input, globals, locals, __import__, open (raw)
 }
+
+
+# ---------------------------------------------------------------------------
+# Pre-flight security scanner for exec()-based REPL
+# ---------------------------------------------------------------------------
+
+import re as _re
+
+_BLOCKED_CODE_PATTERNS: list[tuple[_re.Pattern[str], str]] = [
+    (
+        _re.compile(r"\b__import__\s*\("),
+        "Dynamic __import__() is blocked — use pre-loaded modules (json, math, re, …)",
+    ),
+    (_re.compile(r"\bos\.system\s*\("), "os.system() is blocked"),
+    (_re.compile(r"\bos\.popen\s*\("), "os.popen() is blocked"),
+    (_re.compile(r"\bsubprocess\b"), "subprocess module is blocked"),
+    (_re.compile(r"\beval\s*\("), "eval() is blocked"),
+    (_re.compile(r"\bexec\s*\("), "exec() is blocked (use the REPL directly)"),
+    (_re.compile(r"\bcompile\s*\("), "compile() is blocked"),
+    (_re.compile(r"\bglobals\s*\(\s*\)"), "globals() is blocked"),
+    (_re.compile(r"\blocals\s*\(\s*\)"), "locals() is blocked"),
+    (_re.compile(r"\b__subclasses__\s*\("), "__subclasses__() is blocked"),
+    (_re.compile(r"\b__bases__\b"), "__bases__ access is blocked"),
+    (_re.compile(r"\b__builtins__\b"), "__builtins__ access is blocked"),
+]
+
+
+def _check_code_safety(code: str) -> str | None:
+    """Return a blocking error message if *code* contains a dangerous pattern, else None."""
+    for pattern, message in _BLOCKED_CODE_PATTERNS:
+        for match in pattern.finditer(code):
+            # Skip matches inside comments
+            line_start = code.rfind("\n", 0, match.start()) + 1
+            line_end = code.find("\n", match.start())
+            if line_end == -1:
+                line_end = len(code)
+            line = code[line_start:line_end]
+            stripped = line.lstrip()
+            if stripped.startswith("#"):
+                continue
+            # Skip matches inside string literals (basic heuristic: odd number of quotes before match)
+            prefix = code[line_start : match.start()]
+            if prefix.count('"') % 2 == 1 or prefix.count("'") % 2 == 1:
+                continue
+            return message
+    return None
 
 
 # System prompt implementing pure RLM semantics (ported from official reference)
@@ -223,10 +279,10 @@ _USER_PROMPT = (
     "determine your answer. Your next action:"
 )
 _USER_PROMPT_WITH_ROOT = (
-    'Think step-by-step on what to do using the REPL environment (which contains the '
+    "Think step-by-step on what to do using the REPL environment (which contains the "
     'context) to answer the original prompt: "{root_prompt}".\n\nContinue using the REPL '
-    'environment, which has the `context` variable, and querying sub-LLMs by writing to '
-    '```repl``` tags, and determine your answer. Your next action:'
+    "environment, which has the `context` variable, and querying sub-LLMs by writing to "
+    "```repl``` tags, and determine your answer. Your next action:"
 )
 _ITERATION_0_SAFEGUARD = (
     "You have not interacted with the REPL environment or seen your prompt / context yet. "
@@ -275,6 +331,8 @@ class PureRLMConfig:
     max_llm_calls: int = 50
     max_output_chars: int = 20000
     max_iteration_output_chars: int = 20000  # Per-iteration truncation (reference: 20K)
+    output_metadata_mode: str = "summarize"  # truncate | summarize | metadata
+    metadata_preview_chars: int = 240
     preview_length: int = 500
     max_workers: int = 8
     sub_model: str | None = None
@@ -373,6 +431,29 @@ class PureRLMEnvironment:
     """
 
     name = "pure_rlm"
+    _OUTPUT_METADATA_MODES = {"truncate", "summarize", "metadata"}
+
+    def _make_safe_open(self) -> Callable:
+        """Create a restricted open() that only allows reading files under workdir."""
+        workdir = self.workdir
+
+        def safe_open(path: str, mode: str = "r", **kwargs: Any) -> Any:
+            if mode not in ("r", "rb"):
+                raise PermissionError(
+                    f"Write mode '{mode}' is not allowed in the RLM sandbox. "
+                    f"Only read modes ('r', 'rb') are permitted."
+                )
+            resolved = Path(path).resolve()
+            try:
+                resolved.relative_to(workdir)
+            except ValueError:
+                raise PermissionError(
+                    f"Access denied: '{path}' is outside the working directory. "
+                    f"Only files under '{workdir}' can be accessed."
+                )
+            return open(str(resolved), mode, **kwargs)
+
+        return safe_open
 
     def __init__(
         self,
@@ -382,6 +463,7 @@ class PureRLMEnvironment:
         tools: list[Callable] | None = None,
         signature: Any | None = None,
         interpreter: Any | None = None,
+        allow_unsafe_exec: bool = False,
     ):
         self.workdir = (workdir or Path.cwd()).resolve()
         if isinstance(reward_profile, RLMRewardProfile):
@@ -390,6 +472,22 @@ class PureRLMEnvironment:
             self.reward_profile = RLMRewardProfile.from_mapping(reward_profile)
 
         self.config = config or PureRLMConfig()
+        self.config.max_iteration_output_chars = max(
+            100,
+            int(self.config.max_iteration_output_chars or 20000),
+        )
+        self.config.metadata_preview_chars = max(
+            20,
+            int(self.config.metadata_preview_chars or 240),
+        )
+        output_mode = str(self.config.output_metadata_mode or "summarize").strip().lower()
+        if output_mode not in self._OUTPUT_METADATA_MODES:
+            logger.warning(
+                "Unsupported output_metadata_mode '%s'; falling back to summarize.",
+                output_mode,
+            )
+            output_mode = "summarize"
+        self.config.output_metadata_mode = output_mode
 
         # User-registered tools (injected into REPL namespace)
         self._user_tools: list[Callable] = list(tools or [])
@@ -397,6 +495,29 @@ class PureRLMEnvironment:
         self._signature = signature
         # Optional CodeInterpreter (if not provided, uses internal namespace)
         self._interpreter = interpreter
+        self._allow_unsafe_exec = bool(allow_unsafe_exec)
+
+        if interpreter is None:
+            if not self._allow_unsafe_exec:
+                raise RuntimeError(
+                    "PureRLMEnvironment requires a secure interpreter by default. "
+                    "Pass interpreter=MontyInterpreter(...) or interpreter=DockerPersistentInterpreter(...). "
+                    "To intentionally use unsafe exec() for local experiments, set allow_unsafe_exec=True."
+                )
+            warnings.warn(
+                "PureRLMEnvironment is using exec()-based execution with limited "
+                "isolation. For production use, pass interpreter=MontyInterpreter(...) "
+                "for full sandboxing. See MontyInterpreter docs for setup.",
+                UserWarning,
+                stacklevel=2,
+            )
+        else:
+            start_fn = getattr(interpreter, "start", None)
+            if callable(start_fn):
+                try:
+                    start_fn()
+                except Exception as exc:
+                    logger.warning("Failed to start interpreter: %s", exc)
 
         # REPL state
         self._namespace: dict[str, Any] = {}
@@ -420,6 +541,35 @@ class PureRLMEnvironment:
         # Will be set when execute_action is called with llm_connector
         self._llm_connector: Any = None
 
+    def _interpreter_enabled(self) -> bool:
+        return self._interpreter is not None and callable(
+            getattr(self._interpreter, "execute", None)
+        )
+
+    @property
+    def allow_unsafe_exec(self) -> bool:
+        return self._allow_unsafe_exec
+
+    def _register_interpreter_external(self, name: str, fn: Callable[..., Any]) -> None:
+        if not self._interpreter_enabled():
+            return
+        register = getattr(self._interpreter, "register_external", None)
+        if callable(register):
+            try:
+                register(name, fn)
+            except Exception as exc:
+                logger.debug("Interpreter external registration failed for %s: %s", name, exc)
+
+    def _sync_interpreter_variable(self, name: str, value: Any) -> None:
+        if not self._interpreter_enabled():
+            return
+        setter = getattr(self._interpreter, "set_variable", None)
+        if callable(setter):
+            try:
+                setter(name, value)
+            except Exception as exc:
+                logger.debug("Interpreter variable sync failed for %s: %s", name, exc)
+
     def initialize_context(
         self,
         context: Any,
@@ -434,6 +584,7 @@ class PureRLMEnvironment:
         """
         # Reset state
         self._namespace = dict(SAFE_BUILTINS)
+        self._namespace["open"] = self._make_safe_open()
         self._variables = []
         self._llm_call_count = 0
         self._pending_llm_calls = []
@@ -448,6 +599,8 @@ class PureRLMEnvironment:
         # Store context as variable (versioned: context_0, alias context)
         self._namespace["context"] = context
         self._namespace["context_0"] = context
+        self._sync_interpreter_variable("context", context)
+        self._sync_interpreter_variable("context_0", context)
 
         # Create metadata for the context
         context_var = REPLVariable.from_value(
@@ -462,6 +615,7 @@ class PureRLMEnvironment:
         if additional_vars:
             for name, value in additional_vars.items():
                 self._namespace[name] = value
+                self._sync_interpreter_variable(name, value)
                 var_meta = REPLVariable.from_value(
                     name=name,
                     value=value,
@@ -474,12 +628,18 @@ class PureRLMEnvironment:
         self._namespace["FINAL_VAR"] = FINAL_VAR
         self._namespace["SUBMIT"] = SUBMIT
         self._namespace["SHOW_VARS"] = self._make_show_vars()
+        self._register_interpreter_external("FINAL", FINAL)
+        self._register_interpreter_external("FINAL_VAR", FINAL_VAR)
+        self._register_interpreter_external("SUBMIT", SUBMIT)
+        self._register_interpreter_external("SHOW_VARS", self._namespace["SHOW_VARS"])
 
         # Add result buffers (from RLM-From-Scratch)
         self._namespace["buffers"] = []
+        self._sync_interpreter_variable("buffers", self._namespace["buffers"])
 
         # Add chunking helper (from RLM-From-Scratch)
         self._namespace["chunk_indices"] = self._make_chunk_indices()
+        self._register_interpreter_external("chunk_indices", self._namespace["chunk_indices"])
 
         # Add multi-file helpers (from RLM-From-Scratch)
         self._namespace["load_file"] = self._make_load_file()
@@ -487,12 +647,20 @@ class PureRLMEnvironment:
         self._namespace["switch_to"] = self._make_switch_to()
         self._namespace["list_files"] = self._make_list_files()
         self._namespace["remove_file"] = self._make_remove_file()
+        self._register_interpreter_external("load_file", self._namespace["load_file"])
+        self._register_interpreter_external("load_files", self._namespace["load_files"])
+        self._register_interpreter_external("switch_to", self._namespace["switch_to"])
+        self._register_interpreter_external("list_files", self._namespace["list_files"])
+        self._register_interpreter_external("remove_file", self._namespace["remove_file"])
         self._namespace["files"] = self._files
         self._namespace["content"] = None  # Will be set when a file is loaded
+        self._sync_interpreter_variable("files", self._namespace["files"])
+        self._sync_interpreter_variable("content", self._namespace["content"])
 
         # Inject user-registered tools into REPL namespace
         for fn in self._user_tools:
             self._namespace[fn.__name__] = fn
+            self._register_interpreter_external(fn.__name__, fn)
 
         # Build initial message history with system prompt + context metadata
         query_meta = QueryMetadata.from_context(context)
@@ -511,7 +679,9 @@ class PureRLMEnvironment:
         if self._signature is not None and hasattr(self._signature, "prompt_description"):
             system_prompt += f"\n\n{self._signature.prompt_description()}"
             if hasattr(self._signature, "submit_template"):
-                system_prompt += f"\n\nTo return your answer, call: {self._signature.submit_template()}"
+                system_prompt += (
+                    f"\n\nTo return your answer, call: {self._signature.submit_template()}"
+                )
 
         self._message_history = [
             {"role": "system", "content": system_prompt},
@@ -534,8 +704,12 @@ class PureRLMEnvironment:
         self._llm_connector = connector
 
         # Now we can add llm_query functions
-        self._namespace["llm_query"] = self._make_llm_query()
-        self._namespace["llm_query_batched"] = self._make_llm_query_batched()
+        llm_query_fn = self._make_llm_query()
+        llm_query_batched_fn = self._make_llm_query_batched()
+        self._namespace["llm_query"] = llm_query_fn
+        self._namespace["llm_query_batched"] = llm_query_batched_fn
+        self._register_interpreter_external("llm_query", llm_query_fn)
+        self._register_interpreter_external("llm_query_batched", llm_query_batched_fn)
 
     # ── Multi-file management helpers (from RLM-From-Scratch) ────────────
 
@@ -580,6 +754,8 @@ class PureRLMEnvironment:
             self._active_file = name
             self._namespace["content"] = text
             self._namespace["files"] = self._files
+            self._sync_interpreter_variable("content", self._namespace["content"])
+            self._sync_interpreter_variable("files", self._namespace["files"])
             print(f"Loaded '{name}' ({len(text):,} chars)")
             return text
 
@@ -610,6 +786,8 @@ class PureRLMEnvironment:
             self._namespace["files"] = self._files
             if self._active_file:
                 self._namespace["content"] = self._files[self._active_file]["content"]
+            self._sync_interpreter_variable("files", self._namespace["files"])
+            self._sync_interpreter_variable("content", self._namespace["content"])
             print(f"Loaded {len(results)} file(s): {list(results.keys())}")
             return results
 
@@ -624,6 +802,7 @@ class PureRLMEnvironment:
                 raise KeyError(f"File '{name}' not loaded. Available: {list(self._files.keys())}")
             self._active_file = name
             self._namespace["content"] = self._files[name]["content"]
+            self._sync_interpreter_variable("content", self._namespace["content"])
             print(f"Switched to '{name}' ({self._files[name]['length']:,} chars)")
             return self._files[name]["content"]
 
@@ -652,11 +831,11 @@ class PureRLMEnvironment:
             if self._active_file == name:
                 self._active_file = next(iter(self._files), None)
                 self._namespace["content"] = (
-                    self._files[self._active_file]["content"]
-                    if self._active_file
-                    else None
+                    self._files[self._active_file]["content"] if self._active_file else None
                 )
             self._namespace["files"] = self._files
+            self._sync_interpreter_variable("files", self._namespace["files"])
+            self._sync_interpreter_variable("content", self._namespace["content"])
             print(f"Removed '{name}'")
 
         return remove_file
@@ -670,20 +849,24 @@ class PureRLMEnvironment:
             """List all user-defined variables in the REPL namespace."""
             # Filter out builtins and internal functions
             tool_names = {fn.__name__ for fn in self._user_tools}
-            exclude = set(SAFE_BUILTINS.keys()) | {
-                "FINAL",
-                "FINAL_VAR",
-                "SUBMIT",
-                "SHOW_VARS",
-                "llm_query",
-                "llm_query_batched",
-                "load_file",
-                "load_files",
-                "switch_to",
-                "list_files",
-                "remove_file",
-                "chunk_indices",
-            } | tool_names
+            exclude = (
+                set(SAFE_BUILTINS.keys())
+                | {
+                    "FINAL",
+                    "FINAL_VAR",
+                    "SUBMIT",
+                    "SHOW_VARS",
+                    "llm_query",
+                    "llm_query_batched",
+                    "load_file",
+                    "load_files",
+                    "switch_to",
+                    "list_files",
+                    "remove_file",
+                    "chunk_indices",
+                }
+                | tool_names
+            )
             user_vars = {
                 k: type(v).__name__
                 for k, v in self._namespace.items()
@@ -739,11 +922,13 @@ class PureRLMEnvironment:
 
                 # Track the call
                 with self._lock:
-                    self._pending_llm_calls.append({
-                        "prompt": prompt[:500],
-                        "response": result[:500],
-                        "model": model,
-                    })
+                    self._pending_llm_calls.append(
+                        {
+                            "prompt": prompt[:500],
+                            "response": result[:500],
+                            "model": model,
+                        }
+                    )
 
                 return result
 
@@ -809,12 +994,14 @@ class PureRLMEnvironment:
             # Track calls
             with self._lock:
                 for prompt, response in zip(prompts, results):
-                    self._pending_llm_calls.append({
-                        "prompt": prompt[:500],
-                        "response": response[:500],
-                        "model": model,
-                        "batched": True,
-                    })
+                    self._pending_llm_calls.append(
+                        {
+                            "prompt": prompt[:500],
+                            "response": response[:500],
+                            "model": model,
+                            "batched": True,
+                        }
+                    )
 
             return results
 
@@ -874,14 +1061,30 @@ class PureRLMEnvironment:
     def _get_user_variables(self) -> list[str]:
         """Get list of user-defined variable names in the REPL (excluding internals)."""
         tool_names = {fn.__name__ for fn in self._user_tools}
-        exclude = set(SAFE_BUILTINS.keys()) | {
-            "FINAL", "FINAL_VAR", "SUBMIT", "SHOW_VARS",
-            "llm_query", "llm_query_batched",
-            "load_file", "load_files", "switch_to", "list_files", "remove_file",
-            "chunk_indices", "__builtins__", "__name__", "__doc__",
-        } | tool_names
+        exclude = (
+            set(SAFE_BUILTINS.keys())
+            | {
+                "FINAL",
+                "FINAL_VAR",
+                "SUBMIT",
+                "SHOW_VARS",
+                "llm_query",
+                "llm_query_batched",
+                "load_file",
+                "load_files",
+                "switch_to",
+                "list_files",
+                "remove_file",
+                "chunk_indices",
+                "__builtins__",
+                "__name__",
+                "__doc__",
+            }
+            | tool_names
+        )
         return [
-            k for k, v in self._namespace.items()
+            k
+            for k, v in self._namespace.items()
             if k not in exclude
             and not k.startswith("_")
             and isinstance(v, (str, int, float, bool, list, dict, tuple, set, bytes))
@@ -902,6 +1105,65 @@ class PureRLMEnvironment:
 
         return "\n\n".join(parts) if parts else "No output"
 
+    def _clip_output_text(self, text: str, limit: int) -> str:
+        if len(text) <= limit:
+            return text
+        return text[:limit] + f"... + [{len(text) - limit} chars omitted]"
+
+    def _summarize_output_for_history(self, text: str) -> str:
+        if not text:
+            return "No output."
+        if len(text) <= self.config.max_iteration_output_chars:
+            return text
+
+        line_count = text.count("\n") + 1
+        preview = self.config.metadata_preview_chars
+        head = text[:preview]
+        tail = text[-preview:] if len(text) > preview else ""
+        has_traceback = "traceback" in text.lower()
+        summary_lines = [
+            (
+                f"[Output Summary] chars={len(text):,}, lines={line_count:,}, "
+                f"traceback={'yes' if has_traceback else 'no'}"
+            ),
+            "Head preview:",
+            head,
+        ]
+        if tail and tail != head:
+            summary_lines.extend(["Tail preview:", tail])
+        return self._clip_output_text(
+            "\n".join(summary_lines),
+            self.config.max_iteration_output_chars,
+        )
+
+    def _metadata_output_for_history(self, text: str) -> str:
+        if not text:
+            return "[Output Metadata] chars=0, lines=0"
+
+        preview = self.config.metadata_preview_chars
+        line_count = text.count("\n") + 1
+        head = text[:preview]
+        tail = text[-preview:] if len(text) > preview else ""
+        metadata_lines = [
+            f"[Output Metadata] chars={len(text):,}, lines={line_count:,}, mode=metadata",
+            "Head preview:",
+            head,
+        ]
+        if tail and tail != head:
+            metadata_lines.extend(["Tail preview:", tail])
+        return self._clip_output_text(
+            "\n".join(metadata_lines),
+            self.config.max_iteration_output_chars,
+        )
+
+    def _format_output_for_history(self, text: str) -> str:
+        mode = self.config.output_metadata_mode
+        if mode == "metadata":
+            return self._metadata_output_for_history(text)
+        if mode == "summarize":
+            return self._summarize_output_for_history(text)
+        return self._clip_output_text(text, self.config.max_iteration_output_chars)
+
     def _format_iteration_messages(
         self,
         response: str,
@@ -917,13 +1179,7 @@ class PureRLMEnvironment:
 
         for code, result in zip(code_blocks, results):
             formatted_result = self._format_execution_result(result)
-            # Truncate long outputs (reference: 20K chars)
-            max_len = self.config.max_iteration_output_chars
-            if len(formatted_result) > max_len:
-                formatted_result = (
-                    formatted_result[:max_len]
-                    + f"... + [{len(formatted_result) - max_len} chars...]"
-                )
+            formatted_result = self._format_output_for_history(formatted_result)
 
             execution_message = {
                 "role": "user",
@@ -1143,7 +1399,7 @@ class PureRLMEnvironment:
         # Update message history with iteration results (matching reference)
         iteration_messages = self._format_iteration_messages(
             response=raw_response or reasoning,
-            code_blocks=code_blocks[:len(all_results)],
+            code_blocks=code_blocks[: len(all_results)],
             results=all_results,
         )
         self._message_history.extend(iteration_messages)
@@ -1166,7 +1422,7 @@ class PureRLMEnvironment:
             return EnvironmentActionResult(
                 observation={
                     "success": True,
-                    "stdout": "\n".join(combined_stdout)[:self.config.max_output_chars],
+                    "stdout": "\n".join(combined_stdout)[: self.config.max_output_chars],
                     "final_detected": True,
                     "repl_variables": self._get_user_variables(),
                 },
@@ -1192,7 +1448,9 @@ class PureRLMEnvironment:
         self._history = self._history.append(
             reasoning=reasoning,
             code="\n\n".join(code_blocks),
-            output=combined_result.stdout[:2000] if combined_result.stdout else combined_result.stderr[:2000],
+            output=combined_result.stdout[:2000]
+            if combined_result.stdout
+            else combined_result.stderr[:2000],
             execution_time=total_time,
             llm_calls=total_llm_calls,
         )
@@ -1204,7 +1462,7 @@ class PureRLMEnvironment:
         return EnvironmentActionResult(
             observation={
                 "success": combined_result.success,
-                "stdout": combined_result.stdout[:self.config.max_output_chars],
+                "stdout": combined_result.stdout[: self.config.max_output_chars],
                 "stderr": combined_result.stderr[:2000] if combined_result.stderr else "",
                 "execution_time": total_time,
                 "llm_calls_made": len(total_llm_calls),
@@ -1224,8 +1482,10 @@ class PureRLMEnvironment:
             index = self._context_count
         var_name = f"context_{index}"
         self._namespace[var_name] = payload
+        self._sync_interpreter_variable(var_name, payload)
         if index == 0:
             self._namespace["context"] = payload
+            self._sync_interpreter_variable("context", payload)
         self._context_count = max(self._context_count, index + 1)
 
         var_meta = REPLVariable.from_value(
@@ -1241,15 +1501,33 @@ class PureRLMEnvironment:
             index = self._history_count
         var_name = f"history_{index}"
         self._namespace[var_name] = message_history
+        self._sync_interpreter_variable(var_name, message_history)
         if index == 0:
             self._namespace["history"] = message_history
+            self._sync_interpreter_variable("history", message_history)
         self._history_count = max(self._history_count, index + 1)
 
     def _execute_code(self, code: str, timeout: int = 30) -> REPLResult:
         """Execute code in the REPL namespace."""
+        # Pre-flight security scan
+        safety_error = _check_code_safety(code)
+        if safety_error:
+            return REPLResult(
+                stdout="",
+                stderr=f"Security check failed: {safety_error}",
+                locals={k: v for k, v in self._namespace.items() if not k.startswith("_")},
+                execution_time=0.0,
+                llm_calls=[],
+                success=False,
+                final_output=None,
+            )
+
         # Clear pending LLM calls
         with self._lock:
             self._pending_llm_calls = []
+
+        if self._interpreter_enabled():
+            return self._execute_code_with_interpreter(code)
 
         # Capture stdout/stderr
         old_stdout = sys.stdout
@@ -1290,6 +1568,55 @@ class PureRLMEnvironment:
         return REPLResult(
             stdout=captured_stdout.getvalue(),
             stderr=captured_stderr.getvalue(),
+            locals={k: v for k, v in self._namespace.items() if not k.startswith("_")},
+            execution_time=execution_time,
+            llm_calls=llm_calls,
+            success=success,
+            final_output=final_output,
+        )
+
+    def _execute_code_with_interpreter(self, code: str) -> REPLResult:
+        start_time = time.time()
+        success = True
+        final_output = None
+        stdout = ""
+        stderr = ""
+
+        try:
+            result = self._interpreter.execute(code)
+            stdout = str(getattr(result, "output", "") or "")
+            stderr = str(getattr(result, "error", "") or "")
+            success = not bool(stderr)
+
+            monty_final = getattr(result, "final_output", None)
+            if isinstance(monty_final, dict):
+                final_output = dict(monty_final)
+            submit_fields = getattr(result, "submit_fields", None)
+            if submit_fields is not None and final_output is None:
+                final_output = {"type": "submit", "fields": dict(submit_fields)}
+
+            interp_vars = getattr(self._interpreter, "variables", None)
+            if isinstance(interp_vars, dict):
+                for name, value in interp_vars.items():
+                    if not str(name).startswith("_"):
+                        self._namespace[str(name)] = value
+
+        except FinalOutput as fo:
+            final_output = fo.output
+        except SubmitOutput as so:
+            final_output = {"fields": so.fields, "type": "submit"}
+        except Exception:
+            success = False
+            stderr = traceback.format_exc()
+
+        execution_time = time.time() - start_time
+
+        with self._lock:
+            llm_calls = self._pending_llm_calls.copy()
+
+        return REPLResult(
+            stdout=stdout,
+            stderr=stderr,
             locals={k: v for k, v in self._namespace.items() if not k.startswith("_")},
             execution_time=execution_time,
             llm_calls=llm_calls,
@@ -1373,6 +1700,23 @@ class PureRLMEnvironment:
                     recommendation="LLM connector will be set automatically when running.",
                 )
             )
+
+        checks.append(
+            EnvironmentDoctorCheck(
+                name="execution_backend",
+                status="pass" if self._interpreter_enabled() else "warn",
+                detail=(
+                    f"Interpreter backend active: {type(self._interpreter).__name__}"
+                    if self._interpreter_enabled()
+                    else "exec()-based backend active."
+                ),
+                recommendation=(
+                    None
+                    if self._interpreter_enabled()
+                    else "Set sandbox.pure_rlm_backend to monty (or docker when available) for stronger isolation."
+                ),
+            )
+        )
 
         # Check Python version
         checks.append(

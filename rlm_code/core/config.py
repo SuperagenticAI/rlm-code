@@ -7,7 +7,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 from .exceptions import ConfigurationError
 
@@ -46,13 +46,15 @@ class QualityScoringConfig:
     warning_penalty: int = 5  # Points deducted per warning
     min_documentation_score: int = 75  # Default documentation score
     min_optimization_score: int = 70  # Default optimization readiness score
-    grade_thresholds: dict[str, int] = field(default_factory=lambda: {
-        "A": 90,
-        "B": 80,
-        "C": 70,
-        "D": 60,
-        "F": 0,
-    })
+    grade_thresholds: dict[str, int] = field(
+        default_factory=lambda: {
+            "A": 90,
+            "B": 80,
+            "C": 70,
+            "D": 60,
+            "F": 0,
+        }
+    )
 
 
 @dataclass
@@ -86,18 +88,49 @@ class SandboxDockerConfig:
 
 
 @dataclass
+class SandboxAppleContainerConfig:
+    """Apple container-specific sandbox configuration."""
+
+    image: str = "docker.io/library/python:3.11-slim"
+    memory_limit_mb: int = 512
+    cpus: float | None = 1.0
+    network_enabled: bool = False
+    extra_args: list[str] = field(default_factory=list)
+
+
+@dataclass
 class SandboxConfig:
     """Execution sandbox runtime configuration."""
 
-    runtime: str = "local"  # local | docker | apple-container
+    runtime: str = "docker"  # local | docker | apple-container | daytona | e2b
     default_timeout_seconds: int = 30
     memory_limit_mb: int = 512
     allowed_mount_roots: list[str] = field(
-        default_factory=lambda: [".", "/tmp", "/var/folders", "/private/tmp", "/private/var/folders"]
+        default_factory=lambda: [
+            ".",
+            "/tmp",
+            "/var/folders",
+            "/private/tmp",
+            "/private/var/folders",
+        ]
     )
     env_allowlist: list[str] = field(default_factory=list)
+    superbox_profile: str = "secure"  # secure | dev | custom
+    superbox_auto_fallback: bool = True
+    superbox_fallback_runtimes: list[str] = field(
+        default_factory=lambda: ["docker", "daytona", "e2b"]
+    )
     docker: SandboxDockerConfig = field(default_factory=SandboxDockerConfig)
+    apple: SandboxAppleContainerConfig = field(default_factory=SandboxAppleContainerConfig)
     apple_container_enabled: bool = False
+    pure_rlm_backend: str = "docker"  # docker | monty | exec (unsafe opt-in only)
+    pure_rlm_allow_unsafe_exec: bool = False
+    pure_rlm_strict: bool = False
+    pure_rlm_output_mode: str = "summarize"  # truncate | summarize | metadata
+    pure_rlm_max_iteration_output_chars: int = 12000
+    monty_type_check: bool = False
+    monty_max_allocations: int | None = None
+    monty_max_memory: int | None = None
 
 
 @dataclass
@@ -180,11 +213,15 @@ class ProjectConfig:
                 docker_data = (
                     sandbox_data.get("docker", {}) if isinstance(sandbox_data, dict) else {}
                 )
+                apple_data = sandbox_data.get("apple", {}) if isinstance(sandbox_data, dict) else {}
                 if not isinstance(docker_data, dict):
                     docker_data = {}
+                if not isinstance(apple_data, dict):
+                    apple_data = {}
                 if isinstance(sandbox_data, dict):
                     sandbox_data = sandbox_data.copy()
                     sandbox_data["docker"] = SandboxDockerConfig(**docker_data)
+                    sandbox_data["apple"] = SandboxAppleContainerConfig(**apple_data)
                     data["sandbox"] = SandboxConfig(**sandbox_data)
                 else:
                     data["sandbox"] = SandboxConfig()
@@ -198,7 +235,9 @@ class ProjectConfig:
                     if isinstance(raw_pack_paths, str):
                         pack_paths = [raw_pack_paths]
                     elif isinstance(raw_pack_paths, list):
-                        pack_paths = [str(item).strip() for item in raw_pack_paths if str(item).strip()]
+                        pack_paths = [
+                            str(item).strip() for item in raw_pack_paths if str(item).strip()
+                        ]
                     else:
                         pack_paths = []
                     rlm_data = rlm_data.copy()
@@ -289,9 +328,13 @@ class ProjectConfig:
                 if "sandbox" in filtered_data and isinstance(filtered_data["sandbox"], dict):
                     sandbox_data = filtered_data["sandbox"].copy()
                     docker_data = sandbox_data.get("docker", {})
+                    apple_data = sandbox_data.get("apple", {})
                     if not isinstance(docker_data, dict):
                         docker_data = {}
+                    if not isinstance(apple_data, dict):
+                        apple_data = {}
                     sandbox_data["docker"] = SandboxDockerConfig(**docker_data)
+                    sandbox_data["apple"] = SandboxAppleContainerConfig(**apple_data)
                     filtered_data["sandbox"] = SandboxConfig(**sandbox_data)
                 else:
                     filtered_data["sandbox"] = SandboxConfig()
@@ -307,7 +350,9 @@ class ProjectConfig:
                     if isinstance(raw_pack_paths, str):
                         pack_paths = [raw_pack_paths]
                     elif isinstance(raw_pack_paths, list):
-                        pack_paths = [str(item).strip() for item in raw_pack_paths if str(item).strip()]
+                        pack_paths = [
+                            str(item).strip() for item in raw_pack_paths if str(item).strip()
+                        ]
                     else:
                         pack_paths = []
                     rlm_data["benchmark_pack_paths"] = pack_paths
@@ -325,7 +370,7 @@ class ProjectConfig:
         except Exception as e:
             raise ConfigurationError(f"Failed to load configuration: {e}")
 
-    def _load_api_keys_from_env(self):
+    def _load_api_keys_from_env(self) -> None:
         """Load API keys from environment variables if not set in config."""
         import os
 
@@ -344,7 +389,7 @@ class ProjectConfig:
         if not self.models.gemini_api_key or self.models.gemini_api_key == "null":
             self.models.gemini_api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
 
-    def _load_dotenv(self, env_file: Path):
+    def _load_dotenv(self, env_file: Path) -> None:
         """Load environment variables from .env file."""
         try:
             with open(env_file) as f:
@@ -438,13 +483,30 @@ sandbox:
   memory_limit_mb: {self.sandbox.memory_limit_mb}
   allowed_mount_roots: {self.sandbox.allowed_mount_roots if self.sandbox.allowed_mount_roots else [".", "/tmp"]}
   env_allowlist: {self.sandbox.env_allowlist if self.sandbox.env_allowlist else []}
+  superbox_profile: {self.sandbox.superbox_profile}
+  superbox_auto_fallback: {str(self.sandbox.superbox_auto_fallback).lower()}
+  superbox_fallback_runtimes: {self.sandbox.superbox_fallback_runtimes if self.sandbox.superbox_fallback_runtimes else []}
   apple_container_enabled: {str(self.sandbox.apple_container_enabled).lower()}
+  pure_rlm_backend: {self.sandbox.pure_rlm_backend}
+  pure_rlm_allow_unsafe_exec: {str(self.sandbox.pure_rlm_allow_unsafe_exec).lower()}
+  pure_rlm_strict: {str(self.sandbox.pure_rlm_strict).lower()}
+  pure_rlm_output_mode: {self.sandbox.pure_rlm_output_mode}
+  pure_rlm_max_iteration_output_chars: {self.sandbox.pure_rlm_max_iteration_output_chars}
+  monty_type_check: {str(self.sandbox.monty_type_check).lower()}
+  monty_max_allocations: {self.sandbox.monty_max_allocations}
+  monty_max_memory: {self.sandbox.monty_max_memory}
   docker:
     image: {self.sandbox.docker.image}
     memory_limit_mb: {self.sandbox.docker.memory_limit_mb}
     cpus: {self.sandbox.docker.cpus}
     network_enabled: {str(self.sandbox.docker.network_enabled).lower()}
     extra_args: {self.sandbox.docker.extra_args if self.sandbox.docker.extra_args else []}
+  apple:
+    image: {self.sandbox.apple.image}
+    memory_limit_mb: {self.sandbox.apple.memory_limit_mb}
+    cpus: {self.sandbox.apple.cpus}
+    network_enabled: {str(self.sandbox.apple.network_enabled).lower()}
+    extra_args: {self.sandbox.apple.extra_args if self.sandbox.apple.extra_args else []}
 
 # RLM runtime tuning (used by /rlm commands)
 rlm:
@@ -519,6 +581,7 @@ class ConfigManager:
         """Get current configuration, loading if necessary."""
         if self._config is None:
             self.load_config()
+        assert self._config is not None
         return self._config
 
     def load_config(self) -> ProjectConfig:
@@ -545,7 +608,7 @@ class ConfigManager:
 
         self._config.save_to_file(self.config_path, minimal=minimal)
 
-    def update_config(self, **kwargs) -> None:
+    def update_config(self, **kwargs: Any) -> None:
         """Update configuration with new values."""
         config = self.config
 
@@ -584,7 +647,7 @@ class ConfigManager:
         else:
             raise ConfigurationError(f"Unknown provider: {provider}")
 
-    def set_model_config(self, provider: str, **kwargs) -> None:
+    def set_model_config(self, provider: str, **kwargs: Any) -> None:
         """Set configuration for a specific model provider."""
         models = self.config.models
 

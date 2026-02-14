@@ -8,7 +8,7 @@ by recording all approval requests and responses.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -100,7 +100,7 @@ class ApprovalAuditLog:
         # Add to memory
         self._entries.append(entry)
         if len(self._entries) > self.max_memory_entries:
-            self._entries = self._entries[-self.max_memory_entries:]
+            self._entries = self._entries[-self.max_memory_entries :]
 
         # Write to file
         if self.log_file:
@@ -198,11 +198,13 @@ class ApprovalAuditLog:
                 f"{stats['approved']} approved ({rate:.0%})"
             )
 
-        report_lines.extend([
-            "",
-            "## Recent Entries",
-            "",
-        ])
+        report_lines.extend(
+            [
+                "",
+                "## Recent Entries",
+                "",
+            ]
+        )
 
         for entry in self._entries[-20:]:
             status = "APPROVED" if entry.approved else "DENIED"
@@ -236,7 +238,7 @@ class ApprovalAuditLog:
 
         # Trim to max
         if len(self._entries) > self.max_memory_entries:
-            self._entries = self._entries[-self.max_memory_entries:]
+            self._entries = self._entries[-self.max_memory_entries :]
 
         return loaded
 

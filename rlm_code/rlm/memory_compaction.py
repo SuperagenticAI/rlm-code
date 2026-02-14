@@ -16,9 +16,9 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Callable
+from typing import Any
 
-from .repl_types import REPLHistory, REPLEntry
+from .repl_types import REPLEntry, REPLHistory
 
 
 @dataclass
@@ -50,9 +50,7 @@ class CompactionResult:
     compacted_chars: int
     summary: str
     preserved_entries: list[REPLEntry]
-    timestamp: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
-    )
+    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     used_llm: bool = False
 
     @property
@@ -92,8 +90,7 @@ class MemoryCompactor:
 
         # Check total character count
         total_chars = sum(
-            len(entry.reasoning) + len(entry.code) + len(entry.output)
-            for entry in history.entries
+            len(entry.reasoning) + len(entry.code) + len(entry.output) for entry in history.entries
         )
         return total_chars >= self.config.max_chars_before_compaction
 
@@ -133,7 +130,9 @@ class MemoryCompactor:
             self.config.preserve_last_n_entries,
             len(history.entries),
         )
-        entries_to_summarize = history.entries[:-preserve_count] if preserve_count > 0 else history.entries
+        entries_to_summarize = (
+            history.entries[:-preserve_count] if preserve_count > 0 else history.entries
+        )
         preserved_entries = history.entries[-preserve_count:] if preserve_count > 0 else []
 
         # Generate summary
@@ -152,8 +151,7 @@ class MemoryCompactor:
 
         # Calculate compacted size
         compacted_chars = len(summary) + sum(
-            len(e.reasoning) + len(e.code) + len(e.output)
-            for e in preserved_entries
+            len(e.reasoning) + len(e.code) + len(e.output) for e in preserved_entries
         )
 
         return CompactionResult(
@@ -169,8 +167,7 @@ class MemoryCompactor:
     def _count_chars(self, history: REPLHistory) -> int:
         """Count total characters in history."""
         return sum(
-            len(entry.reasoning) + len(entry.code) + len(entry.output)
-            for entry in history.entries
+            len(entry.reasoning) + len(entry.code) + len(entry.output) for entry in history.entries
         )
 
     def _llm_summarize(
@@ -186,10 +183,10 @@ class MemoryCompactor:
             if entry.reasoning:
                 parts.append(f"  Reasoning: {entry.reasoning[:200]}")
             if entry.code:
-                code_preview = entry.code[:150].replace('\n', ' ')
+                code_preview = entry.code[:150].replace("\n", " ")
                 parts.append(f"  Code: {code_preview}...")
             if entry.output:
-                output_preview = entry.output[:100].replace('\n', ' ')
+                output_preview = entry.output[:100].replace("\n", " ")
                 parts.append(f"  Output: {output_preview}")
             formatted_entries.append("\n".join(parts))
 
@@ -197,7 +194,7 @@ class MemoryCompactor:
 
         prompt = f"""Summarize this RLM interaction history in {self.config.summary_max_sentences} sentences.
 
-Task: {task or 'Analyzing context'}
+Task: {task or "Analyzing context"}
 
 Interaction History:
 {entries_text}
@@ -234,10 +231,11 @@ Summary (2-3 sentences):"""
         # Count statistics
         total_steps = len(entries)
         successful_outputs = sum(
-            1 for e in entries
-            if e.output and not any(
-                err in e.output.lower()
-                for err in ["error", "exception", "traceback", "failed"]
+            1
+            for e in entries
+            if e.output
+            and not any(
+                err in e.output.lower() for err in ["error", "exception", "traceback", "failed"]
             )
         )
         llm_calls = sum(len(e.llm_calls) for e in entries)
@@ -269,14 +267,14 @@ Summary (2-3 sentences):"""
                 continue
 
             # Look for numeric findings
-            numbers = re.findall(r'\b\d+(?:,\d{3})*(?:\.\d+)?\b', entry.output)
+            numbers = re.findall(r"\b\d+(?:,\d{3})*(?:\.\d+)?\b", entry.output)
             if numbers and len(numbers) <= 3:
                 # Likely meaningful numbers
                 context = entry.output[:50]
                 findings.append(f"{context.strip()}")
 
             # Look for key-value patterns
-            kv_pattern = r'(\w+):\s*([^\n,]+)'
+            kv_pattern = r"(\w+):\s*([^\n,]+)"
             matches = re.findall(kv_pattern, entry.output)
             for key, value in matches[:2]:
                 findings.append(f"{key}={value.strip()[:30]}")
@@ -401,8 +399,7 @@ class ConversationMemory:
             summaries.append(f"Q: {user_preview}... A: {assistant_preview}...")
 
         self._compacted_summary = (
-            f"[Previous conversation ({len(to_compact)} turns): "
-            f"{' | '.join(summaries[:3])}]"
+            f"[Previous conversation ({len(to_compact)} turns): {' | '.join(summaries[:3])}]"
         )
 
     def get_context(self) -> str:

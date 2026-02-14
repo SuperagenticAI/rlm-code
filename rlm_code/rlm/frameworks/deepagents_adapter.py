@@ -17,6 +17,8 @@ class DeepAgentsFrameworkAdapter:
 
     workdir: str
     framework_id: str = "deepagents"
+    adapter_mode: str = "agent_loop"
+    reference_impl: str = "deepagents (installed package)"
 
     def doctor(self) -> tuple[bool, str]:
         try:
@@ -31,8 +33,7 @@ class DeepAgentsFrameworkAdapter:
         except Exception:
             return (
                 False,
-                "langchain-core not available. "
-                "Install with: pip install 'rlm-code[deepagents]'",
+                "langchain-core not available. Install with: pip install 'rlm-code[deepagents]'",
             )
         return (True, "deepagents available")
 
@@ -53,12 +54,13 @@ class DeepAgentsFrameworkAdapter:
             from langchain_core.messages import HumanMessage
         except Exception as exc:
             raise RuntimeError(
-                "deepagents package is required. "
-                "Install with: pip install 'rlm-code[deepagents]'"
+                "deepagents package is required. Install with: pip install 'rlm-code[deepagents]'"
             ) from exc
 
         model_name = (sub_model or getattr(llm_connector, "current_model", None) or "").strip()
-        provider = (sub_provider or getattr(llm_connector, "model_type", None) or "").strip().lower()
+        provider = (
+            (sub_provider or getattr(llm_connector, "model_type", None) or "").strip().lower()
+        )
         if not model_name:
             raise RuntimeError("No active model. Connect a model first with /connect.")
 
@@ -109,9 +111,7 @@ class DeepAgentsFrameworkAdapter:
             },
         )
 
-    def _resolve_model(
-        self, *, provider: str, model_name: str, llm_connector: Any
-    ) -> str:
+    def _resolve_model(self, *, provider: str, model_name: str, llm_connector: Any) -> str:
         """Map RLM connector model to DeepAgents provider:model format."""
         normalized = provider or "openai"
 
@@ -123,7 +123,12 @@ class DeepAgentsFrameworkAdapter:
         elif normalized in {"gemini", "google", "google-genai"}:
             normalized = "google-genai"
         elif normalized in {
-            "lmstudio", "vllm", "sglang", "tgi", "openai-compatible", "opencode",
+            "lmstudio",
+            "vllm",
+            "sglang",
+            "tgi",
+            "openai-compatible",
+            "opencode",
         }:
             normalized = "openai"
             base_url = str(getattr(llm_connector, "base_url", "") or "").strip()
@@ -152,16 +157,16 @@ class DeepAgentsFrameworkAdapter:
 
         if backend_name == "filesystem":
             from deepagents.backends import FilesystemBackend
+
             return FilesystemBackend(root=workdir)
         if backend_name == "local_shell":
             from deepagents.backends import LocalShellBackend
+
             return LocalShellBackend(cwd=workdir)
 
         return StateBackend
 
-    def _extract_steps(
-        self, messages: list[Any]
-    ) -> tuple[list[FrameworkStepRecord], float]:
+    def _extract_steps(self, messages: list[Any]) -> tuple[list[FrameworkStepRecord], float]:
         """Convert LangChain message history to FrameworkStepRecords."""
         steps: list[FrameworkStepRecord] = []
         total_reward = 0.0
@@ -176,7 +181,9 @@ class DeepAgentsFrameworkAdapter:
                 tool_calls = getattr(msg, "tool_calls", None) or []
 
                 for tc in tool_calls:
-                    tool_name = tc.get("name", "") if isinstance(tc, dict) else getattr(tc, "name", "")
+                    tool_name = (
+                        tc.get("name", "") if isinstance(tc, dict) else getattr(tc, "name", "")
+                    )
                     reward = 0.03 if tool_name in ("write_todos", "read_todos") else 0.02
                     steps.append(
                         FrameworkStepRecord(

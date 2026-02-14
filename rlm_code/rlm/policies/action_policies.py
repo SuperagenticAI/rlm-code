@@ -10,8 +10,8 @@ Different strategies for selecting actions:
 
 from __future__ import annotations
 
-import random
 import math
+import random
 from typing import Any
 
 from .base import ActionSelectionPolicy, PolicyContext

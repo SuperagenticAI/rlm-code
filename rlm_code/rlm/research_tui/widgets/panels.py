@@ -12,9 +12,7 @@ Includes:
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
-from typing import Any, Callable
 
 from rich.console import RenderableType
 from rich.panel import Panel
@@ -22,14 +20,13 @@ from rich.style import Style
 from rich.syntax import Syntax
 from rich.text import Text
 from rich.tree import Tree
-from textual.widget import Widget
-from textual.reactive import reactive
-from textual.widgets import Static, Input, TextArea, DirectoryTree
-from textual.containers import Container, Vertical, Horizontal, ScrollableContainer
-from textual.message import Message
 from textual.binding import Binding
+from textual.containers import Horizontal
+from textual.message import Message
+from textual.reactive import reactive
+from textual.widgets import Input, Static
 
-from ..theme import COLORS, ICONS, BOX, sparkline, get_reward_color, get_status_color
+from ..theme import COLORS, ICONS, get_reward_color, get_status_color
 
 
 class FileBrowser(Static):
@@ -66,6 +63,7 @@ class FileBrowser(Static):
 
     class FileSelected(Message):
         """Message sent when a file is selected."""
+
         def __init__(self, path: Path) -> None:
             super().__init__()
             self.path = path
@@ -95,7 +93,7 @@ class FileBrowser(Static):
 
         return Panel(
             tree,
-            title=f"[bold #a855f7]Files[/]",
+            title="[bold #a855f7]Files[/]",
             border_style=Style(color=COLORS.border_default),
             padding=(0, 1),
         )
@@ -115,7 +113,7 @@ class FileBrowser(Static):
                 continue
 
             if entry.is_dir():
-                icon = ICONS['folder_open'] if entry in self._expanded else ICONS['folder']
+                icon = ICONS["folder_open"] if entry in self._expanded else ICONS["folder"]
                 style = "#8be9fd" if entry in self._expanded else "#8b949e"
                 branch = tree.add(f"[{style}]{icon} {entry.name}[/]")
 
@@ -143,7 +141,7 @@ class FileBrowser(Static):
             ".css": "🎨",
             ".html": "🌐",
         }
-        return icons.get(ext, ICONS['file'])
+        return icons.get(ext, ICONS["file"])
 
     def toggle_directory(self, path: Path) -> None:
         """Toggle directory expansion."""
@@ -266,6 +264,7 @@ class ResponseArea(Static):
 
     class Toggled(Message):
         """Message sent when collapse state changes."""
+
         def __init__(self, collapsed: bool) -> None:
             super().__init__()
             self.collapsed = collapsed
@@ -290,7 +289,7 @@ class ResponseArea(Static):
 
     def render(self) -> RenderableType:
         """Render the response area."""
-        icon = ICONS['collapse'] if not self.is_collapsed else ICONS['expand']
+        icon = ICONS["collapse"] if not self.is_collapsed else ICONS["expand"]
         title = f"[bold #a855f7]{icon} {self.title}[/]"
 
         if self.is_collapsed:
@@ -323,12 +322,14 @@ class ResponseArea(Static):
                 if in_code_block:
                     # End code block
                     code = "\n".join(code_lines)
-                    parts.append(Syntax(
-                        code,
-                        code_lang,
-                        theme="dracula",
-                        background_color="#161b22",
-                    ))
+                    parts.append(
+                        Syntax(
+                            code,
+                            code_lang,
+                            theme="dracula",
+                            background_color="#161b22",
+                        )
+                    )
                     code_lines = []
                     in_code_block = False
                 else:
@@ -379,6 +380,7 @@ class PromptBox(Static):
 
     class Submitted(Message):
         """Message sent when prompt is submitted."""
+
         def __init__(self, value: str) -> None:
             super().__init__()
             self.value = value
@@ -445,35 +447,39 @@ class MetricsPanel(Static):
         text = Text()
 
         # Header
-        status_icon = ICONS['success'] if self.status == "complete" else ICONS['running']
+        status_icon = ICONS["success"] if self.status == "complete" else ICONS["running"]
         status_color = get_status_color(self.status)
 
-        text.append(f"Run: ", style=Style(color=COLORS.text_muted))
-        text.append(f"{self.run_id[:12] if self.run_id else 'N/A'}", style=Style(color=COLORS.text_primary))
-        text.append(f" │ ", style=Style(color=COLORS.border_default))
-        text.append(f"{status_icon} {self.status.upper()}", style=Style(color=status_color, bold=True))
+        text.append("Run: ", style=Style(color=COLORS.text_muted))
+        text.append(
+            f"{self.run_id[:12] if self.run_id else 'N/A'}", style=Style(color=COLORS.text_primary)
+        )
+        text.append(" │ ", style=Style(color=COLORS.border_default))
+        text.append(
+            f"{status_icon} {self.status.upper()}", style=Style(color=status_color, bold=True)
+        )
         text.append("\n")
 
         # Metrics row 1
-        text.append(f"Steps: ", style=Style(color=COLORS.text_muted))
+        text.append("Steps: ", style=Style(color=COLORS.text_muted))
         text.append(f"{self.steps}/{self.max_steps}", style=Style(color=COLORS.text_primary))
-        text.append(f" │ ", style=Style(color=COLORS.border_default))
+        text.append(" │ ", style=Style(color=COLORS.border_default))
 
-        text.append(f"Reward: ", style=Style(color=COLORS.text_muted))
+        text.append("Reward: ", style=Style(color=COLORS.text_muted))
         reward_color = get_reward_color(self.reward)
         text.append(f"{self.reward:.3f}", style=Style(color=reward_color, bold=True))
-        text.append(f" │ ", style=Style(color=COLORS.border_default))
+        text.append(" │ ", style=Style(color=COLORS.border_default))
 
-        text.append(f"Tokens: ", style=Style(color=COLORS.text_muted))
+        text.append("Tokens: ", style=Style(color=COLORS.text_muted))
         text.append(f"{self.tokens:,}", style=Style(color=COLORS.text_primary))
         text.append("\n")
 
         # Metrics row 2
-        text.append(f"Cost: ", style=Style(color=COLORS.text_muted))
+        text.append("Cost: ", style=Style(color=COLORS.text_muted))
         text.append(f"${self.cost:.4f}", style=Style(color=COLORS.text_primary))
-        text.append(f" │ ", style=Style(color=COLORS.border_default))
+        text.append(" │ ", style=Style(color=COLORS.border_default))
 
-        text.append(f"Duration: ", style=Style(color=COLORS.text_muted))
+        text.append("Duration: ", style=Style(color=COLORS.text_muted))
         text.append(f"{self.duration:.1f}s", style=Style(color=COLORS.text_primary))
 
         return Panel(
@@ -530,7 +536,7 @@ class TimelinePanel(Static):
                 duration = step.get("duration", 0.0)
 
                 # Icon and color
-                icon = ICONS['success'] if success else ICONS['error']
+                icon = ICONS["success"] if success else ICONS["error"]
                 color = COLORS.success if success else COLORS.error
 
                 # Step number

@@ -10,10 +10,10 @@ import pytest
 
 from rlm_code.rlm.frameworks.base import FrameworkEpisodeResult, FrameworkStepRecord
 
-
 # ---------------------------------------------------------------------------
 # Helpers: lightweight mock messages (no deepagents/langchain install needed)
 # ---------------------------------------------------------------------------
+
 
 def _make_msg(class_name: str, **kwargs):
     """Create an object that quacks like a LangChain message."""
@@ -47,10 +47,10 @@ def _system(content=""):
 
 from rlm_code.rlm.frameworks.deepagents_adapter import DeepAgentsFrameworkAdapter
 
-
 # ===================================================================
 # doctor()
 # ===================================================================
+
 
 class TestDoctor:
     def test_framework_id(self):
@@ -68,11 +68,14 @@ class TestDoctor:
         adapter = DeepAgentsFrameworkAdapter(workdir="/tmp/w")
         fake_da = MagicMock()
         fake_lc = MagicMock()
-        with patch.dict(sys.modules, {
-            "deepagents": fake_da,
-            "langchain_core": fake_lc,
-            "langchain_core.messages": fake_lc.messages,
-        }):
+        with patch.dict(
+            sys.modules,
+            {
+                "deepagents": fake_da,
+                "langchain_core": fake_lc,
+                "langchain_core.messages": fake_lc.messages,
+            },
+        ):
             ok, detail = adapter.doctor()
         assert ok is True
         assert "available" in detail
@@ -82,16 +85,22 @@ class TestDoctor:
 # _resolve_model()
 # ===================================================================
 
+
 class TestResolveModel:
     def _resolve(self, provider, model_name, **connector_attrs):
         adapter = DeepAgentsFrameworkAdapter(workdir="/tmp/w")
         connector = SimpleNamespace(**connector_attrs)
         return adapter._resolve_model(
-            provider=provider, model_name=model_name, llm_connector=connector,
+            provider=provider,
+            model_name=model_name,
+            llm_connector=connector,
         )
 
     def test_anthropic(self):
-        assert self._resolve("anthropic", "claude-sonnet-4-20250514") == "anthropic:claude-sonnet-4-20250514"
+        assert (
+            self._resolve("anthropic", "claude-sonnet-4-20250514")
+            == "anthropic:claude-sonnet-4-20250514"
+        )
 
     def test_claude_alias(self):
         assert self._resolve("claude", "claude-opus-4-6") == "anthropic:claude-opus-4-6"
@@ -103,15 +112,19 @@ class TestResolveModel:
         assert self._resolve("google-genai", "gemini-pro") == "google-genai:gemini-pro"
 
     def test_ollama(self):
-        assert self._resolve("ollama", "llama3", base_url="http://localhost:11434") == "ollama:llama3"
+        assert (
+            self._resolve("ollama", "llama3", base_url="http://localhost:11434") == "ollama:llama3"
+        )
 
     def test_openai_default(self):
         assert self._resolve("openai", "gpt-4o") == "openai:gpt-4o"
 
     def test_lmstudio_maps_to_openai(self):
         result = self._resolve(
-            "lmstudio", "local-model",
-            base_url="http://localhost:1234/v1", api_key="test-key",
+            "lmstudio",
+            "local-model",
+            base_url="http://localhost:1234/v1",
+            api_key="test-key",
         )
         assert result == "openai:local-model"
 
@@ -125,6 +138,7 @@ class TestResolveModel:
 # ===================================================================
 # _extract_steps()
 # ===================================================================
+
 
 class TestExtractSteps:
     def _extract(self, messages):
@@ -144,24 +158,30 @@ class TestExtractSteps:
         assert reward == pytest.approx(0.05)
 
     def test_ai_tool_call(self):
-        steps, reward = self._extract([
-            _ai(content="", tool_calls=[{"name": "ls", "args": {"path": "."}, "id": "tc1"}]),
-        ])
+        steps, reward = self._extract(
+            [
+                _ai(content="", tool_calls=[{"name": "ls", "args": {"path": "."}, "id": "tc1"}]),
+            ]
+        )
         assert len(steps) == 1
         assert steps[0].action == "tool_call"
         assert steps[0].reward == pytest.approx(0.02)
         assert steps[0].observation["tool_name"] == "ls"
 
     def test_planning_tool_higher_reward(self):
-        steps, _ = self._extract([
-            _ai(content="", tool_calls=[{"name": "write_todos", "args": {}, "id": "tc2"}]),
-        ])
+        steps, _ = self._extract(
+            [
+                _ai(content="", tool_calls=[{"name": "write_todos", "args": {}, "id": "tc2"}]),
+            ]
+        )
         assert steps[0].reward == pytest.approx(0.03)
 
     def test_read_todos_planning_reward(self):
-        steps, _ = self._extract([
-            _ai(content="", tool_calls=[{"name": "read_todos", "args": {}, "id": "tc3"}]),
-        ])
+        steps, _ = self._extract(
+            [
+                _ai(content="", tool_calls=[{"name": "read_todos", "args": {}, "id": "tc3"}]),
+            ]
+        )
         assert steps[0].reward == pytest.approx(0.03)
 
     def test_tool_result_success(self):
@@ -193,9 +213,11 @@ class TestExtractSteps:
         assert reward == pytest.approx(0.02 + 0.06 + 0.05)
 
     def test_list_content_format(self):
-        steps, _ = self._extract([
-            _ai(content=[{"type": "text", "text": "Hello"}, {"type": "text", "text": "World"}]),
-        ])
+        steps, _ = self._extract(
+            [
+                _ai(content=[{"type": "text", "text": "Hello"}, {"type": "text", "text": "World"}]),
+            ]
+        )
         assert len(steps) == 2
         assert steps[0].observation["text"] == "Hello"
         assert steps[1].observation["text"] == "World"
@@ -214,12 +236,14 @@ class TestExtractSteps:
         assert len(steps) <= 80
 
     def test_ai_with_tool_calls_and_text(self):
-        steps, reward = self._extract([
-            _ai(
-                content="Let me check.",
-                tool_calls=[{"name": "read_file", "args": {"path": "a.py"}, "id": "t1"}],
-            ),
-        ])
+        steps, reward = self._extract(
+            [
+                _ai(
+                    content="Let me check.",
+                    tool_calls=[{"name": "read_file", "args": {"path": "a.py"}, "id": "t1"}],
+                ),
+            ]
+        )
         assert len(steps) == 2  # tool_call + model_text
         assert reward == pytest.approx(0.02 + 0.05)
 
@@ -227,6 +251,7 @@ class TestExtractSteps:
 # ===================================================================
 # _extract_final_response()
 # ===================================================================
+
 
 class TestExtractFinalResponse:
     def _final(self, messages):
@@ -259,6 +284,7 @@ class TestExtractFinalResponse:
 # _serialize_tool_call()
 # ===================================================================
 
+
 class TestSerializeToolCall:
     def test_dict_input(self):
         result = DeepAgentsFrameworkAdapter._serialize_tool_call(
@@ -280,6 +306,7 @@ class TestSerializeToolCall:
 # run_episode() with mocked deepagents
 # ===================================================================
 
+
 class TestRunEpisode:
     def test_raises_without_model(self):
         adapter = DeepAgentsFrameworkAdapter(workdir="/tmp/w")
@@ -287,12 +314,15 @@ class TestRunEpisode:
 
         fake_da = MagicMock()
         fake_lc = MagicMock()
-        with patch.dict(sys.modules, {
-            "deepagents": fake_da,
-            "deepagents.graph": fake_da.graph,
-            "langchain_core": fake_lc,
-            "langchain_core.messages": fake_lc.messages,
-        }):
+        with patch.dict(
+            sys.modules,
+            {
+                "deepagents": fake_da,
+                "deepagents.graph": fake_da.graph,
+                "langchain_core": fake_lc,
+                "langchain_core.messages": fake_lc.messages,
+            },
+        ):
             with pytest.raises(RuntimeError, match="No active model"):
                 adapter.run_episode(
                     task="test",
@@ -304,7 +334,9 @@ class TestRunEpisode:
 
     def test_successful_run(self):
         adapter = DeepAgentsFrameworkAdapter(workdir="/tmp/w")
-        connector = SimpleNamespace(current_model="claude-sonnet-4-20250514", model_type="anthropic")
+        connector = SimpleNamespace(
+            current_model="claude-sonnet-4-20250514", model_type="anthropic"
+        )
 
         mock_ai = _ai("Done!")
         mock_agent = MagicMock()
@@ -314,16 +346,22 @@ class TestRunEpisode:
         mock_human_cls = MagicMock()
         mock_state_backend = MagicMock()
 
-        with patch(
-            "rlm_code.rlm.frameworks.deepagents_adapter.DeepAgentsFrameworkAdapter._resolve_backend",
-            return_value=mock_state_backend,
-        ), patch.dict(sys.modules, {
-            "deepagents": MagicMock(),
-            "deepagents.graph": MagicMock(create_deep_agent=mock_create),
-            "deepagents.backends": MagicMock(StateBackend=mock_state_backend),
-            "langchain_core": MagicMock(),
-            "langchain_core.messages": MagicMock(HumanMessage=mock_human_cls),
-        }):
+        with (
+            patch(
+                "rlm_code.rlm.frameworks.deepagents_adapter.DeepAgentsFrameworkAdapter._resolve_backend",
+                return_value=mock_state_backend,
+            ),
+            patch.dict(
+                sys.modules,
+                {
+                    "deepagents": MagicMock(),
+                    "deepagents.graph": MagicMock(create_deep_agent=mock_create),
+                    "deepagents.backends": MagicMock(StateBackend=mock_state_backend),
+                    "langchain_core": MagicMock(),
+                    "langchain_core.messages": MagicMock(HumanMessage=mock_human_cls),
+                },
+            ),
+        ):
             # Patch the lazy imports inside run_episode
             with patch(
                 "rlm_code.rlm.frameworks.deepagents_adapter.DeepAgentsFrameworkAdapter.run_episode"
@@ -332,7 +370,11 @@ class TestRunEpisode:
                 mock_run.return_value = FrameworkEpisodeResult(
                     completed=True,
                     final_response="Done!",
-                    steps=[FrameworkStepRecord(action="model_text", observation={"text": "Done!"}, reward=0.05)],
+                    steps=[
+                        FrameworkStepRecord(
+                            action="model_text", observation={"text": "Done!"}, reward=0.05
+                        )
+                    ],
                     total_reward=0.05,
                     metadata={"framework": "deepagents"},
                 )
@@ -353,6 +395,7 @@ class TestRunEpisode:
 # ===================================================================
 # Registry integration
 # ===================================================================
+
 
 class TestRegistryIntegration:
     def test_adapter_in_default_registry(self):

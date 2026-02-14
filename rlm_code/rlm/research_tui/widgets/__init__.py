@@ -5,21 +5,21 @@ Animated and panel widgets for the Research TUI.
 """
 
 from .animated import (
-    ThinkingSpinner,
     ProgressPulse,
-    SparklineChart,
-    TypewriterText,
     RewardFlash,
+    SparklineChart,
     StatusIndicator,
+    ThinkingSpinner,
+    TypewriterText,
 )
 from .panels import (
-    FileBrowser,
     CodePreview,
-    ResponseArea,
-    PromptBox,
-    MetricsPanel,
-    TimelinePanel,
+    FileBrowser,
     LeaderboardPanel,
+    MetricsPanel,
+    PromptBox,
+    ResponseArea,
+    TimelinePanel,
 )
 
 __all__ = [

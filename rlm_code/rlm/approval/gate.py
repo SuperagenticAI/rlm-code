@@ -11,12 +11,12 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Callable, Awaitable
+from typing import Any, Awaitable, Callable
 
 from .policy import (
     ApprovalPolicy,
-    RiskAssessor,
     RiskAssessment,
+    RiskAssessor,
     ToolRiskLevel,
 )
 
@@ -40,9 +40,7 @@ class ApprovalRequest:
     action: dict[str, Any]
     risk_assessment: RiskAssessment
     requires_approval: bool
-    timestamp: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
-    )
+    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     context: dict[str, Any] = field(default_factory=dict)
     timeout_seconds: int = 300
 
@@ -73,9 +71,7 @@ class ApprovalResponse:
     approved: bool
     reason: str = ""
     modified_action: dict[str, Any] | None = None
-    timestamp: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
-    )
+    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     approver: str = ""
 
 

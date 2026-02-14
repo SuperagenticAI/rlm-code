@@ -7,27 +7,21 @@ Tests for:
 - CLI command enhancements
 """
 
-import json
 import tempfile
 from pathlib import Path
 
 import pytest
 import yaml
 
-from rlm_code.rlm.config_schema import (
-    RLMConfig,
-    PureRLMConfig,
-    SandboxConfig,
-    MCPServerConfig,
-    BenchmarkConfig,
-    TrajectoryConfig,
-    generate_sample_config,
-    get_default_config,
-)
 from rlm_code.mcp.server.tools import (
     RLMTools,
     ToolDefinition,
     ToolParameter,
+)
+from rlm_code.rlm.config_schema import (
+    RLMConfig,
+    generate_sample_config,
+    get_default_config,
 )
 
 
@@ -278,14 +272,14 @@ class TestMCPServer:
 
     def test_server_import(self):
         """Test that MCP server can be imported."""
-        from rlm_code.mcp.server import RLMServer, create_rlm_server
+        from rlm_code.mcp.server import create_rlm_server
 
         server = create_rlm_server()
         assert server is not None
 
     def test_server_config(self):
         """Test server configuration."""
-        from rlm_code.mcp.server.rlm_server import ServerConfig, RLMServer
+        from rlm_code.mcp.server.rlm_server import RLMServer, ServerConfig
 
         config = ServerConfig(
             name="test-server",
@@ -330,10 +324,12 @@ class TestMCPServer:
         from rlm_code.mcp.server import create_rlm_server
 
         server = create_rlm_server()
-        result = await server.handle_tools_call({
-            "name": "unknown_tool",
-            "arguments": {},
-        })
+        result = await server.handle_tools_call(
+            {
+                "name": "unknown_tool",
+                "arguments": {},
+            }
+        )
 
         assert result.get("isError") is True
         assert "Unknown tool" in result["content"][0]["text"]
@@ -347,9 +343,7 @@ class TestConfigIntegration:
         runtimes = ["local", "docker", "modal", "e2b", "daytona"]
 
         for runtime in runtimes:
-            config = RLMConfig.from_dict({
-                "sandbox": {"runtime": runtime}
-            })
+            config = RLMConfig.from_dict({"sandbox": {"runtime": runtime}})
             assert config.sandbox.runtime == runtime
 
     def test_config_paradigms(self):
@@ -362,14 +356,16 @@ class TestConfigIntegration:
 
     def test_benchmark_config(self):
         """Test benchmark configuration."""
-        config = RLMConfig.from_dict({
-            "benchmarks": {
-                "default_preset": "oolong_style",
-                "trajectory_dir": "/custom/traces",
-                "export_html": False,
-                "pack_paths": ["pack1.yaml", "pack2.yaml"],
+        config = RLMConfig.from_dict(
+            {
+                "benchmarks": {
+                    "default_preset": "oolong_style",
+                    "trajectory_dir": "/custom/traces",
+                    "export_html": False,
+                    "pack_paths": ["pack1.yaml", "pack2.yaml"],
+                }
             }
-        })
+        )
 
         assert config.benchmarks.default_preset == "oolong_style"
         assert config.benchmarks.trajectory_dir == "/custom/traces"
@@ -378,14 +374,16 @@ class TestConfigIntegration:
 
     def test_trajectory_config(self):
         """Test trajectory configuration."""
-        config = RLMConfig.from_dict({
-            "trajectory": {
-                "enabled": True,
-                "output_dir": "./custom_traces",
-                "format": "jsonl",
-                "include_prompts": True,
+        config = RLMConfig.from_dict(
+            {
+                "trajectory": {
+                    "enabled": True,
+                    "output_dir": "./custom_traces",
+                    "format": "jsonl",
+                    "include_prompts": True,
+                }
             }
-        })
+        )
 
         assert config.trajectory.enabled is True
         assert config.trajectory.output_dir == "./custom_traces"

@@ -67,7 +67,9 @@ class DockerSandboxRuntime:
                 stderr=result.stderr,
             )
         except FileNotFoundError as exc:
-            raise ConfigurationError("Docker CLI not found. Install Docker or use /sandbox use local.") from exc
+            raise ConfigurationError(
+                "Docker CLI not found. Install Docker or use /sandbox use local."
+            ) from exc
 
     @staticmethod
     def check_health(timeout_seconds: float = 2.5) -> tuple[bool, str]:

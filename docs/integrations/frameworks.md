@@ -13,6 +13,9 @@ observability and comparison across execution backends.
 rlm_code.rlm.frameworks
   +-- base.py                 -- Protocol, data classes
   +-- registry.py             -- Adapter registry
+  +-- (runner-native)         -- `framework=native` path in RLMRunner
+  +-- dspy_rlm_adapter.py     -- DSPy native RLM adapter
+  +-- adk_rlm_adapter.py      -- ADK sample native RLM adapter
   +-- pydantic_ai_adapter.py  -- Pydantic AI adapter
   +-- google_adk_adapter.py   -- Google ADK adapter
   +-- deepagents_adapter.py   -- DeepAgents (LangGraph) adapter
@@ -25,15 +28,23 @@ rlm_code.rlm.frameworks
 ```mermaid
 graph TD
     Runner["RLM Runner"] --> Registry["FrameworkAdapterRegistry"]
+    Registry -->|"get('dspy-rlm')"| DSPyRLM["DSPyRLMFrameworkAdapter"]
+    Registry -->|"get('adk-rlm')"| ADKRLM["ADKRLMFrameworkAdapter"]
     Registry -->|"get('pydantic-ai')"| PydAI["PydanticAIFrameworkAdapter"]
     Registry -->|"get('google-adk')"| ADK["GoogleADKFrameworkAdapter"]
     Registry -->|"get('deepagents')"| DA["DeepAgentsFrameworkAdapter"]
+    DSPyRLM --> Agent0["dspy.RLM"]
+    ADKRLM --> Agent00["adk_rlm.completion"]
     PydAI --> Agent1["Pydantic AI Agent"]
     ADK --> Agent2["Google ADK LlmAgent"]
     DA --> Agent3["DeepAgents LangGraph Agent"]
+    Agent0 --> Steps0["FrameworkStepRecord[]"]
+    Agent00 --> Steps00["FrameworkStepRecord[]"]
     Agent1 --> Steps1["FrameworkStepRecord[]"]
     Agent2 --> Steps2["FrameworkStepRecord[]"]
     Agent3 --> Steps3["FrameworkStepRecord[]"]
+    Steps0 --> Result["FrameworkEpisodeResult"]
+    Steps00 --> Result
     Steps1 --> Result["FrameworkEpisodeResult"]
     Steps2 --> Result
     Steps3 --> Result
@@ -168,23 +179,95 @@ registry = FrameworkAdapterRegistry.default(workdir="/path/to/project")
 
 ### Default Registry
 
-The `default()` factory registers all three built-in adapters:
+The `default()` factory registers all built-in adapters:
 
 ```python
 registry = FrameworkAdapterRegistry.default(workdir="/my/project")
 print(registry.list_ids())
-# ["deepagents", "google-adk", "pydantic-ai"]
+# ["adk-rlm", "deepagents", "dspy-rlm", "google-adk", "pydantic-ai"]
 ```
+
+`native` is intentionally not listed here because it is built directly into
+`RLMRunner` (not adapter-registered).
 
 ### Doctor Output
 
 ```python
 results = registry.doctor()
 # [
+#   {"framework": "adk-rlm", "ok": False, "mode": "native_rlm", "detail": "adk_rlm not installed..."},
+#   {"framework": "dspy-rlm", "ok": True, "mode": "native_rlm", "detail": "dspy RLM available"},
 #   {"framework": "google-adk", "ok": False, "detail": "google-adk not installed..."},
 #   {"framework": "pydantic-ai", "ok": True, "detail": "pydantic-ai available"},
 # ]
 ```
+
+### TUI / CLI Usage
+
+Use the shell command to inspect adapter readiness:
+
+```text
+/rlm frameworks
+```
+
+Then select an adapter in any run path:
+
+```text
+/rlm run Investigate memory leak framework=dspy-rlm env=generic
+/rlm run Build an RLM planner framework=adk-rlm env=generic
+/rlm chat Continue analysis framework=deepagents
+```
+
+Compatibility alias: `framework=dspy` maps to `framework=dspy-rlm`.
+Use `framework=native env=pure_rlm` for paper-style built-in recursive mode.
+
+---
+
+## DSPy RLM Adapter
+
+**Module:** `rlm_code.rlm.frameworks.dspy_rlm_adapter`
+
+**Adapter ID:** `dspy-rlm`
+
+This adapter uses DSPy's native `dspy.RLM` abstraction (reference:
+`dspy.RLM` from the installed DSPy package) and returns one normalized
+`FrameworkEpisodeResult`.
+
+### Installation
+
+```bash
+pip install dspy
+```
+
+### Notes
+
+1. Requires a DSPy build that exposes `dspy.RLM`.
+2. Uses `dspy.settings.lm` if already configured, otherwise resolves from
+   the connected RLM Code model.
+
+---
+
+## ADK Sample RLM Adapter
+
+**Module:** `rlm_code.rlm.frameworks.adk_rlm_adapter`
+
+**Adapter ID:** `adk-rlm`
+
+This adapter runs the Google ADK sample RLM implementation (reference:
+`adk_rlm/main.py` from the vendored sample package) through
+`adk_rlm.completion(...)`.
+
+### Installation
+
+```bash
+pip install 'rlm-code[adk]'
+```
+
+### Notes
+
+1. `adk_rlm` is vendored inside `rlm-code` for parity with the ADK reference sample.
+2. `google-adk` + `google-genai` still need to be installed via extras.
+3. Defaults to a Gemini model when no active sub-model is provided.
 
 ---
 
@@ -529,6 +612,29 @@ result = adapter.run_episode(task="...", ...)
 ---
 
 ## Class Reference
+
+### DSPyRLMFrameworkAdapter
+
+| Field / Method         | Description                                          |
+|-----------------------|------------------------------------------------------|
+| `workdir`             | Working directory path                               |
+| `framework_id`        | `"dspy-rlm"`                                         |
+| `adapter_mode`        | `"native_rlm"`                                       |
+| `reference_impl`      | `"dspy.RLM (installed package)"`                     |
+| `doctor()`            | Check if `dspy` and `dspy.RLM` are available         |
+| `run_episode()`       | Execute one task via `dspy.RLM`                      |
+| `_resolve_lm()`       | Resolve configured `dspy.LM` for sub-model/provider  |
+
+### ADKRLMFrameworkAdapter
+
+| Field / Method         | Description                                          |
+|-----------------------|------------------------------------------------------|
+| `workdir`             | Working directory path                               |
+| `framework_id`        | `"adk-rlm"`                                          |
+| `adapter_mode`        | `"native_rlm"`                                       |
+| `reference_impl`      | `"adk_rlm/main.py (vendored sample package)"`        |
+| `doctor()`            | Check if `adk_rlm` sample package is importable      |
+| `run_episode()`       | Execute via `adk_rlm.completion()`                   |
 
 ### PydanticAIFrameworkAdapter
 

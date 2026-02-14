@@ -31,7 +31,7 @@ class REPLVariable:
     description: str = ""
     constraints: str = ""
     total_length: int = 0  # Characters, not tokens
-    preview: str = ""      # First N chars for LLM orientation
+    preview: str = ""  # First N chars for LLM orientation
 
     # Preview configuration
     PREVIEW_LENGTH: int = 500
@@ -323,7 +323,9 @@ class ImmutableHistory:
         for e in self.entries:
             content = e.content
             if len(content) > max_chars:
-                content = content[:max_chars] + f"... [{len(e.content) - max_chars} chars truncated]"
+                content = (
+                    content[:max_chars] + f"... [{len(e.content) - max_chars} chars truncated]"
+                )
             truncated.append(
                 ImmutableHistoryEntry(
                     role=e.role,

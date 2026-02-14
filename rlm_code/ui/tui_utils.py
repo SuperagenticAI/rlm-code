@@ -21,11 +21,7 @@ def filter_commands(commands: list[str], query: str, limit: int = 12) -> list[st
         return sorted(commands)[:limit]
 
     prefix = [cmd for cmd in commands if cmd.lower().startswith(query)]
-    contains = [
-        cmd
-        for cmd in commands
-        if query in cmd.lower() and cmd not in prefix
-    ]
+    contains = [cmd for cmd in commands if query in cmd.lower() and cmd not in prefix]
 
     fuzzy = difflib.get_close_matches(query, commands, n=limit, cutoff=0.35)
     fuzzy = [cmd for cmd in fuzzy if cmd not in prefix and cmd not in contains]
@@ -54,4 +50,3 @@ def generate_unified_diff(
         n=context_lines,
     )
     return "".join(diff)
-

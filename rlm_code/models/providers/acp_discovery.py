@@ -146,7 +146,7 @@ class ACPDiscovery:
     ]
 
     def __init__(self, version_timeout: float = 1.5):
-        self.version_timeout = max(version_timeout, 0.5)
+        self.version_timeout = max(version_timeout, 0.1)
 
     def discover(self) -> list[ACPAgentResult]:
         """Discover known ACP agents."""

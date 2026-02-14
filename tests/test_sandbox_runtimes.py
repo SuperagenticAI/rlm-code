@@ -32,6 +32,10 @@ class _SandboxCfg:
     memory_limit_mb: int = 333
     allowed_mount_roots: list[str] = field(default_factory=lambda: [".", "/tmp"])
     env_allowlist: list[str] = field(default_factory=list)
+    superbox_auto_fallback: bool = True
+    superbox_fallback_runtimes: list[str] = field(
+        default_factory=lambda: ["docker", "apple-container", "local"]
+    )
     docker: _DockerCfg = field(default_factory=_DockerCfg)
     apple_container_enabled: bool = False
 
@@ -75,7 +79,9 @@ def test_execution_sandbox_uses_runtime_override(monkeypatch):
             assert request.timeout_seconds == 7
             return RuntimeExecutionResult(return_code=0, stdout="ok", stderr="")
 
-    monkeypatch.setattr("rlm_code.execution.sandbox.create_runtime", lambda name, cfg: _FakeRuntime())
+    monkeypatch.setattr(
+        "rlm_code.sandbox.superbox.create_runtime", lambda name, cfg: _FakeRuntime()
+    )
 
     code = "print('hello')"
     return_code, stdout, stderr = sandbox.execute(code)

@@ -95,7 +95,9 @@ class LLMConnector:
                 f"Use /connect <provider> <model> and one of: {supported}"
             )
 
-        normalized_model = self.provider_registry.normalize_model_name(provider.provider_id, model_name)
+        normalized_model = self.provider_registry.normalize_model_name(
+            provider.provider_id, model_name
+        )
 
         try:
             if provider.adapter_type == "ollama":
@@ -107,7 +109,9 @@ class LLMConnector:
             elif provider.adapter_type == "gemini":
                 return self._connect_gemini(normalized_model, api_key)
             elif provider.adapter_type == "openai_compatible":
-                return self._connect_openai_compatible(provider, normalized_model, api_key, base_url)
+                return self._connect_openai_compatible(
+                    provider, normalized_model, api_key, base_url
+                )
             else:
                 raise ModelError(f"Unsupported model adapter: {provider.adapter_type}")
 
@@ -360,7 +364,9 @@ class LLMConnector:
                 # Find the full name with tag
                 for full_name in available_models:
                     if full_name.startswith(model_name + ":") or full_name == model_name:
-                        self._set_active_connection(provider, full_name, api_key=None, base_url=endpoint)
+                        self._set_active_connection(
+                            provider, full_name, api_key=None, base_url=endpoint
+                        )
                         logger.info(f"Connected to Ollama model: {full_name}")
                         return True
 
@@ -395,7 +401,9 @@ class LLMConnector:
             raise ModelError("Invalid OpenAI API key format. Should start with 'sk-'")
 
         resolved_base_url = self._get_provider_base_url(provider, explicit_base_url=base_url)
-        self._set_active_connection(provider, model_name, api_key=api_key, base_url=resolved_base_url)
+        self._set_active_connection(
+            provider, model_name, api_key=api_key, base_url=resolved_base_url
+        )
 
         logger.info(f"Connected to OpenAI model: {model_name}")
         return True
@@ -456,7 +464,9 @@ class LLMConnector:
             api_key = self._get_env_value(provider.api_key_env_vars)
 
         if provider.requires_api_key and not api_key:
-            expected = ", ".join(provider.api_key_env_vars) if provider.api_key_env_vars else "API key"
+            expected = (
+                ", ".join(provider.api_key_env_vars) if provider.api_key_env_vars else "API key"
+            )
             raise ModelError(
                 f"{provider.display_name} API key required. Set {expected} or provide --api-key"
             )
@@ -567,11 +577,7 @@ class LLMConnector:
         Keep only likely free OpenCode models when no API key is configured.
         """
         free_catalog = set(get_superqode_models("opencode"))
-        filtered = [
-            model
-            for model in models
-            if model in free_catalog or "free" in model.lower()
-        ]
+        filtered = [model for model in models if model in free_catalog or "free" in model.lower()]
         if filtered:
             return self._dedupe_preserve_order(filtered)
         return list(free_catalog)
@@ -664,7 +670,9 @@ class LLMConnector:
                 "commands",
             }:
                 continue
-            if any(char in candidate for char in "-/.") or any(char.isdigit() for char in candidate):
+            if any(char in candidate for char in "-/.") or any(
+                char.isdigit() for char in candidate
+            ):
                 models.append(candidate)
 
         return self._dedupe_preserve_order(models)
@@ -822,7 +830,9 @@ class LLMConnector:
         ):
             return self._generate_opencode_via_cli(prompt, system_prompt, context)
 
-        provider_name = self.current_provider.display_name if self.current_provider else "OpenAI-compatible"
+        provider_name = (
+            self.current_provider.display_name if self.current_provider else "OpenAI-compatible"
+        )
         return self._generate_openai_family(
             prompt=prompt,
             system_prompt=system_prompt,
@@ -1184,7 +1194,9 @@ class LLMConnector:
         if context:
             # Add framework reference documentation
             if "dspy_reference" in context:
-                parts.append(f"\n# Framework Reference Documentation:\n{context['dspy_reference']}\n")
+                parts.append(
+                    f"\n# Framework Reference Documentation:\n{context['dspy_reference']}\n"
+                )
 
             # Add conversation history
             if "conversation_history" in context:

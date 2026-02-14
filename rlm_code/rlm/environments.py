@@ -102,13 +102,11 @@ class RLMEnvironment(Protocol):
 
     name: str
 
-    def system_prompt(self) -> str:
-        ...
+    def system_prompt(self) -> str: ...
 
     def planner_prompt(
         self, task: str, memory: list[str], trajectory: list[dict[str, Any]], step_index: int
-    ) -> str:
-        ...
+    ) -> str: ...
 
     def execute_action(
         self,
@@ -116,11 +114,9 @@ class RLMEnvironment(Protocol):
         execution_engine: Any,
         exec_timeout: int,
         llm_connector: Any | None = None,
-    ) -> EnvironmentActionResult:
-        ...
+    ) -> EnvironmentActionResult: ...
 
-    def doctor_checks(self) -> list[EnvironmentDoctorCheck]:
-        ...
+    def doctor_checks(self) -> list[EnvironmentDoctorCheck]: ...
 
 
 class GenericRLMEnvironment:
@@ -159,7 +155,9 @@ class GenericRLMEnvironment:
             reward = entry.get("reward", 0.0)
             obs = entry.get("observation", {})
             success = obs.get("success")
-            recent_text.append(f"- step={entry.get('step')} action={action} success={success} reward={reward}")
+            recent_text.append(
+                f"- step={entry.get('step')} action={action} success={success} reward={reward}"
+            )
         recent_block = "\n".join(recent_text) or "- (no prior steps)"
         return (
             f"Task: {task}\n"
@@ -248,7 +246,9 @@ class GenericRLMEnvironment:
                 name="workdir_writable",
                 status="pass" if writable else "fail",
                 detail=f"Write access to workdir: {'yes' if writable else 'no'}",
-                recommendation=None if writable else "Fix directory permissions before running /rlm run.",
+                recommendation=None
+                if writable
+                else "Fix directory permissions before running /rlm run.",
             )
         )
 
@@ -474,7 +474,11 @@ class DSPyCodingRLMEnvironment(GenericRLMEnvironment):
                 )
             except subprocess.TimeoutExpired:
                 return EnvironmentActionResult(
-                    observation={"success": False, "error": "Test command timed out.", "command": command},
+                    observation={
+                        "success": False,
+                        "error": "Test command timed out.",
+                        "command": command,
+                    },
                     reward=-0.4,
                     memory_note="Tests timed out.",
                 )
@@ -1114,8 +1118,8 @@ class DSPyCodingRLMEnvironment(GenericRLMEnvironment):
         return (
             "[dspy-signature]\n"
             "class MySig(dspy.Signature):\n"
-            "    input_text = dspy.InputField(desc=\"...\")\n"
-            "    output_text = dspy.OutputField(desc=\"...\")\n\n"
+            '    input_text = dspy.InputField(desc="...")\n'
+            '    output_text = dspy.OutputField(desc="...")\n\n'
             "[dspy-module]\n"
             "class MyModule(dspy.Module):\n"
             "    def __init__(self):\n"
@@ -1194,7 +1198,9 @@ class DSPyCodingRLMEnvironment(GenericRLMEnvironment):
                 name="dspy_import",
                 status="pass" if dspy_ok else "warn",
                 detail="DSPy import check passed." if dspy_ok else "DSPy import check failed.",
-                recommendation=None if dspy_ok else "Install/activate dependencies so `import dspy` works.",
+                recommendation=None
+                if dspy_ok
+                else "Install/activate dependencies so `import dspy` works.",
             )
         )
         return checks

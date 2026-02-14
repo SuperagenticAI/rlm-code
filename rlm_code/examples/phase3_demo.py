@@ -16,10 +16,8 @@ import tempfile
 from pathlib import Path
 
 from rlm_code.rlm import (
-    # Trajectory logging
     TrajectoryLogger,
     TrajectoryViewer,
-    TrajectoryEventType,
     compare_trajectories,
 )
 from rlm_code.rlm.benchmarks import (
@@ -35,9 +33,9 @@ def demo_cloud_runtime_discovery():
     print("=" * 60)
 
     from rlm_code.sandbox.runtimes.registry import (
-        detect_runtime_health,
-        SUPPORTED_RUNTIMES,
         CLOUD_RUNTIMES,
+        SUPPORTED_RUNTIMES,
+        detect_runtime_health,
     )
 
     print("\n--- Supported Runtimes ---")
@@ -145,7 +143,9 @@ def demo_paper_benchmarks():
     print("\n--- All Benchmark Presets ---")
     presets = list_benchmark_presets()
     for preset in presets:
-        print(f"  {preset['preset']:25} ({preset['cases']} cases) - {preset['description'][:50]}...")
+        print(
+            f"  {preset['preset']:25} ({preset['cases']} cases) - {preset['description'][:50]}..."
+        )
 
     print("\n--- OOLONG-Style Benchmarks (Long Context) ---")
     print("Based on the OOLONG benchmark from the RLM paper.")
@@ -219,7 +219,9 @@ def demo_trajectory_comparison():
         print(f"{'Trajectory':<20} {'Success':<10} {'Iterations':<12} {'Tokens':<10}")
         print("-" * 52)
         for traj in comparison["trajectories"]:
-            print(f"{traj['run_id']:<20} {str(traj['success']):<10} {traj['iterations']:<12} {traj['tokens']:<10}")
+            print(
+                f"{traj['run_id']:<20} {str(traj['success']):<10} {traj['iterations']:<12} {traj['tokens']:<10}"
+            )
 
         print("\n--- Aggregate Metrics ---")
         comp = comparison["comparison"]

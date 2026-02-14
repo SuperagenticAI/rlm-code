@@ -11,22 +11,61 @@ prefix display, mode suffix).
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
-from typing import Callable, Sequence
 
 from rich.text import Text
 
 from .design_system import PALETTE
 
-
 # Shell commands that trigger auto-detection (from Toad's likely_shell pattern).
-_SHELL_COMMANDS = frozenset({
-    "ls", "cd", "pwd", "cat", "echo", "grep", "find", "mkdir", "rm", "cp",
-    "mv", "touch", "head", "tail", "less", "more", "wc", "sort", "uniq",
-    "git", "docker", "npm", "pip", "cargo", "make", "python", "node",
-    "curl", "wget", "ssh", "scp", "tar", "zip", "unzip",
-})
+_SHELL_COMMANDS = frozenset(
+    {
+        "ls",
+        "cd",
+        "pwd",
+        "cat",
+        "echo",
+        "grep",
+        "find",
+        "mkdir",
+        "rm",
+        "cp",
+        "mv",
+        "touch",
+        "head",
+        "tail",
+        "less",
+        "more",
+        "wc",
+        "sort",
+        "uniq",
+        "git",
+        "docker",
+        "npm",
+        "pip",
+        "cargo",
+        "make",
+        "python",
+        "node",
+        "curl",
+        "wget",
+        "ssh",
+        "scp",
+        "tar",
+        "zip",
+        "unzip",
+    }
+)
+
+_PATH_ARG_COMMANDS = frozenset(
+    {
+        "/snapshot",
+        "/diff",
+        "/run",
+        "/test",
+        "/validate",
+    }
+)
 
 
 class CommandSuggester:
@@ -76,10 +115,21 @@ class PathCompleter:
 
     def complete(self, partial: str, *, limit: int = 10) -> list[str]:
         """Return file path completions for a partial path string."""
-        if not partial:
-            return []
-
         try:
+            if not partial:
+                entries = sorted(self.root.iterdir())
+                completions: list[str] = []
+                for entry in entries:
+                    if entry.name.startswith("."):
+                        continue
+                    rel = str(entry.relative_to(self.root))
+                    if entry.is_dir():
+                        rel += "/"
+                    completions.append(rel)
+                    if len(completions) >= limit:
+                        break
+                return completions
+
             # Resolve relative to root.
             target = self.root / partial
             parent = target.parent if not target.is_dir() else target
@@ -188,9 +238,7 @@ class SuggestionState:
 
     def select_next(self) -> None:
         if self.suggestions:
-            self.selected_index = min(
-                len(self.suggestions) - 1, self.selected_index + 1
-            )
+            self.selected_index = min(len(self.suggestions) - 1, self.selected_index + 1)
 
     def select_prev(self) -> None:
         if self.suggestions:
@@ -248,6 +296,7 @@ class PromptHelper:
         self.path_completer = PathCompleter(root)
         self.mode = PromptMode()
         self.suggestions = SuggestionState()
+        self._command_templates: dict[str, list[str]] = {}
 
         # History navigation (from Toad/SuperQode).
         self._history: list[str] = []
@@ -257,6 +306,46 @@ class PromptHelper:
 
     def set_commands(self, commands: list[str]) -> None:
         self.command_suggester.set_commands(commands)
+
+    def set_command_templates(self, templates: dict[str, list[str]]) -> None:
+        """Set suffix templates for slash command argument completion.
+
+        Template values are suffixes after the command name. Example:
+        {"/sandbox": ["status", "profile secure", "backend docker"]}.
+        """
+        normalized: dict[str, list[str]] = {}
+        for command, values in templates.items():
+            cmd = str(command).strip().lower()
+            if not cmd.startswith("/"):
+                cmd = f"/{cmd}"
+            deduped = list(
+                dict.fromkeys(str(value).strip() for value in values if str(value).strip())
+            )
+            if deduped:
+                normalized[cmd] = deduped
+        self._command_templates = normalized
+
+    def _suggest_template_suffixes(
+        self,
+        command_lower: str,
+        remainder: str,
+        *,
+        limit: int = 8,
+    ) -> list[str]:
+        templates = self._command_templates.get(command_lower, [])
+        if not templates:
+            return []
+
+        typed = remainder.strip().lower()
+        if not typed:
+            return templates[:limit]
+
+        prefix_matches = [item for item in templates if item.lower().startswith(typed)]
+        if prefix_matches:
+            return prefix_matches[:limit]
+
+        contains_matches = [item for item in templates if typed in item.lower()]
+        return contains_matches[:limit]
 
     def add_to_history(self, text: str) -> None:
         """Record a submitted input into the history."""
@@ -268,7 +357,7 @@ class PromptHelper:
             return
         self._history.append(text)
         if len(self._history) > self._max_history:
-            self._history = self._history[-self._max_history:]
+            self._history = self._history[-self._max_history :]
         self._history_index = -1
         self._history_stash = ""
 
@@ -281,9 +370,33 @@ class PromptHelper:
             self.suggestions.clear()
             return
 
-        if stripped.startswith("/"):
+        normalized = text.lstrip()
+
+        if normalized.startswith("/"):
+            command, sep, remainder = normalized.partition(" ")
+            command_lower = command.lower()
+
+            # File-oriented slash commands support path completion for trailing argument.
+            if sep and command_lower in _PATH_ARG_COMMANDS:
+                partial = remainder.rsplit(" ", 1)[-1] if remainder else ""
+                prefix = normalized[: len(normalized) - len(partial)] if partial else normalized
+                completions = self.path_completer.complete(partial, limit=8)
+                if completions:
+                    expanded = [f"{prefix}{candidate}" for candidate in completions]
+                    self.suggestions.update(expanded)
+                    return
+                self.suggestions.clear()
+                return
+
+            if sep:
+                suffixes = self._suggest_template_suffixes(command_lower, remainder, limit=8)
+                if suffixes:
+                    expanded = [f"{command} {suffix}".rstrip() for suffix in suffixes]
+                    self.suggestions.update(expanded)
+                    return
+
             # Slash command mode: suggest commands.
-            matches = self.command_suggester.suggest(stripped)
+            matches = self.command_suggester.suggest(command)
             self.suggestions.update(matches)
         elif stripped.startswith("!"):
             # Shell command mode: no suggestions for now.

@@ -17,6 +17,8 @@ class GoogleADKFrameworkAdapter:
 
     workdir: str
     framework_id: str = "google-adk"
+    adapter_mode: str = "agent_loop"
+    reference_impl: str = "google.adk (installed package)"
 
     def doctor(self) -> tuple[bool, str]:
         try:
@@ -50,7 +52,9 @@ class GoogleADKFrameworkAdapter:
             ) from exc
 
         model_name = (sub_model or getattr(llm_connector, "current_model", None) or "").strip()
-        provider = (sub_provider or getattr(llm_connector, "model_type", None) or "").strip().lower()
+        provider = (
+            (sub_provider or getattr(llm_connector, "model_type", None) or "").strip().lower()
+        )
         if not model_name:
             raise RuntimeError("No active model. Connect a model first with /connect.")
 
@@ -73,7 +77,9 @@ class GoogleADKFrameworkAdapter:
                 app_name="rlm_code",
                 user_id="rlm_user",
             )
-            content = genai_types.Content(role="user", parts=[genai_types.Part.from_text(text=task)])
+            content = genai_types.Content(
+                role="user", parts=[genai_types.Part.from_text(text=task)]
+            )
 
             steps: list[FrameworkStepRecord] = []
             total_reward = 0.0

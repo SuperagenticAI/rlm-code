@@ -29,28 +29,28 @@ Usage:
             return "Action denied by user"
 """
 
+from .audit import (
+    ApprovalAuditLog,
+    AuditEntry,
+)
 from .gate import (
     ApprovalGate,
     ApprovalRequest,
     ApprovalResponse,
     ApprovalStatus,
 )
-from .policy import (
-    ApprovalPolicy,
-    RiskAssessor,
-    ToolRiskLevel,
-    RiskAssessment,
-)
 from .handlers import (
     ApprovalHandler,
-    ConsoleApprovalHandler,
     AutoApproveHandler,
     AutoDenyHandler,
     CallbackApprovalHandler,
+    ConsoleApprovalHandler,
 )
-from .audit import (
-    ApprovalAuditLog,
-    AuditEntry,
+from .policy import (
+    ApprovalPolicy,
+    RiskAssessment,
+    RiskAssessor,
+    ToolRiskLevel,
 )
 
 __all__ = [

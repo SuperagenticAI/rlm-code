@@ -11,26 +11,20 @@ Includes:
 
 from __future__ import annotations
 
-import asyncio
 from time import monotonic
-from typing import Any
 
 from rich.console import RenderableType
 from rich.style import Style
 from rich.text import Text
-from textual.widget import Widget
 from textual.reactive import reactive
-from textual.app import ComposeResult
 from textual.widgets import Static
 
 from ..theme import (
     COLORS,
-    THINKING_GRADIENT,
-    SPINNER_DOTS,
-    SPINNER_BRAILLE,
-    SPARKLINE_CHARS,
     PROGRESS_SMOOTH,
-    sparkline,
+    SPARKLINE_CHARS,
+    SPINNER_DOTS,
+    THINKING_GRADIENT,
     progress_bar,
 )
 
@@ -256,7 +250,7 @@ class SparklineChart(Static):
         new_values.append(value)
         # Keep only last N values
         if len(new_values) > self._width:
-            new_values = new_values[-self._width:]
+            new_values = new_values[-self._width :]
         self.values = new_values
 
     def render(self) -> RenderableType:
@@ -277,7 +271,7 @@ class SparklineChart(Static):
         range_val = max_val - min_val if max_val != min_val else 1
 
         # Render each character with color based on value
-        display_values = self.values[-self._width:]
+        display_values = self.values[-self._width :]
 
         for v in display_values:
             normalized = (v - min_val) / range_val
@@ -374,7 +368,7 @@ class TypewriterText(Static):
         if not self.full_text:
             return Text("")
 
-        revealed = self.full_text[:self._revealed_count]
+        revealed = self.full_text[: self._revealed_count]
         text = Text(revealed, style=Style(color=COLORS.text_primary))
 
         # Add cursor if still typing
@@ -516,10 +510,7 @@ class StatusIndicator(Static):
 
     def render(self) -> RenderableType:
         """Render the status indicator."""
-        icon, color = self.STATUS_CONFIG.get(
-            self.status.lower(),
-            ("○", COLORS.text_muted)
-        )
+        icon, color = self.STATUS_CONFIG.get(self.status.lower(), ("○", COLORS.text_muted))
 
         text = Text()
         text.append(icon, style=Style(color=color))

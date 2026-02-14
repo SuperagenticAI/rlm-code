@@ -137,7 +137,7 @@ arrow keys to navigate, Enter to select.
 ### Available Palette Commands
 
 ```
-/help  /connect  /models  /status  /sandbox  /rlm
+/help  /workflow  /connect  /models  /status  /sandbox  /rlm  /rml  /harness
 /clear  /snapshot  /diff  /view  /layout  /pane
 /copy  /focus  /exit
 ```
@@ -207,12 +207,15 @@ This avoids unnecessary API calls for trivial interactions.
 | Command | Description |
 |---------|-------------|
 | `/help` | 📖 Show all commands and shortcuts |
+| `/workflow` | 🧭 Show recommended RLM workflow steps |
 | `/connect` | 🔗 Launch connect wizard |
 | `/connect <provider> <model> ...` | 🔗 Direct model connection |
 | `/models` | 📋 List all providers and models |
 | `/status` | 📊 Refresh status panel |
-| `/sandbox` | 📦 Sandbox status, doctor, runtime switch |
+| `/sandbox` | 📦 Sandbox status, doctor, runtime switch, profile/backend controls |
 | `/rlm` | 🧠 RLM runner (run, bench, status, replay, doctor, chat, observability) |
+| `/rml` | 🧠 Alias for `/rlm` |
+| `/harness` | 🛠 Tool-using coding harness (`tools`, `doctor`, `run`) |
 | `/clear` | 🧹 Clear chat and shell logs |
 | `/snapshot [file]` | 📸 Take baseline snapshot for diffing |
 | `/diff [file]` | 🔍 Show diff against snapshot |
@@ -234,6 +237,18 @@ This avoids unnecessary API calls for trivial interactions.
 | `RLM_TUI_HISTORY_ITEM_CHARS` | `320` | 📝 Max chars per history item |
 | `RLM_TUI_HISTORY_TOTAL_CHARS` | `1800` | 📝 Max total chars for history |
 | `RLM_TUI_THINK_TICK` | `0.08` | ⏱️ Thinking animation refresh interval (sec) |
+| `RLM_TUI_EVENT_FLUSH_SECONDS` | `0.12` | 📡 Event log batch flush cadence |
+| `RLM_TUI_EVENT_BATCH_LIMIT` | `32` | 📡 Max events per flush batch |
+| `RLM_TUI_ACP_DISCOVERY_TIMEOUT_SECONDS` | `0.45` | 🔌 ACP discovery timeout |
+| `RLM_TUI_ACP_CACHE_TTL_SECONDS` | `30` | 🔌 ACP discovery cache TTL |
+| `RLM_TUI_HARNESS_AUTO` | `1` | 🛠 Enable automatic harness routing for coding tasks |
+| `RLM_TUI_HARNESS_AUTO_MCP` | `1` | 🛠 Include MCP tools in auto harness route |
+| `RLM_TUI_HARNESS_AUTO_STEPS` | `8` | 🛠 Max steps for auto harness runs |
+| `RLM_TUI_HARNESS_PREVIEW_STEPS` | `6` | 🛠 Steps shown in harness preview |
+| `RLM_TUI_INPUT_DEBOUNCE_SECONDS` | `0.0` | ⌨️ Input debounce delay |
+| `RLM_TUI_CHAT_MAX_LINES` | `2200` | 💬 Chat log line cap |
+| `RLM_TUI_TOOL_MAX_LINES` | `1600` | 🧰 Tool log line cap |
+| `RLM_TUI_EVENT_MAX_LINES` | `3200` | 📡 Event log line cap |
 
 ---
 

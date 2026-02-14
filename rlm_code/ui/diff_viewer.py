@@ -13,7 +13,7 @@ indicators, split/unified toggle, async diff) and SuperQode's diff_view.py
 from __future__ import annotations
 
 import difflib
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import Sequence
 
@@ -159,13 +159,15 @@ def compute_side_by_side_diff(
             continue
 
         if line.startswith("@@"):
-            result.append(DiffLine(
-                left_num=None,
-                left_text=line,
-                right_num=None,
-                right_text="",
-                line_type=LineType.HEADER,
-            ))
+            result.append(
+                DiffLine(
+                    left_num=None,
+                    left_text=line,
+                    right_num=None,
+                    right_text="",
+                    line_type=LineType.HEADER,
+                )
+            )
             try:
                 parts = line.split("@@")[1].strip()
                 left_part, right_part = parts.split("+")
@@ -177,33 +179,39 @@ def compute_side_by_side_diff(
 
         if line.startswith("-"):
             left_num += 1
-            result.append(DiffLine(
-                left_num=left_num,
-                left_text=line[1:],
-                right_num=None,
-                right_text="",
-                line_type=LineType.REMOVED,
-            ))
+            result.append(
+                DiffLine(
+                    left_num=left_num,
+                    left_text=line[1:],
+                    right_num=None,
+                    right_text="",
+                    line_type=LineType.REMOVED,
+                )
+            )
         elif line.startswith("+"):
             right_num += 1
-            result.append(DiffLine(
-                left_num=None,
-                left_text="",
-                right_num=right_num,
-                right_text=line[1:],
-                line_type=LineType.ADDED,
-            ))
+            result.append(
+                DiffLine(
+                    left_num=None,
+                    left_text="",
+                    right_num=right_num,
+                    right_text=line[1:],
+                    line_type=LineType.ADDED,
+                )
+            )
         else:
             left_num += 1
             right_num += 1
             text = line[1:] if line.startswith(" ") else line
-            result.append(DiffLine(
-                left_num=left_num,
-                left_text=text,
-                right_num=right_num,
-                right_text=text,
-                line_type=LineType.CONTEXT,
-            ))
+            result.append(
+                DiffLine(
+                    left_num=left_num,
+                    left_text=text,
+                    right_num=right_num,
+                    right_text=text,
+                    line_type=LineType.CONTEXT,
+                )
+            )
 
     # Pair adjacent removed+added lines as MODIFIED for better visual matching.
     result = _pair_modified_lines(result)
@@ -220,13 +228,15 @@ def _pair_modified_lines(lines: list[DiffLine]) -> list[DiffLine]:
             and lines[i].line_type == LineType.REMOVED
             and lines[i + 1].line_type == LineType.ADDED
         ):
-            result.append(DiffLine(
-                left_num=lines[i].left_num,
-                left_text=lines[i].left_text,
-                right_num=lines[i + 1].right_num,
-                right_text=lines[i + 1].right_text,
-                line_type=LineType.MODIFIED,
-            ))
+            result.append(
+                DiffLine(
+                    left_num=lines[i].left_num,
+                    left_text=lines[i].left_text,
+                    right_num=lines[i + 1].right_num,
+                    right_text=lines[i + 1].right_text,
+                    line_type=LineType.MODIFIED,
+                )
+            )
             i += 2
         else:
             result.append(lines[i])
@@ -320,14 +330,10 @@ class DiffRenderable:
         self.context_lines = context_lines
         self.max_col_width = max_col_width
         self.mode = mode
-        self.diff_lines = compute_side_by_side_diff(
-            before, after, context_lines=context_lines
-        )
+        self.diff_lines = compute_side_by_side_diff(before, after, context_lines=context_lines)
         self.stats = _compute_stats(self.diff_lines)
 
-    def __rich_console__(
-        self, console: Console, options: ConsoleOptions
-    ) -> RenderResult:
+    def __rich_console__(self, console: Console, options: ConsoleOptions) -> RenderResult:
         # Auto-select mode based on width (from SuperQode's on_resize logic).
         effective_mode = self.mode
         if effective_mode == DiffMode.SPLIT and options.max_width < 80:
@@ -340,9 +346,7 @@ class DiffRenderable:
         else:
             yield from self._render_split(console, options)
 
-    def _render_split(
-        self, console: Console, options: ConsoleOptions
-    ) -> RenderResult:
+    def _render_split(self, console: Console, options: ConsoleOptions) -> RenderResult:
         table = Table(
             show_header=True,
             header_style=f"bold {PALETTE.primary_lighter}",
@@ -385,9 +389,7 @@ class DiffRenderable:
                 )
             elif dl.line_type == LineType.MODIFIED:
                 # Character-level highlighting.
-                left_styled, right_styled = _highlight_char_diff(
-                    dl.left_text, dl.right_text
-                )
+                left_styled, right_styled = _highlight_char_diff(dl.left_text, dl.right_text)
                 table.add_row(
                     Text(edge, style=f"bold {LINE_COLORS[LineType.REMOVED][0]}"),
                     Text(left_num, style=PALETTE.text_dim),
@@ -434,9 +436,7 @@ class DiffRenderable:
             padding=(0, 0),
         )
 
-    def _render_unified(
-        self, console: Console, options: ConsoleOptions
-    ) -> RenderResult:
+    def _render_unified(self, console: Console, options: ConsoleOptions) -> RenderResult:
         """Render in unified diff format (single column)."""
         table = Table(
             show_header=True,
@@ -460,7 +460,8 @@ class DiffRenderable:
             if dl.line_type == LineType.HEADER:
                 table.add_row(
                     Text(edge, style=f"bold {fg}"),
-                    "", "",
+                    "",
+                    "",
                     Text(dl.left_text, style=f"{fg} on {bg} bold"),
                 )
             elif dl.line_type == LineType.REMOVED:
@@ -479,9 +480,7 @@ class DiffRenderable:
                 )
             elif dl.line_type == LineType.MODIFIED:
                 # Show both lines with char-level diff.
-                left_styled, right_styled = _highlight_char_diff(
-                    dl.left_text, dl.right_text
-                )
+                left_styled, right_styled = _highlight_char_diff(dl.left_text, dl.right_text)
                 table.add_row(
                     Text("-", style=f"bold {LINE_COLORS[LineType.REMOVED][0]}"),
                     Text(left_num, style=PALETTE.text_dim),
@@ -519,15 +518,15 @@ class DiffRenderable:
         total = self.stats.total_changes or 1
         add_bars = max(1, round(self.stats.added / total * bar_width)) if self.stats.added else 0
         rm_bars = max(1, round(self.stats.removed / total * bar_width)) if self.stats.removed else 0
-        mod_bars = max(1, round(self.stats.modified / total * bar_width)) if self.stats.modified else 0
+        mod_bars = (
+            max(1, round(self.stats.modified / total * bar_width)) if self.stats.modified else 0
+        )
         # Fill remaining with context.
         ctx_bars = max(0, bar_width - add_bars - rm_bars - mod_bars)
 
         text = Text()
         if self.file_path:
-            icon, label = FILE_STATUS_DISPLAY.get(
-                self.file_status, ("\U0001f4dd", "Modified")
-            )
+            icon, label = FILE_STATUS_DISPLAY.get(self.file_status, ("\U0001f4dd", "Modified"))
             text.append(f"{icon} {self.file_path} ", style=f"bold {PALETTE.text_body}")
 
         text.append("\u2588" * add_bars, style=PALETTE.success)
@@ -538,9 +537,7 @@ class DiffRenderable:
         return text
 
     def _title_text(self) -> str:
-        icon, label = FILE_STATUS_DISPLAY.get(
-            self.file_status, ("\U0001f4dd", "Modified")
-        )
+        icon, label = FILE_STATUS_DISPLAY.get(self.file_status, ("\U0001f4dd", "Modified"))
         title = f"[{PALETTE.primary_lighter}]{icon} Diff"
         if self.file_path:
             title += f": {self.file_path}"
@@ -559,6 +556,7 @@ class DiffRenderable:
 # ---------------------------------------------------------------------------
 # Multi-file diff support (from SuperQode's DiffViewer pattern)
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class FileDiff:
@@ -587,15 +585,14 @@ class MultiDiffRenderable:
         self.mode = mode
         self.context_lines = context_lines
 
-    def __rich_console__(
-        self, console: Console, options: ConsoleOptions
-    ) -> RenderResult:
+    def __rich_console__(self, console: Console, options: ConsoleOptions) -> RenderResult:
         # Summary header with compact indicators.
         header = Text()
         header.append(f"{len(self.diffs)} files changed\n", style=f"bold {PALETTE.text_body}")
         for fd in self.diffs:
             diff = DiffRenderable(
-                fd.before, fd.after,
+                fd.before,
+                fd.after,
                 file_path=fd.file_path,
                 file_status=fd.file_status,
                 mode=DiffMode.COMPACT,
@@ -612,7 +609,8 @@ class MultiDiffRenderable:
         # Individual file diffs.
         for fd in self.diffs:
             yield DiffRenderable(
-                fd.before, fd.after,
+                fd.before,
+                fd.after,
                 file_path=fd.file_path,
                 file_status=fd.file_status,
                 context_lines=self.context_lines,
@@ -624,6 +622,7 @@ class MultiDiffRenderable:
 # Public API
 # ---------------------------------------------------------------------------
 
+
 def format_diff_for_chat(
     before: str,
     after: str,
@@ -634,7 +633,8 @@ def format_diff_for_chat(
 ) -> DiffRenderable:
     """Create a DiffRenderable for writing to a RichLog."""
     return DiffRenderable(
-        before, after,
+        before,
+        after,
         file_path=file_path,
         context_lines=context_lines,
         mode=mode,

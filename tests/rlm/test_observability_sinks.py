@@ -14,31 +14,28 @@ from dataclasses import dataclass
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from rlm_code.rlm.observability import (
-    RLMObservability,
-    RLMObservabilitySink,
     LocalJSONLSink,
-    MLflowSink,
+    RLMObservability,
 )
 from rlm_code.rlm.observability_sinks import (
-    OpenTelemetrySink,
-    LangSmithSink,
-    LangFuseSink,
-    LogfireSink,
     CompositeSink,
-    create_otel_sink_from_env,
-    create_langsmith_sink_from_env,
-    create_langfuse_sink_from_env,
-    create_logfire_sink_from_env,
+    LangFuseSink,
+    LangSmithSink,
+    LogfireSink,
+    OpenTelemetrySink,
     create_all_sinks_from_env,
+    create_langfuse_sink_from_env,
+    create_langsmith_sink_from_env,
+    create_logfire_sink_from_env,
+    create_otel_sink_from_env,
 )
 
 
 @dataclass
 class MockResult:
     """Mock run result for testing."""
+
     completed: bool = True
     steps: int = 5
     total_reward: float = 0.8
@@ -267,10 +264,13 @@ class TestFactoryFunctions:
             assert sink.enabled is False
             assert sink.service_name == "rlm-code"
 
-        with patch.dict("os.environ", {
-            "DSPY_RLM_OTEL_ENABLED": "true",
-            "OTEL_SERVICE_NAME": "custom-service",
-        }):
+        with patch.dict(
+            "os.environ",
+            {
+                "DSPY_RLM_OTEL_ENABLED": "true",
+                "OTEL_SERVICE_NAME": "custom-service",
+            },
+        ):
             sink = create_otel_sink_from_env()
             assert sink.enabled is True
             assert sink.service_name == "custom-service"
@@ -282,10 +282,13 @@ class TestFactoryFunctions:
             assert sink.enabled is False
             assert sink.project == "rlm-code"
 
-        with patch.dict("os.environ", {
-            "DSPY_RLM_LANGSMITH_ENABLED": "true",
-            "LANGCHAIN_PROJECT": "custom-project",
-        }):
+        with patch.dict(
+            "os.environ",
+            {
+                "DSPY_RLM_LANGSMITH_ENABLED": "true",
+                "LANGCHAIN_PROJECT": "custom-project",
+            },
+        ):
             sink = create_langsmith_sink_from_env()
             assert sink.enabled is True
             assert sink.project == "custom-project"
@@ -296,10 +299,13 @@ class TestFactoryFunctions:
             sink = create_langfuse_sink_from_env()
             assert sink.enabled is False
 
-        with patch.dict("os.environ", {
-            "DSPY_RLM_LANGFUSE_ENABLED": "true",
-            "LANGFUSE_HOST": "https://custom.langfuse.com",
-        }):
+        with patch.dict(
+            "os.environ",
+            {
+                "DSPY_RLM_LANGFUSE_ENABLED": "true",
+                "LANGFUSE_HOST": "https://custom.langfuse.com",
+            },
+        ):
             sink = create_langfuse_sink_from_env()
             assert sink.enabled is True
             assert sink.host == "https://custom.langfuse.com"
@@ -311,10 +317,13 @@ class TestFactoryFunctions:
             assert sink.enabled is False
             assert sink.project_name == "rlm-code"
 
-        with patch.dict("os.environ", {
-            "DSPY_RLM_LOGFIRE_ENABLED": "true",
-            "LOGFIRE_PROJECT_NAME": "custom-project",
-        }):
+        with patch.dict(
+            "os.environ",
+            {
+                "DSPY_RLM_LOGFIRE_ENABLED": "true",
+                "LOGFIRE_PROJECT_NAME": "custom-project",
+            },
+        ):
             sink = create_logfire_sink_from_env()
             assert sink.enabled is True
             assert sink.project_name == "custom-project"

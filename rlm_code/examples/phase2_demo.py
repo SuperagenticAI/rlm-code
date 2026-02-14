@@ -12,25 +12,23 @@ Usage:
     python -m rlm_code.examples.phase2_demo
 """
 
-from pathlib import Path
-
 from rlm_code.rlm import (
-    # Events
-    RLMEventType,
-    RLMEventData,
-    RLMEventBus,
-    RLMEventCollector,
+    CompactionConfig,
+    ComparisonResult,
+    ConversationMemory,
     # Memory
     MemoryCompactor,
-    CompactionConfig,
-    ConversationMemory,
     # Comparison
     Paradigm,
     ParadigmResult,
-    ComparisonResult,
-    create_comparison_report,
     # Types
     REPLHistory,
+    RLMEventBus,
+    RLMEventCollector,
+    RLMEventData,
+    # Events
+    RLMEventType,
+    create_comparison_report,
 )
 
 
@@ -50,8 +48,18 @@ def demo_event_streaming():
         "Child Agents": ["CHILD_SPAWN", "CHILD_START", "CHILD_END", "CHILD_ERROR"],
         "Results": ["FINAL_DETECTED", "FINAL_ANSWER"],
         "Memory": ["MEMORY_COMPACT_START", "MEMORY_COMPACT_END"],
-        "Comparison": ["COMPARISON_START", "COMPARISON_PARADIGM_START", "COMPARISON_PARADIGM_END", "COMPARISON_END"],
-        "Benchmarks": ["BENCHMARK_START", "BENCHMARK_CASE_START", "BENCHMARK_CASE_END", "BENCHMARK_END"],
+        "Comparison": [
+            "COMPARISON_START",
+            "COMPARISON_PARADIGM_START",
+            "COMPARISON_PARADIGM_END",
+            "COMPARISON_END",
+        ],
+        "Benchmarks": [
+            "BENCHMARK_START",
+            "BENCHMARK_CASE_START",
+            "BENCHMARK_CASE_END",
+            "BENCHMARK_END",
+        ],
     }
 
     for category, types in categories.items():
@@ -126,14 +134,16 @@ def demo_memory_compaction():
     for i in range(8):
         history = history.append(
             reasoning=f"Step {i}: Analyzing section {i} of the document",
-            code=f"section = context[{i*1000}:{(i+1)*1000}]\nprint(f'Section {i}: {{len(section)}} chars')",
+            code=f"section = context[{i * 1000}:{(i + 1) * 1000}]\nprint(f'Section {i}: {{len(section)}} chars')",
             output=f"Section {i}: 1000 chars",
             execution_time=0.1,
         )
 
-    print(f"\n--- Before Compaction ---")
+    print("\n--- Before Compaction ---")
     print(f"History entries: {len(history)}")
-    print(f"Total chars: {sum(len(e.reasoning) + len(e.code) + len(e.output) for e in history.entries):,}")
+    print(
+        f"Total chars: {sum(len(e.reasoning) + len(e.code) + len(e.output) for e in history.entries):,}"
+    )
 
     # Check if compaction needed
     should_compact = compactor.should_compact(history)
@@ -142,7 +152,7 @@ def demo_memory_compaction():
     # Perform compaction
     result = compactor.compact(history, task="Analyze document sections")
 
-    print(f"\n--- After Compaction ---")
+    print("\n--- After Compaction ---")
     print(f"Original entries: {result.original_entries}")
     print(f"Compacted entries: {result.compacted_entries}")
     print(f"Compression ratio: {result.compression_ratio:.1%}")
@@ -163,9 +173,18 @@ def demo_conversation_memory():
         ("What is the capital of France?", "Paris is the capital of France."),
         ("What about Germany?", "Berlin is the capital of Germany."),
         ("And Italy?", "Rome is the capital of Italy."),
-        ("What's the population of Paris?", "Paris has approximately 2.1 million people in the city proper."),
-        ("Compare it to Berlin.", "Berlin has about 3.6 million people, making it larger than Paris."),
-        ("Which is older?", "Paris is older, founded around 250 BC. Berlin was founded in the 13th century."),
+        (
+            "What's the population of Paris?",
+            "Paris has approximately 2.1 million people in the city proper.",
+        ),
+        (
+            "Compare it to Berlin.",
+            "Berlin has about 3.6 million people, making it larger than Paris.",
+        ),
+        (
+            "Which is older?",
+            "Paris is older, founded around 250 BC. Berlin was founded in the 13th century.",
+        ),
     ]
 
     print("\n--- Adding Conversation Turns ---")
@@ -173,7 +192,7 @@ def demo_conversation_memory():
         memory.add_turn(user, assistant)
         print(f"User: {user[:50]}...")
 
-    print(f"\n--- Memory State ---")
+    print("\n--- Memory State ---")
     print(f"Compacted summary exists: {bool(memory._compacted_summary)}")
 
     context = memory.get_context()
@@ -204,44 +223,50 @@ def demo_paradigm_comparison():
     )
 
     # Add mock results
-    comparison.add_result(ParadigmResult(
-        paradigm=Paradigm.PURE_RLM,
-        success=True,
-        answer="Found 3 key insights related to...",
-        context_tokens=200,  # Only metadata
-        total_tokens=1500,
-        estimated_cost=0.0075,
-        duration_seconds=12.5,
-        iterations=4,
-        root_llm_calls=4,
-        sub_llm_calls=6,
-    ))
+    comparison.add_result(
+        ParadigmResult(
+            paradigm=Paradigm.PURE_RLM,
+            success=True,
+            answer="Found 3 key insights related to...",
+            context_tokens=200,  # Only metadata
+            total_tokens=1500,
+            estimated_cost=0.0075,
+            duration_seconds=12.5,
+            iterations=4,
+            root_llm_calls=4,
+            sub_llm_calls=6,
+        )
+    )
 
-    comparison.add_result(ParadigmResult(
-        paradigm=Paradigm.CODEACT,
-        success=True,
-        answer="The document contains insights about...",
-        context_tokens=12500,  # Full context
-        total_tokens=15000,
-        estimated_cost=0.075,
-        duration_seconds=8.2,
-        iterations=3,
-        root_llm_calls=3,
-        sub_llm_calls=0,
-    ))
+    comparison.add_result(
+        ParadigmResult(
+            paradigm=Paradigm.CODEACT,
+            success=True,
+            answer="The document contains insights about...",
+            context_tokens=12500,  # Full context
+            total_tokens=15000,
+            estimated_cost=0.075,
+            duration_seconds=8.2,
+            iterations=3,
+            root_llm_calls=3,
+            sub_llm_calls=0,
+        )
+    )
 
-    comparison.add_result(ParadigmResult(
-        paradigm=Paradigm.TRADITIONAL,
-        success=True,
-        answer="Analysis shows the following patterns...",
-        context_tokens=3000,  # Partial reads
-        total_tokens=5000,
-        estimated_cost=0.025,
-        duration_seconds=15.8,
-        iterations=5,
-        root_llm_calls=5,
-        sub_llm_calls=0,
-    ))
+    comparison.add_result(
+        ParadigmResult(
+            paradigm=Paradigm.TRADITIONAL,
+            success=True,
+            answer="Analysis shows the following patterns...",
+            context_tokens=3000,  # Partial reads
+            total_tokens=5000,
+            estimated_cost=0.025,
+            duration_seconds=15.8,
+            iterations=5,
+            root_llm_calls=5,
+            sub_llm_calls=0,
+        )
+    )
 
     print("\n--- Comparison Results ---")
     print(comparison.format_table())

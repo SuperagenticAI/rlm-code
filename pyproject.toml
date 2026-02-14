@@ -22,7 +22,6 @@ classifiers = [
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -30,90 +29,88 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Text Processing :: Linguistic",
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
-    "click>=8.0.0",
-    "dspy>=3.0.4",
-    # Modern Rich for full emoji + spinner support across terminals (13.7+ and 14.x)
-    "rich>=13.7.0,<15.0.0",
-    "requests>=2.28.0",
-    "pyyaml>=6.0",
-    "mcp>=1.2.1",
-    "anyio>=4.5",
-    "httpx>=0.27.1",
-    "httpx-sse>=0.4",
-    "pydantic>=2.11.0,<3.0.0",
-    "jsonschema>=4.20.0",
-    "packaging>=23.0",
+    "click",
+    "dspy",
+    "rich",
+    "requests",
+    "pyyaml",
+    "mcp",
+    "anyio",
+    "httpx",
+    "httpx-sse",
+    "pydantic",
+    "jsonschema",
+    "packaging",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0.0",
-    "pytest-cov>=4.1.0",
-    "pytest-asyncio>=0.23.0",
-    "pytest-xdist>=3.5.0",
-    "hypothesis>=6.100.0",
-    "ruff>=0.8.0",
-    "mypy>=1.13.0",
-    "pre-commit>=4.0.0",
-    "types-requests>=2.31.0",
-    "types-pyyaml>=6.0.12",
+    "pytest",
+    "pytest-cov",
+    "pytest-asyncio",
+    "pytest-xdist",
+    "hypothesis",
+    "ruff",
+    "mypy",
+    "pre-commit",
+    "types-requests",
+    "types-pyyaml",
 ]
 docs = [
-    "mkdocs>=1.5.0",
-    "mkdocs-material>=9.5.0",
-    "mkdocstrings[python]>=0.24.0",
-    "mkdocs-minify-plugin>=0.7.0",
+    "mkdocs",
+    "mkdocs-material",
+    "mkdocstrings[python]",
+    "mkdocs-minify-plugin",
 ]
 test = [
-    "pytest>=8.0.0",
-    "pytest-cov>=4.1.0",
-    "pytest-asyncio>=0.23.0",
-    "pytest-xdist>=3.5.0",
-    "hypothesis>=6.100.0",
+    "pytest",
+    "pytest-cov",
+    "pytest-asyncio",
+    "pytest-xdist",
+    "hypothesis",
 ]
 mcp-ws = [
-    "websockets>=15.0.1",
+    "websockets",
 ]
 openai = [
-    # Use modern 2.x client; tested with 2.8.1
-    "openai>=2.8.1,<3.0.0",
+    "openai",
 ]
 anthropic = [
-    # Recent stable anthropic client
-    "anthropic>=0.39.0,<1.0.0",
+    "anthropic",
 ]
 gemini = [
-    # Official Google Gen AI SDK (Gemini Developer API + Vertex AI)
-    # See https://github.com/googleapis/python-genai
-    "google-genai>=1.52.0,<2.0.0",
+    "google-genai",
 ]
 tui = [
-    # Textual framework for multi-pane terminal UI mode
-    "textual>=0.86.0,<1.0.0",
+    "textual",
 ]
 llm-all = [
-    "openai>=2.8.1,<3.0.0",
-    "anthropic>=0.39.0,<1.0.0",
-    "google-genai>=1.52.0,<2.0.0",
+    "openai",
+    "anthropic",
+    "google-genai",
 ]
 mlflow = [
-    "mlflow>=2.17.0",
+    "mlflow",
 ]
 pydantic = [
-    "pydantic-ai>=0.4.0",
+    "pydantic-ai",
 ]
 adk = [
-    "google-adk>=1.12.0",
+    "google-adk",
+    "google-genai",
+    "python-dotenv",
 ]
 deepagents = [
-    "deepagents>=0.0.20",
+    "deepagents",
 ]
 frameworks = [
-    "pydantic-ai>=0.4.0",
-    "google-adk>=1.12.0",
-    "deepagents>=0.0.20",
+    "pydantic-ai",
+    "google-adk",
+    "google-genai",
+    "python-dotenv",
+    "deepagents",
 ]
 
 [project.urls]
@@ -127,7 +124,7 @@ Changelog = "https://github.com/SuperagenticAI/rlm-code/blob/main/CHANGELOG.md"
 rlm-code = "rlm_code.main:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["rlm_code"]
+packages = ["rlm_code", "adk_rlm"]
 exclude = [
     "docs/",
     "mkdocs.yml",
@@ -140,6 +137,7 @@ exclude = [
 [tool.hatch.build.targets.sdist]
 include = [
     "rlm_code/",
+    "adk_rlm/",
     "tests/",
     "README.md",
     "LICENSE",
@@ -151,10 +149,26 @@ exclude = [
     "mkdocs.yml",
 ]
 
+# uv configuration
+[tool.uv]
+dev-dependencies = [
+    "pytest",
+    "pytest-cov",
+    "pytest-asyncio",
+    "pytest-xdist",
+    "hypothesis",
+    "ruff",
+    "mypy",
+    "pre-commit",
+    "types-requests",
+    "types-pyyaml",
+]
+
 # Ruff configuration - Modern, fast linter and formatter
 [tool.ruff]
-target-version = "py310"
+target-version = "py311"
 line-length = 100
+extend-exclude = ["adk_rlm"]
 
 [tool.ruff.lint]
 select = [
@@ -190,7 +204,7 @@ line-ending = "auto"
 known-first-party = ["rlm_code"]
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 check_untyped_defs = true

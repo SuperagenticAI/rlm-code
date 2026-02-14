@@ -27,7 +27,9 @@ class ConfigurationError(ValidationError):
 class CodeValidationError(ValidationError):
     """Raised when generated code validation fails."""
 
-    def __init__(self, message: str, code_snippet: str | None = None, line_number: int | None = None):
+    def __init__(
+        self, message: str, code_snippet: str | None = None, line_number: int | None = None
+    ):
         self.code_snippet = code_snippet
         self.line_number = line_number
         super().__init__(message)

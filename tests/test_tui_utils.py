@@ -25,4 +25,3 @@ def test_generate_unified_diff_contains_headers_and_hunks():
     assert "+++ b/sample.txt" in diff
     assert "-b" in diff
     assert "+B" in diff
-

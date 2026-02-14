@@ -15,9 +15,10 @@ import re
 import shutil
 import subprocess
 import sys
+import warnings
 from pathlib import Path
-from threading import Event, Thread
-from time import perf_counter
+from threading import Event, Lock, Thread
+from time import monotonic, perf_counter
 from typing import Any, Callable
 
 from rich.console import Console
@@ -30,25 +31,26 @@ from rich.text import Text
 from ..core.config import ConfigManager
 from ..core.exceptions import DSPyCLIError, ModelError
 from ..models.llm_connector import LLMConnector
-from .animations import SIMPLE_UI, get_random_llm_message
+
+# Research tab widgets (lazy-safe: imported at module level for compose())
+from ..rlm.research_tui.widgets.animated import SparklineChart
+from ..rlm.research_tui.widgets.panels import MetricsPanel
+from .animations import SIMPLE_UI
 from .design_system import (
-    PALETTE, PURPLE_GRADIENT, FILE_ICONS, ICONS, SPINNER_FRAMES,
-    get_reward_color, render_gradient_text, render_message_header,
-    render_status_indicator,
+    ICONS,
+    PALETTE,
+    PURPLE_GRADIENT,
+    SPINNER_FRAMES,
+    render_gradient_text,
+    render_message_header,
 )
 from .diff_viewer import format_diff_for_chat
-from .notifications import notify_run_complete, notify_benchmark_complete
+from .notifications import notify_benchmark_complete, notify_run_complete
 from .persistent_shell import PersistentShell, ShellResult
 from .prompt_widget import PromptHelper
 from .pty_terminal import is_pty_available
 from .thinking_display import format_thinking_for_chat
 from .tui_utils import filter_commands, suggest_command
-
-# Research tab widgets (lazy-safe: imported at module level for compose())
-from ..rlm.research_tui.widgets.animated import SparklineChart
-from ..rlm.research_tui.widgets.panels import MetricsPanel
-
-PURPLE_BAR_COLORS = PURPLE_GRADIENT
 
 
 def _guess_language(path: Path) -> str:
@@ -79,7 +81,7 @@ def _display_path(path: Path, max_width: int = 44) -> str:
 
     if len(normalized) <= max_width:
         return normalized
-    return f"...{normalized[-(max_width - 3):]}"
+    return f"...{normalized[-(max_width - 3) :]}"
 
 
 def run_textual_tui(config_manager: ConfigManager) -> None:
@@ -90,12 +92,19 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
         from textual.binding import Binding
         from textual.containers import Horizontal, ScrollableContainer, Vertical, VerticalScroll
         from textual.screen import ModalScreen
-        from textual.widgets import Button, DirectoryTree, Footer, Header, Input, OptionList, RichLog, Static
-        from textual.widgets.option_list import Option
+        from textual.widgets import (
+            Button,
+            DirectoryTree,
+            Footer,
+            Header,
+            Input,
+            OptionList,
+            RichLog,
+            Static,
+        )
     except ImportError as exc:  # pragma: no cover - depends on local environment
         raise DSPyCLIError(
-            "Textual TUI requires the 'textual' package.\n"
-            "Install with: pip install textual"
+            "Textual TUI requires the 'textual' package.\nInstall with: pip install textual"
         ) from exc
 
     class CommandPaletteModal(ModalScreen[str | None]):
@@ -170,28 +179,45 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             self.subtitle = subtitle
             self.options = options
             self._ol: OptionList | None = None
-            # Build display labels with number badges.
+            self._selected_hint: Static | None = None
             self._display: list[str] = []
             for idx, (_, label) in enumerate(options):
-                badge = f"[{idx + 1}] " if idx < 9 else "    "
-                self._display.append(f"{badge}{label}")
+                text = str(label).strip()
+                if re.match(r"^\d+\.\s", text):
+                    self._display.append(text)
+                else:
+                    self._display.append(f"{idx + 1}. {text}")
 
         def compose(self) -> ComposeResult:
             with Vertical(id="connect_modal"):
                 yield Static(self.picker_title, id="connect_title")
                 yield Static(self.subtitle, id="connect_subtitle")
                 yield OptionList(*self._display, id="connect_list")
+                yield Static("", id="connect_selected")
                 yield Static(
-                    "[bold #a78bfa]1-9[/] quick select  "
-                    "[bold #a78bfa]↑↓/jk[/] move  "
-                    "[bold #a78bfa]Enter[/] select  "
-                    "[bold #a78bfa]Esc[/] close",
+                    "1-9 quick select  up/down or j/k move  Enter select  Esc close",
                     id="connect_hint",
                 )
 
         def on_mount(self) -> None:
             self._ol = self.query_one("#connect_list", OptionList)
+            self._selected_hint = self.query_one("#connect_selected", Static)
+            self._refresh_selected_hint()
             self._ol.focus()
+
+        def _refresh_selected_hint(self) -> None:
+            hint = self._selected_hint
+            ol = self._ol
+            if hint is None or ol is None:
+                return
+            idx = int(ol.highlighted if ol.highlighted is not None else 0)
+            idx = max(0, min(len(self.options) - 1, idx))
+            label = self._display[idx] if 0 <= idx < len(self._display) else ""
+            hint.update(f"[bold #86e1ff]▶ Selected:[/bold #86e1ff] {label}")
+
+        def on_option_list_option_highlighted(self, event: OptionList.OptionHighlighted) -> None:
+            _ = event
+            self._refresh_selected_hint()
 
         def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
             idx = event.option_index
@@ -206,10 +232,22 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 return
             if event.key == "j":
                 ol.action_cursor_down()
+                self._refresh_selected_hint()
                 event.stop()
                 event.prevent_default()
             elif event.key == "k":
                 ol.action_cursor_up()
+                self._refresh_selected_hint()
+                event.stop()
+                event.prevent_default()
+            elif event.key == "down":
+                ol.action_cursor_down()
+                self._refresh_selected_hint()
+                event.stop()
+                event.prevent_default()
+            elif event.key == "up":
+                ol.action_cursor_up()
+                self._refresh_selected_hint()
                 event.stop()
                 event.prevent_default()
             elif event.key.isdigit():
@@ -256,7 +294,7 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
         #single_mode_btn {
           margin-left: 1;
         }
-        #back_chat_btn {
+        #quit_btn {
           margin-left: 1;
         }
         #main_row {
@@ -308,11 +346,18 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
           min-width: 0;
         }
         App.-single-view.-view-shell #main_row {
-          display: none;
+          display: block;
+          height: 1fr;
+          padding: 0 1;
+        }
+        App.-single-view.-view-shell #center_pane {
+          display: block;
+          width: 1fr;
+          height: 1fr;
         }
         App.-single-view.-view-shell #bottom_pane {
           display: block;
-          height: 1fr;
+          height: 10;
           margin: 0 1;
         }
         App.-single-view.-view-research #main_row {
@@ -435,12 +480,12 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
           margin-right: 0;
         }
         #bottom_pane {
-          height: 13;
+          height: 9;
           layout: vertical;
           margin: 1 1 0 1;
         }
         #tool_log {
-          height: 5;
+          height: 3;
           min-height: 3;
           background: #000000;
           color: #dce7f3;
@@ -562,9 +607,9 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
           color: #dce7f3;
         }
         #connect_modal {
-          width: 96;
+          width: 78;
           height: auto;
-          max-height: 32;
+          max-height: 24;
           border: round #3f7cb0;
           background: #000000;
           padding: 1 2;
@@ -583,24 +628,29 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
         }
         #connect_list {
           height: auto;
-          max-height: 16;
+          max-height: 12;
           min-height: 3;
           background: #000000;
           border: none;
           scrollbar-size: 1 1;
         }
         #connect_list > .option-list--option-highlighted {
-          background: #0d1a2e;
-          color: #86e1ff;
+          background: #173153;
+          color: #ffffff;
           text-style: bold;
         }
         #connect_list > .option-list--option {
           color: #d4e7ff;
         }
+        #connect_selected {
+          color: #9fd6ff;
+          height: auto;
+          margin-top: 1;
+        }
         #connect_hint {
           color: #89a0b8;
           height: auto;
-          margin-top: 1;
+          margin-top: 0;
         }
         """
 
@@ -645,10 +695,18 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             self._slash_context: dict[str, Any] = {}
             self._slash_init_error: str | None = None
             self._acp_profile: dict[str, str] | None = None
+            self._last_response_route = "direct-llm"
             self._research_sub_view = "dashboard"
             self._session_replayer: Any | None = None
             self._last_run_result: Any | None = None
             self._event_bus_subscribed = False
+            self._slash_bridge_lock = Lock()
+            self._run_viz_cache: dict[str, tuple[int, int, dict[str, Any]]] = {}
+            self._leaderboard_cache: tuple[float, str] | None = None
+            self._file_state_cache: dict[Path, tuple[int, int]] = {}
+            self._event_log_buffer: list[str] = []
+            self._acp_agents_cache: list[dict[str, Any]] = []
+            self._acp_agents_cache_at: float = 0.0
 
             def _env_int(name: str, default: int, minimum: int) -> int:
                 raw = os.getenv(name)
@@ -688,6 +746,60 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 default=0.08,
                 minimum=0.04,
             )
+            self._event_log_flush_seconds = _env_float(
+                "RLM_TUI_EVENT_FLUSH_SECONDS",
+                default=0.12,
+                minimum=0.05,
+            )
+            self._event_log_batch_limit = _env_int(
+                "RLM_TUI_EVENT_BATCH_LIMIT",
+                default=24,
+                minimum=8,
+            )
+            self._acp_discovery_timeout_seconds = _env_float(
+                "RLM_TUI_ACP_DISCOVERY_TIMEOUT_SECONDS",
+                default=0.45,
+                minimum=0.15,
+            )
+            self._acp_cache_ttl_seconds = _env_float(
+                "RLM_TUI_ACP_CACHE_TTL_SECONDS",
+                default=30.0,
+                minimum=5.0,
+            )
+            harness_auto_raw = str(os.getenv("RLM_TUI_HARNESS_AUTO", "1")).strip().lower()
+            self._harness_auto_enabled = harness_auto_raw not in {"0", "off", "false", "no"}
+            harness_auto_mcp_raw = str(os.getenv("RLM_TUI_HARNESS_AUTO_MCP", "1")).strip().lower()
+            self._harness_auto_include_mcp = harness_auto_mcp_raw not in {"0", "off", "false", "no"}
+            self._harness_auto_steps = _env_int(
+                "RLM_TUI_HARNESS_AUTO_STEPS",
+                default=8,
+                minimum=2,
+            )
+            self._harness_preview_steps = _env_int(
+                "RLM_TUI_HARNESS_PREVIEW_STEPS",
+                default=6,
+                minimum=1,
+            )
+            self._input_debounce_seconds = _env_float(
+                "RLM_TUI_INPUT_DEBOUNCE_SECONDS",
+                default=0.0,
+                minimum=0.0,
+            )
+            self._chat_log_max_lines = _env_int(
+                "RLM_TUI_CHAT_MAX_LINES",
+                default=2200,
+                minimum=400,
+            )
+            self._tool_log_max_lines = _env_int(
+                "RLM_TUI_TOOL_MAX_LINES",
+                default=1600,
+                minimum=300,
+            )
+            self._research_event_log_max_lines = _env_int(
+                "RLM_TUI_EVENT_MAX_LINES",
+                default=3200,
+                minimum=500,
+            )
             self._acp_provider_map = {
                 "gemini": "gemini",
                 "claude-code": "anthropic",
@@ -706,11 +818,14 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             }
             self.palette_commands = [
                 "/help",
+                "/workflow",
                 "/connect",
                 "/models",
                 "/status",
                 "/sandbox",
                 "/rlm",
+                "/rml",
+                "/harness",
                 "/clear",
                 "/snapshot",
                 "/diff",
@@ -730,7 +845,22 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             # Cached widget refs (set in on_mount to avoid query overhead per keystroke).
             self._cached_chat_input: Any = None
             self._cached_suggestion_panel: Any = None
+            self._cached_chat_log: Any = None
+            self._cached_tool_log: Any = None
+            self._cached_thinking_status: Any = None
+            self._cached_research_event_log: Any = None
+            self._cached_preview_panel: Any = None
+            self._cached_diff_panel: Any = None
+            self._cached_research_summary: Any = None
+            self._cached_research_trajectory_detail: Any = None
+            self._cached_research_leaderboard: Any = None
+            self._event_log_flush_timer: Any = None
+            self._input_debounce_timer: Any = None
+            self._pending_input_text: str | None = None
+            self._last_prompt_mode: str | None = None
+            self._last_suggestion_state: tuple[bool, int, tuple[str, ...]] | None = None
             self._init_full_slash_handler()
+            self._configure_prompt_templates()
             self._auto_connect_default_model()
 
         def compose(self) -> ComposeResult:
@@ -741,9 +871,8 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 yield Button("📊 Details", id="view_details_btn", classes="focus_btn")
                 yield Button("🧰 Shell", id="view_shell_btn", classes="focus_btn")
                 yield Button("🔬 Research Lab", id="view_research_btn", classes="focus_btn")
-                yield Button("📋 Copy", id="copy_last_btn", classes="focus_btn")
                 yield Button("One Screen: ON", id="single_mode_btn", classes="focus_btn")
-                yield Button("↩ Back to Chat", id="back_chat_btn", classes="focus_btn")
+                yield Button("✕ Quit", id="quit_btn", classes="focus_btn")
             with Horizontal(id="main_row"):
                 with Vertical(id="left_pane"):
                     yield Static("🗂 Project Files", classes="pane_title")
@@ -751,7 +880,13 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 with Vertical(id="center_pane"):
                     yield Static("💬 Conversation", classes="pane_title")
                     yield Static(id="status_strip")
-                    yield RichLog(id="chat_log", wrap=True, highlight=True, markup=True)
+                    yield RichLog(
+                        id="chat_log",
+                        wrap=True,
+                        highlight=False,
+                        markup=True,
+                        max_lines=self._chat_log_max_lines,
+                    )
                     yield Static(
                         "Tip: use focus buttons, `/view`, or `Ctrl+1..4`. Run `/connect` for keyboard picker.",
                         id="chat_hint",
@@ -772,9 +907,16 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                         yield Static(id="diff_panel")
             with Vertical(id="bottom_pane"):
                 yield Static("🧰 Tools & Shell", classes="pane_title")
-                yield RichLog(id="tool_log", wrap=True, highlight=True, markup=True)
+                yield RichLog(
+                    id="tool_log",
+                    wrap=True,
+                    highlight=False,
+                    markup=True,
+                    max_lines=self._tool_log_max_lines,
+                )
                 if is_pty_available():
                     from .pty_terminal import TerminalPane
+
                     yield TerminalPane(id="terminal_pane")
                 else:
                     yield Input(placeholder="Shell command (persistent)", id="shell_input")
@@ -793,7 +935,7 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                         yield Static(
                             "[bold #a78bfa]Welcome to the Research Lab[/bold #a78bfa]\n\n"
                             "[dim]Quick start:[/dim]\n"
-                            "  [cyan]/rlm run \"your task\"[/cyan]     Run an experiment\n"
+                            '  [cyan]/rlm run "your task"[/cyan]     Run an experiment\n'
                             "  [cyan]/rlm bench preset=X[/cyan]    Run a benchmark suite\n"
                             "  [cyan]/rlm replay <id>[/cyan]       Replay a past run\n"
                             "  [cyan]/rlm viz <id>[/cyan]          Visualize a trajectory\n\n"
@@ -832,8 +974,9 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                         yield RichLog(
                             id="research_event_log",
                             wrap=True,
-                            highlight=True,
+                            highlight=False,
                             markup=True,
+                            max_lines=self._research_event_log_max_lines,
                         )
             yield Footer()
 
@@ -841,11 +984,31 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             # Cache frequently-accessed widgets to avoid DOM queries on every keystroke.
             self._cached_chat_input = self.query_one("#chat_input", Input)
             self._cached_suggestion_panel = self.query_one("#suggestion_panel", Static)
+            self._cached_chat_log = self.query_one("#chat_log", RichLog)
+            self._cached_tool_log = self.query_one("#tool_log", RichLog)
+            self._cached_thinking_status = self.query_one("#thinking_status", Static)
+            self._cached_research_event_log = self.query_one("#research_event_log", RichLog)
+            self._cached_preview_panel = self.query_one("#preview_panel", Static)
+            self._cached_diff_panel = self.query_one("#diff_panel", Static)
+            self._cached_research_summary = self.query_one("#research_summary", Static)
+            self._cached_research_trajectory_detail = self.query_one(
+                "#research_trajectory_detail", Static
+            )
+            self._cached_research_leaderboard = self.query_one(
+                "#research_leaderboard_table", Static
+            )
+            self._event_log_flush_timer = self.set_interval(
+                self._event_log_flush_seconds,
+                self._flush_research_event_log,
+                pause=False,
+            )
 
             self._apply_view_mode()
             self._apply_research_sub_view()
             self._update_focus_buttons()
             self._update_status_panel()
+            self._configure_prompt_templates()
+            self._ensure_event_bus_subscription()
             self._set_preview_text("Select a file from the left pane to preview.")
             self._set_diff_text("Use /snapshot then /diff to inspect changes.")
 
@@ -857,7 +1020,10 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
 
             # Mode indicator line.
             mode_line = Text()
-            mode_line.append(f"{ICONS['connected']} ", style=PALETTE.success if self.connector.current_model else PALETTE.error)
+            mode_line.append(
+                f"{ICONS['connected']} ",
+                style=PALETTE.success if self.connector.current_model else PALETTE.error,
+            )
             mode_line.append(
                 self.connector.current_model or "No model connected",
                 style=PALETTE.text_primary if self.connector.current_model else PALETTE.text_muted,
@@ -883,9 +1049,9 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 self._chat_log().write(
                     f"[yellow]Full slash command bridge unavailable:[/yellow] {self._slash_init_error}"
                 )
-            self._chat_log().write('[dim]Type /help to view commands.[/dim]')
+            self._chat_log().write("[dim]Type /help to view commands.[/dim]")
             try:
-                self.query_one("#research_event_log", RichLog).write(
+                self._research_event_log().write(
                     "[bold #a78bfa]Event Stream[/bold #a78bfa]\n"
                     "[dim]Live events from /rlm run will appear here.\n"
                     "Events include: run start/end, iterations, LLM calls, code execution, rewards.[/dim]\n"
@@ -895,28 +1061,32 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             self._cached_chat_input.focus()
 
         def on_unmount(self) -> None:
+            self._flush_research_event_log()
+            if self._event_log_flush_timer is not None:
+                self._event_log_flush_timer.stop()
+            if self._input_debounce_timer is not None:
+                self._input_debounce_timer.stop()
             self.shell.close()
 
         def _chat_log(self) -> RichLog:
-            return self.query_one("#chat_log", RichLog)
+            if self._cached_chat_log is None:
+                self._cached_chat_log = self.query_one("#chat_log", RichLog)
+            return self._cached_chat_log
 
         def _tool_log(self) -> RichLog:
-            return self.query_one("#tool_log", RichLog)
+            if self._cached_tool_log is None:
+                self._cached_tool_log = self.query_one("#tool_log", RichLog)
+            return self._cached_tool_log
 
         def _thinking_status(self) -> Static:
-            return self.query_one("#thinking_status", Static)
+            if self._cached_thinking_status is None:
+                self._cached_thinking_status = self.query_one("#thinking_status", Static)
+            return self._cached_thinking_status
 
-        @staticmethod
-        def _build_purple_bar(position: int, width: int, head: int = 10) -> Text:
-            bar = Text(no_wrap=True)
-            palette_len = len(PURPLE_BAR_COLORS)
-            for i in range(width):
-                color = PURPLE_BAR_COLORS[(i + position) % palette_len]
-                is_head = position <= i < position + head
-                char = "█" if is_head else "━"
-                style = f"bold {color}" if is_head else f"{color} dim"
-                bar.append(char, style=style)
-            return bar
+        def _research_event_log(self) -> RichLog:
+            if self._cached_research_event_log is None:
+                self._cached_research_event_log = self.query_one("#research_event_log", RichLog)
+            return self._cached_research_event_log
 
         @staticmethod
         def _truncate_status_message(message: str, max_len: int = 72) -> str:
@@ -938,6 +1108,159 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 "good afternoon",
                 "good evening",
             }
+
+        @staticmethod
+        def _is_connection_status_query(user_text: str) -> bool:
+            normalized = re.sub(r"[^a-z0-9\s]", " ", user_text.lower())
+            normalized = " ".join(normalized.split())
+            hints = (
+                "which model",
+                "what model",
+                "current model",
+                "model am i using",
+                "what llm",
+                "which provider",
+                "what provider",
+                "am i connected",
+                "connection status",
+                "connected to",
+            )
+            return any(hint in normalized for hint in hints)
+
+        def _build_connection_status_response(self) -> str:
+            model = (
+                self.connector.current_model_id or self.connector.current_model or "disconnected"
+            )
+            provider = self.connector.model_type or "unknown"
+            mode = "byok"
+            if self._acp_profile:
+                mode = "acp"
+            else:
+                try:
+                    spec = self.connector.provider_registry.get(provider)
+                    if spec and spec.connection_type:
+                        mode = str(spec.connection_type)
+                except Exception:
+                    mode = "byok"
+
+            lines = [
+                "Current connection status:",
+                f"- Model: `{model}`",
+                f"- Provider: `{provider}`",
+                f"- Mode: `{mode}`",
+            ]
+            if self._acp_profile:
+                lines.append(f"- ACP: `{self._acp_profile.get('display_name', 'active')}`")
+            return "\n".join(lines)
+
+        @staticmethod
+        def _is_probable_coding_prompt(user_text: str) -> bool:
+            normalized = re.sub(r"[^a-z0-9_\\-\\s./]", " ", str(user_text or "").lower())
+            normalized = " ".join(normalized.split())
+            if not normalized:
+                return False
+
+            coding_keywords = (
+                "code",
+                "python",
+                "function",
+                "class",
+                "module",
+                "script",
+                "api",
+                "endpoint",
+                "bug",
+                "debug",
+                "refactor",
+                "test",
+                "pytest",
+                "file",
+                "directory",
+                "repository",
+                "repo",
+                "patch",
+                "implement",
+                "build",
+                "create",
+                "fix",
+                "error",
+                "traceback",
+                "stack trace",
+                "cli",
+            )
+            if any(keyword in normalized for keyword in coding_keywords):
+                return True
+
+            intent_pattern = re.compile(
+                r"\\b(build|create|implement|fix|debug|refactor|write|update|edit|add)\\b"
+            )
+            target_pattern = re.compile(
+                r"\\b(feature|function|module|class|script|test|file|bug|issue|command|tool)\\b"
+            )
+            return bool(intent_pattern.search(normalized) and target_pattern.search(normalized))
+
+        def _is_harness_connection_mode(self) -> bool:
+            # ACP routing should stay out of harness auto mode.
+            if self._acp_profile is not None:
+                return False
+
+            provider = getattr(self.connector, "current_provider", None)
+            if provider is not None:
+                connection_type = (
+                    str(getattr(provider, "connection_type", "") or "").strip().lower()
+                )
+                if connection_type in {"byok", "local"}:
+                    return True
+
+            provider_id = str(getattr(self.connector, "model_type", "") or "").strip().lower()
+            if not provider_id:
+                return False
+            try:
+                spec = self.connector.provider_registry.get(provider_id)
+            except Exception:
+                spec = None
+            if spec is None:
+                return False
+            connection_type = str(getattr(spec, "connection_type", "") or "").strip().lower()
+            return connection_type in {"byok", "local"}
+
+        def _should_route_to_harness(self, user_text: str) -> bool:
+            if not self._harness_auto_enabled:
+                return False
+            if not self._is_harness_connection_mode():
+                return False
+            if not self._is_probable_coding_prompt(user_text):
+                return False
+            if self._slash_handler is None:
+                return False
+            return hasattr(self._slash_handler, "harness_runner")
+
+        def _format_harness_result_for_chat(self, result: Any) -> str:
+            final_response = str(getattr(result, "final_response", "") or "").strip()
+            lines = [final_response or "Harness finished without a final response."]
+
+            steps = list(getattr(result, "steps", []) or [])
+            if steps:
+                lines.append("")
+                lines.append("Harness steps:")
+                preview_limit = max(1, int(self._harness_preview_steps))
+                for step in steps[:preview_limit]:
+                    tool_name = str(getattr(step, "tool", "") or getattr(step, "action", "step"))
+                    tool_result = getattr(step, "tool_result", None)
+                    if tool_result is not None:
+                        ok = bool(getattr(tool_result, "success", False))
+                        status = "ok" if ok else "fail"
+                        output = (
+                            str(getattr(tool_result, "output", "") or "").replace("\n", " ").strip()
+                        )
+                        if len(output) > 90:
+                            output = output[:87] + "..."
+                        lines.append(f"- {step.step}. {tool_name} [{status}] {output}")
+                    else:
+                        lines.append(f"- {step.step}. {tool_name}")
+                if len(steps) > preview_limit:
+                    lines.append(f"- ... +{len(steps) - preview_limit} more step(s)")
+            return "\n".join(lines).strip()
 
         def _render_user_prompt(self, user_text: str) -> None:
             turn = len([h for h in self.command_history if h.get("role") == "user"]) + 1
@@ -966,7 +1289,7 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
 
             text = "\n".join(lines)
             if len(text) > self._history_total_chars:
-                text = f"...\n{text[-self._history_total_chars:]}"
+                text = f"...\n{text[-self._history_total_chars :]}"
             return text
 
         def _update_thinking_status(self, spinner: str, message: str, position: int) -> None:
@@ -974,16 +1297,35 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             available_width = self._thinking_status().size.width
             if available_width <= 0:
                 available_width = 72
-            bar_width = max(24, available_width - 2)
-            head_width = max(7, min(14, bar_width // 6))
-            runner_position = position % max(1, bar_width - head_width + 1)
+            track_width = max(24, available_width)
+            trail_len = max(8, min(16, track_width // 5))
+            sweep_x = int(position % track_width)
 
             status = Text()
             status.append(f"{ICONS['thinking']} ", style=PALETTE.warning)
             status.append(f"{spinner} ", style=PALETTE.primary_light)
-            status.append(clipped, style="dim")
+            status.append(clipped, style=PALETTE.text_secondary)
             status.append("\n")
-            status.append_text(self._build_purple_bar(runner_position, bar_width, head=head_width))
+            runner = Text()
+            for idx in range(track_width):
+                dist = sweep_x - idx
+                if dist < 0:
+                    dist += track_width
+                if dist == 0:
+                    runner.append("█", style=PALETTE.text_primary)
+                elif 0 < dist <= trail_len:
+                    fade = 1.0 - (dist / trail_len)
+                    if fade > 0.7:
+                        runner.append("▓", style=PALETTE.accent_light)
+                    elif fade > 0.4:
+                        runner.append("▒", style=PALETTE.primary_light)
+                    elif fade > 0.2:
+                        runner.append("░", style=PALETTE.info)
+                    else:
+                        runner.append("░", style=PALETTE.text_dim)
+                else:
+                    runner.append("─", style=PALETTE.text_dim)
+            status.append_text(runner)
             self._thinking_status().update(status)
 
         def _set_thinking_idle(self) -> None:
@@ -992,14 +1334,22 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             idle.append("Ready", style="dim")
             self._thinking_status().update(idle)
 
-        def _render_assistant_response_panel(self, response: str, elapsed_seconds: float) -> None:
-            model_label = self.connector.current_model_id or self.connector.current_model or "assistant"
+        def _render_assistant_response_panel(
+            self,
+            response: str,
+            elapsed_seconds: float,
+            route: str | None = None,
+        ) -> None:
+            model_label = (
+                self.connector.current_model_id or self.connector.current_model or "assistant"
+            )
             stripped = response.strip()
             if not stripped:
                 stripped = "_No content returned by model._"
 
             # Detect thinking/reasoning blocks (e.g. <thinking>...</thinking>)
             import re as _re
+
             thinking_match = _re.search(
                 r"<thinking>(.*?)</thinking>",
                 stripped,
@@ -1007,7 +1357,9 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             )
             if thinking_match:
                 thinking_text = thinking_match.group(1).strip()
-                visible_response = stripped[: thinking_match.start()] + stripped[thinking_match.end() :]
+                visible_response = (
+                    stripped[: thinking_match.start()] + stripped[thinking_match.end() :]
+                )
                 visible_response = visible_response.strip()
 
                 # Render collapsed thinking section with thought type badges.
@@ -1030,16 +1382,28 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
 
             # Timing badge.
             time_style = PALETTE.success if elapsed_seconds < 10 else PALETTE.warning
+            route_label = (route or "direct-llm").strip().lower() or "direct-llm"
+            self._last_response_route = route_label
+            route_style = PALETTE.info
+            if route_label == "harness-auto":
+                route_style = PALETTE.success
+            elif route_label == "shortcut":
+                route_style = PALETTE.warning
             self._chat_log().write(
                 Panel(
                     markdown_body,
                     title=f"{ICONS['agent']} {model_label}",
-                    subtitle=f"[{time_style}]{elapsed_seconds:.1f}s[/]",
+                    subtitle=(
+                        f"[{time_style}]{elapsed_seconds:.1f}s[/] "
+                        f"[{PALETTE.text_dim}]•[/] "
+                        f"[{route_style}]{route_label}[/]"
+                    ),
                     subtitle_align="right",
                     border_style=PALETTE.bubble_assistant_border,
                     padding=(0, 1),
                 )
             )
+            self._update_status_panel()
 
         def _get_last_assistant_response(self) -> str | None:
             for item in reversed(self.command_history):
@@ -1087,49 +1451,421 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 self._slash_handler = None
                 self._slash_init_error = str(exc)
 
-        def _delegate_to_full_slash_handler(self, command: str) -> bool:
+        def _framework_ids_for_prompt(self) -> list[str]:
+            default_frameworks = [
+                "native",
+                "dspy-rlm",
+                "adk-rlm",
+                "pydantic-ai",
+                "google-adk",
+                "deepagents",
+            ]
+            try:
+                if self._slash_handler is not None:
+                    runner = getattr(self._slash_handler, "rlm_runner", None)
+                    if runner is not None:
+                        getter = getattr(runner, "supported_frameworks", None)
+                        if callable(getter):
+                            frameworks = [
+                                str(item).strip() for item in getter() if str(item).strip()
+                            ]
+                            if frameworks:
+                                return frameworks
+            except Exception:
+                pass
+            return default_frameworks
+
+        def _configure_prompt_templates(self) -> None:
+            provider_ids: list[str] = []
+            try:
+                provider_ids = sorted(
+                    {
+                        str(provider.get("id", "")).strip()
+                        for provider in self.connector.get_supported_providers()
+                        if str(provider.get("id", "")).strip()
+                    }
+                )
+            except Exception:
+                provider_ids = []
+
+            connect_templates = [f"{provider_id} <model>" for provider_id in provider_ids[:24]]
+            connect_templates.insert(0, "<provider> <model> [api-key] [base-url]")
+            connect_templates.insert(1, "acp")
+            connect_templates.insert(2, "local")
+            connect_templates.insert(3, "byok")
+            if "ollama" in provider_ids:
+                connect_templates.insert(4, "ollama qwen2.5-coder:latest")
+
+            frameworks = self._framework_ids_for_prompt()
+            framework_templates = []
+            for framework_id in frameworks[:8]:
+                env = "pure_rlm" if framework_id == "native" else "generic"
+                framework_templates.append(f'run "task" framework={framework_id} env={env}')
+
+            rlm_templates = [
+                'run "task" env=pure_rlm framework=native',
+                "bench list",
+                "bench preset=dspy_quick",
+                "frameworks",
+                "doctor env=pure_rlm",
+                "status",
+                "replay <run_id>",
+                'chat "message" session=default',
+            ]
+            for template in framework_templates:
+                if template not in rlm_templates:
+                    rlm_templates.append(template)
+
+            self._prompt_helper.set_command_templates(
+                {
+                    "/workflow": ["rlm"],
+                    "/connect": connect_templates,
+                    "/sandbox": [
+                        "status",
+                        "profile secure",
+                        "profile dev",
+                        "profile custom",
+                        "backend docker",
+                        "backend monty",
+                        "backend exec ack=I_UNDERSTAND_EXEC_IS_UNSAFE",
+                        "strict on",
+                        "strict off",
+                        "output-mode summarize",
+                        "output-mode truncate",
+                        "output-mode metadata",
+                        "apple on",
+                        "apple off",
+                    ],
+                    "/rlm": rlm_templates,
+                    "/harness": [
+                        "tools",
+                        "doctor",
+                        'run "task" steps=8 mcp=on',
+                        'run "task" steps=6 mcp=off tools=read,grep,write',
+                    ],
+                    "/view": ["chat", "files", "details", "shell", "research", "next", "prev"],
+                    "/layout": ["single", "multi"],
+                    "/focus": ["chat", "default"],
+                    "/pane": [
+                        "files show",
+                        "files hide",
+                        "details show",
+                        "details hide",
+                        "shell show",
+                        "shell hide",
+                    ],
+                }
+            )
+
+        def _run_full_slash_handler(
+            self, command: str, capture_width: int
+        ) -> tuple[bool, str, bool, str | None, bool]:
             if self._slash_handler is None:
-                return False
+                return False, "", False, None, False
 
             try:
                 from ..commands import slash_commands as slash_module
                 from . import prompts as prompts_module
 
-                output_buffer = io.StringIO()
+                streamed_output = False
+
+                class _StreamingCapture(io.TextIOBase):
+                    def __init__(self, emit: Callable[[str], None]) -> None:
+                        self._emit = emit
+                        self._buffer = io.StringIO()
+                        self._pending = ""
+
+                    def write(self, text: str) -> int:
+                        nonlocal streamed_output
+                        if not text:
+                            return 0
+                        self._buffer.write(text)
+                        self._pending += text
+                        while "\n" in self._pending:
+                            line, self._pending = self._pending.split("\n", 1)
+                            rendered = line.rstrip("\r")
+                            if rendered.strip():
+                                streamed_output = True
+                                self._emit(rendered)
+                        return len(text)
+
+                    def flush(self) -> None:
+                        nonlocal streamed_output
+                        rendered = self._pending.rstrip("\r")
+                        if rendered.strip():
+                            streamed_output = True
+                            self._emit(rendered)
+                        self._pending = ""
+
+                    def getvalue(self) -> str:
+                        return self._buffer.getvalue()
+
+                output_stream = _StreamingCapture(
+                    lambda chunk: self.call_from_thread(self._stream_slash_output, chunk)
+                )
                 capture_console = Console(
-                    file=output_buffer,
+                    file=output_stream,
                     force_terminal=False,
                     color_system=None,
-                    width=max(80, self.size.width),
+                    width=max(80, capture_width),
                 )
 
                 original_slash_console = slash_module.console
                 original_prompts_console = prompts_module.console
-                slash_module.console = capture_console
-                prompts_module.console = capture_console
-                try:
-                    handled = self._slash_handler.handle_command(command)
-                finally:
-                    slash_module.console = original_slash_console
-                    prompts_module.console = original_prompts_console
+                with self._slash_bridge_lock:
+                    slash_module.console = capture_console
+                    prompts_module.console = capture_console
+                    try:
+                        handled = self._slash_handler.handle_command(command)
+                    finally:
+                        slash_module.console = original_slash_console
+                        prompts_module.console = original_prompts_console
             except Exception as exc:
-                self._chat_log().write(f"[red]Slash bridge error:[/red] {exc}")
-                return False
+                return False, "", False, str(exc), False
 
-            captured = output_buffer.getvalue().strip()
-            if captured:
-                self._chat_log().write(captured)
+            output_stream.flush()
+            captured = output_stream.getvalue().strip()
+            return handled, captured, self._slash_handler.should_exit, None, streamed_output
 
-            if self._slash_handler.should_exit:
-                self.exit()
+        def _apply_full_slash_result(
+            self,
+            command: str,
+            handled: bool,
+            captured: str,
+            should_exit: bool,
+            error: str | None,
+            streamed_output: bool,
+        ) -> None:
+            self._set_thinking_idle()
+            if error:
+                self._chat_log().write(f"[red]Slash bridge error:[/red] {error}")
+                return
 
-            self._update_status_panel()
+            if handled:
+                if captured and not streamed_output:
+                    self._chat_log().write(captured)
+                if should_exit:
+                    self.exit()
+                if command.strip().lower().startswith("/rlm"):
+                    self._route_rlm_results_to_research(command)
+                return
 
-            # Route /rlm results to Research tab
-            if command.strip().lower().startswith("/rlm"):
-                self._route_rlm_results_to_research(command)
+            parts = command.split()
+            cmd = parts[0].lower() if parts else command.strip().lower()
+            suggestions = suggest_command(cmd, self.palette_commands)
+            if suggestions:
+                self._chat_log().write(
+                    f"[yellow]Unknown command {cmd}. Suggestions:[/yellow] {'  '.join(suggestions)}"
+                )
+            else:
+                self._chat_log().write(f"[yellow]Unknown command {cmd}. Use /help[/yellow]")
 
-            return handled
+        @work(thread=True)
+        def _delegate_to_full_slash_handler_async(self, command: str) -> None:
+            handled, captured, should_exit, error, streamed_output = self._run_full_slash_handler(
+                command,
+                capture_width=max(80, self.size.width),
+            )
+            self.call_from_thread(
+                self._apply_full_slash_result,
+                command,
+                handled,
+                captured,
+                should_exit,
+                error,
+                streamed_output,
+            )
+
+        def _stream_slash_output(self, chunk: str) -> None:
+            if chunk:
+                self._chat_log().write(chunk)
+
+        def _set_command_running(self, command: str) -> None:
+            short = command.strip()
+            if len(short) > 72:
+                short = f"{short[:69]}..."
+            status = Text()
+            status.append(f"{ICONS['thinking']} ", style=PALETTE.info)
+            status.append(f"Running {short}", style=PALETTE.text_secondary)
+            self._thinking_status().update(status)
+
+        def _file_signature(self, path: Path) -> tuple[int, int] | None:
+            try:
+                stat = path.stat()
+            except OSError:
+                return None
+            return stat.st_mtime_ns, stat.st_size
+
+        def _has_file_changed_since_render(self, path: Path) -> bool:
+            signature = self._file_signature(path)
+            if signature is None:
+                return True
+            previous = self._file_state_cache.get(path)
+            self._file_state_cache[path] = signature
+            return previous != signature
+
+        def _run_visualization_cached(self, run_path: Path) -> dict[str, Any]:
+            from ..rlm.visualizer import build_run_visualization
+
+            key = str(run_path.resolve())
+            signature = self._file_signature(run_path)
+            cached = self._run_viz_cache.get(key)
+            if (
+                cached
+                and signature is not None
+                and cached[0] == signature[0]
+                and cached[1] == signature[1]
+            ):
+                return cached[2]
+
+            viz = build_run_visualization(run_path=run_path, run_dir=run_path.parent)
+            if signature is not None:
+                self._run_viz_cache[key] = (signature[0], signature[1], viz)
+            return viz
+
+        def _flush_research_event_log(self) -> None:
+            if not self._event_log_buffer:
+                return
+            chunk = "\n".join(self._event_log_buffer)
+            self._event_log_buffer.clear()
+            try:
+                self._research_event_log().write(chunk)
+            except Exception:
+                pass
+
+        def _sync_prompt_ui(self) -> None:
+            mode = self._prompt_helper.mode
+            chat_input = self._cached_chat_input or self.query_one("#chat_input", Input)
+            mode_name = mode.mode
+            if mode_name != self._last_prompt_mode:
+                if mode.is_command:
+                    chat_input.placeholder = "/ Slash command..."
+                elif mode.is_shell:
+                    chat_input.placeholder = "$ Shell command..."
+                else:
+                    chat_input.placeholder = "Ask, /command, !shell, or >shell..."
+                self._last_prompt_mode = mode_name
+
+            panel = self._cached_suggestion_panel or self.query_one("#suggestion_panel", Static)
+            state = self._prompt_helper.suggestions
+            sig = (
+                bool(state.visible),
+                int(state.selected_index),
+                tuple(state.suggestions),
+            )
+            if sig == self._last_suggestion_state:
+                return
+            self._last_suggestion_state = sig
+            if state.visible:
+                panel.update(state.render_text())
+                panel.add_class("-visible")
+            else:
+                panel.remove_class("-visible")
+
+        def _apply_pending_input_change(self) -> None:
+            text = self._pending_input_text
+            self._pending_input_text = None
+            self._input_debounce_timer = None
+            if text is None:
+                return
+            self._prompt_helper.on_input_changed(text)
+            self._sync_prompt_ui()
+
+        @work(thread=True)
+        def _refresh_research_run_async(self, run_path: Path) -> None:
+            try:
+                viz = self._run_visualization_cached(run_path)
+            except Exception as exc:
+                self.call_from_thread(
+                    self._apply_research_run_load_error,
+                    f"[yellow]Could not load run: {exc}[/yellow]",
+                )
+                return
+            self.call_from_thread(self._apply_research_dashboard_from_viz, viz)
+            self.call_from_thread(self._apply_research_trajectory_from_viz, viz)
+
+        def _apply_research_run_load_error(self, text: str) -> None:
+            try:
+                summary = self._cached_research_summary or self.query_one(
+                    "#research_summary", Static
+                )
+                summary.update(text)
+            except Exception:
+                pass
+
+        @work(thread=True)
+        def _refresh_research_leaderboard_async(self) -> None:
+            now = monotonic()
+            if self._leaderboard_cache and now - self._leaderboard_cache[0] <= 1.0:
+                self.call_from_thread(
+                    self._set_research_leaderboard_text, self._leaderboard_cache[1]
+                )
+                return
+            try:
+                from ..rlm.leaderboard import Leaderboard
+
+                lb = Leaderboard(workdir=Path.cwd() / ".rlm_code", auto_load=True)
+                if not lb.entries:
+                    text = "[dim]No benchmark results yet. Run /rlm bench to generate data.[/dim]"
+                else:
+                    table = lb.format_rich_table(limit=15)
+                    buf = io.StringIO()
+                    temp_console = Console(
+                        file=buf, force_terminal=False, color_system=None, width=120
+                    )
+                    temp_console.print(table)
+                    text = buf.getvalue().strip()
+            except Exception as exc:
+                text = f"[yellow]Could not load leaderboard: {exc}[/yellow]"
+            self._leaderboard_cache = (now, text)
+            self.call_from_thread(self._set_research_leaderboard_text, text)
+
+        def _set_research_leaderboard_text(self, text: str) -> None:
+            panel = self._cached_research_leaderboard or self.query_one(
+                "#research_leaderboard_table", Static
+            )
+            panel.update(text)
+
+        def _apply_research_dashboard_from_viz(self, viz: dict[str, Any]) -> None:
+            metrics = self.query_one("#research_metrics", MetricsPanel)
+            metrics.run_id = viz.get("run_id", "")
+            metrics.status = "complete" if viz.get("completed") else "failed"
+            metrics.reward = viz.get("total_reward", 0.0)
+            metrics.steps = viz.get("step_count", 0)
+            metrics.max_steps = viz.get("step_count", 0)
+
+            reward_curve = viz.get("reward_curve", [])
+            if reward_curve:
+                sparkline = self.query_one("#research_sparkline", SparklineChart)
+                sparkline.values = [pt.get("cumulative_reward", 0.0) for pt in reward_curve]
+
+            completed = viz.get("completed", False)
+            total_reward = viz.get("total_reward", 0.0)
+            step_count = viz.get("step_count", 0)
+            summary = self._cached_research_summary or self.query_one("#research_summary", Static)
+            status_text = "[green]Completed[/green]" if completed else "[red]Failed[/red]"
+            summary.update(
+                f"{status_text} | Reward: [bold]{total_reward:.3f}[/bold] | "
+                f"Steps: {step_count} | Run: [dim]{viz.get('run_id', 'N/A')}[/dim]"
+            )
+
+        def _apply_research_trajectory_from_viz(self, viz: dict[str, Any]) -> None:
+            timeline = viz.get("timeline", [])
+            target = self._cached_research_trajectory_detail or self.query_one(
+                "#research_trajectory_detail", Static
+            )
+            if not timeline:
+                target.update("[dim]No steps recorded in this run.[/dim]")
+                return
+            lines = ["[bold cyan]Step  Action          Reward   Success[/bold cyan]"]
+            for entry in timeline:
+                step = entry.get("step", "?")
+                action = str(entry.get("action", "?"))[:14].ljust(14)
+                reward = entry.get("reward", 0.0)
+                cum = entry.get("cumulative_reward", 0.0)
+                ok = "[green]Y[/green]" if entry.get("success") else "[red]N[/red]"
+                lines.append(f"  {step:<4} {action}  {reward:+.3f} ({cum:.3f})  {ok}")
+            target.update("\n".join(lines))
 
         def _apply_view_mode(self) -> None:
             self.set_class(self.single_view_mode, "-single-view")
@@ -1160,13 +1896,9 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
 
             mode_button = self.query_one("#single_mode_btn", Button)
             mode_button.variant = "success" if self.single_view_mode else "default"
-            mode_button.label = (
-                "One Screen: ON" if self.single_view_mode else "One Screen: OFF"
-            )
-
-            back_button = self.query_one("#back_chat_btn", Button)
-            back_button.disabled = self.active_view == "chat"
-            back_button.variant = "warning" if self.active_view != "chat" else "default"
+            mode_button.label = "One Screen: ON" if self.single_view_mode else "One Screen: OFF"
+            quit_button = self.query_one("#quit_btn", Button)
+            quit_button.variant = "error"
             self._update_chat_hint()
 
         def _update_chat_hint(self) -> None:
@@ -1174,7 +1906,7 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             if self.single_view_mode and self.active_view != "chat":
                 hint.update(
                     f"[bold #ffd684]Focus:[/bold #ffd684] {self.active_view.title()}  "
-                    "[dim](Esc or ↩ Back to Chat, Tab to cycle panes)[/dim]"
+                    "[dim](Esc to chat, Tab to cycle panes)[/dim]"
                 )
                 return
             hint.update(
@@ -1195,6 +1927,15 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             if self._acp_profile:
                 status.add_row("ACP", self._acp_profile.get("display_name", "-"))
             status.add_row("Mode", "[green]Direct model mode[/green]")
+            route_label = (
+                str(self._last_response_route or "direct-llm").strip().lower() or "direct-llm"
+            )
+            route_display = (
+                f"[green]{route_label}[/green]"
+                if route_label == "harness-auto"
+                else f"[cyan]{route_label}[/cyan]"
+            )
+            status.add_row("Route", route_display)
             status.add_row(
                 "Layout",
                 f"ONE SCREEN ({self.active_view.upper()})"
@@ -1221,8 +1962,13 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             )
 
             strip_line = Text()
-            conn_icon = ICONS["connected"] if self.connector.current_model else ICONS["disconnected"]
-            strip_line.append(f"{conn_icon} ", style=PALETTE.success if self.connector.current_model else PALETTE.error)
+            conn_icon = (
+                ICONS["connected"] if self.connector.current_model else ICONS["disconnected"]
+            )
+            strip_line.append(
+                f"{conn_icon} ",
+                style=PALETTE.success if self.connector.current_model else PALETTE.error,
+            )
             strip_line.append(model_value, style=PALETTE.text_primary)
             strip_line.append(f" {ICONS['separator']} ", style=PALETTE.text_dim)
             strip_line.append(provider_value, style=PALETTE.info)
@@ -1233,16 +1979,29 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             mode_sym = self._prompt_helper.mode.prompt_symbol
             mode_name = self._prompt_helper.mode.mode.title()
             strip_line.append(f"{mode_sym} {mode_name}", style=PALETTE.info)
+            strip_line.append(f" {ICONS['separator']} ", style=PALETTE.text_dim)
+            route_style = PALETTE.success if route_label == "harness-auto" else PALETTE.info
+            strip_line.append(f"Route:{route_label}", style=route_style)
             strip.update(strip_line)
 
         def _set_preview_text(self, message: str) -> None:
-            self.query_one("#preview_panel", Static).update(
-                Panel(Text(message, style=PALETTE.text_secondary), title="Preview", border_style=PALETTE.warning)
+            panel = self._cached_preview_panel or self.query_one("#preview_panel", Static)
+            panel.update(
+                Panel(
+                    Text(message, style=PALETTE.text_secondary),
+                    title="Preview",
+                    border_style=PALETTE.warning,
+                )
             )
 
         def _set_diff_text(self, message: str) -> None:
-            self.query_one("#diff_panel", Static).update(
-                Panel(Text(message, style=PALETTE.text_secondary), title="Diff", border_style=PALETTE.accent_light)
+            panel = self._cached_diff_panel or self.query_one("#diff_panel", Static)
+            panel.update(
+                Panel(
+                    Text(message, style=PALETTE.text_secondary),
+                    title="Diff",
+                    border_style=PALETTE.accent_light,
+                )
             )
 
         def _set_preview_file(self, path: Path) -> None:
@@ -1262,7 +2021,8 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 theme="monokai",
                 background_color="#000000",
             )
-            self.query_one("#preview_panel", Static).update(
+            panel = self._cached_preview_panel or self.query_one("#preview_panel", Static)
+            panel.update(
                 Panel(
                     syntax,
                     title=f"Preview: {path.name}",
@@ -1273,6 +2033,9 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             )
             self.current_file = path
             self.file_snapshots.setdefault(path, content)
+            signature = self._file_signature(path)
+            if signature is not None:
+                self._file_state_cache[path] = signature
 
         def _render_diff(self, path: Path) -> None:
             baseline = self.file_snapshots.get(path)
@@ -1290,10 +2053,9 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 self._set_diff_text("No changes since snapshot.")
                 return
 
-            diff_renderable = format_diff_for_chat(
-                baseline, current, file_path=str(path)
-            )
-            self.query_one("#diff_panel", Static).update(diff_renderable)
+            diff_renderable = format_diff_for_chat(baseline, current, file_path=str(path))
+            panel = self._cached_diff_panel or self.query_one("#diff_panel", Static)
+            panel.update(diff_renderable)
 
         def _auto_connect_default_model(self) -> None:
             default_model = self.config_manager.config.default_model
@@ -1337,7 +2099,9 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 return
 
         def action_command_palette(self) -> None:
-            self.push_screen(CommandPaletteModal(self.palette_commands), self._apply_palette_selection)
+            self.push_screen(
+                CommandPaletteModal(self.palette_commands), self._apply_palette_selection
+            )
 
         def _apply_palette_selection(self, selection: str | None) -> None:
             if not selection:
@@ -1382,6 +2146,7 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             # Focus the PTY terminal if available, else the shell input.
             try:
                 from .pty_terminal import TerminalPane
+
                 self.query_one("#terminal_pane", TerminalPane).focus()
             except Exception:
                 try:
@@ -1454,8 +2219,9 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 elif "start" in name_lower:
                     color = "#f0ce74"
 
-                log = self.query_one("#research_event_log", RichLog)
-                log.write(f"[dim]{ts}[/dim] [{color}]{name}[/{color}] {msg}")
+                self._event_log_buffer.append(f"[dim]{ts}[/dim] [{color}]{name}[/{color}] {msg}")
+                if len(self._event_log_buffer) >= self._event_log_batch_limit:
+                    self._flush_research_event_log()
             except Exception:
                 pass
 
@@ -1482,106 +2248,34 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
         def _refresh_research_dashboard(self, run_path: Path) -> None:
             """Populate the Research dashboard from a completed run trace."""
             try:
-                from ..rlm.visualizer import build_run_visualization
-
-                viz = build_run_visualization(
-                    run_path=run_path, run_dir=run_path.parent
-                )
-
-                metrics = self.query_one("#research_metrics", MetricsPanel)
-                metrics.run_id = viz.get("run_id", "")
-                metrics.status = "complete" if viz.get("completed") else "failed"
-                metrics.reward = viz.get("total_reward", 0.0)
-                metrics.steps = viz.get("step_count", 0)
-                metrics.max_steps = viz.get("step_count", 0)
-
-                reward_curve = viz.get("reward_curve", [])
-                if reward_curve:
-                    sparkline = self.query_one("#research_sparkline", SparklineChart)
-                    sparkline.values = [
-                        pt.get("cumulative_reward", 0.0) for pt in reward_curve
-                    ]
-
-                completed = viz.get("completed", False)
-                total_reward = viz.get("total_reward", 0.0)
-                step_count = viz.get("step_count", 0)
-                summary = self.query_one("#research_summary", Static)
-                status_text = "[green]Completed[/green]" if completed else "[red]Failed[/red]"
-                summary.update(
-                    f"{status_text} | Reward: [bold]{total_reward:.3f}[/bold] | "
-                    f"Steps: {step_count} | Run: [dim]{viz.get('run_id', 'N/A')}[/dim]"
-                )
+                viz = self._run_visualization_cached(run_path)
+                self._apply_research_dashboard_from_viz(viz)
             except Exception as exc:
                 try:
-                    self.query_one("#research_summary", Static).update(
-                        f"[yellow]Could not load run: {exc}[/yellow]"
+                    summary = self._cached_research_summary or self.query_one(
+                        "#research_summary", Static
                     )
+                    summary.update(f"[yellow]Could not load run: {exc}[/yellow]")
                 except Exception:
                     pass
 
         def _refresh_research_trajectory(self, run_path: Path) -> None:
             """Populate the Trajectory sub-view from a run trace."""
             try:
-                from ..rlm.visualizer import build_run_visualization
-
-                viz = build_run_visualization(
-                    run_path=run_path, run_dir=run_path.parent
-                )
-                timeline = viz.get("timeline", [])
-                if not timeline:
-                    self.query_one("#research_trajectory_detail", Static).update(
-                        "[dim]No steps recorded in this run.[/dim]"
-                    )
-                    return
-
-                lines = ["[bold cyan]Step  Action          Reward   Success[/bold cyan]"]
-                for entry in timeline:
-                    step = entry.get("step", "?")
-                    action = str(entry.get("action", "?"))[:14].ljust(14)
-                    reward = entry.get("reward", 0.0)
-                    cum = entry.get("cumulative_reward", 0.0)
-                    ok = "[green]Y[/green]" if entry.get("success") else "[red]N[/red]"
-                    lines.append(
-                        f"  {step:<4} {action}  {reward:+.3f} ({cum:.3f})  {ok}"
-                    )
-
-                self.query_one("#research_trajectory_detail", Static).update(
-                    "\n".join(lines)
-                )
+                viz = self._run_visualization_cached(run_path)
+                self._apply_research_trajectory_from_viz(viz)
             except Exception as exc:
                 try:
-                    self.query_one("#research_trajectory_detail", Static).update(
-                        f"[yellow]Could not load trajectory: {exc}[/yellow]"
+                    target = self._cached_research_trajectory_detail or self.query_one(
+                        "#research_trajectory_detail", Static
                     )
+                    target.update(f"[yellow]Could not load trajectory: {exc}[/yellow]")
                 except Exception:
                     pass
 
         def _refresh_research_leaderboard(self) -> None:
             """Populate the Benchmarks sub-view with the leaderboard table."""
-            try:
-                from ..rlm.leaderboard import Leaderboard
-
-                lb = Leaderboard(workdir=Path.cwd() / ".rlm_code", auto_load=True)
-                if not lb.entries:
-                    self.query_one("#research_leaderboard_table", Static).update(
-                        "[dim]No benchmark results yet. Run /rlm bench to generate data.[/dim]"
-                    )
-                    return
-
-                table = lb.format_rich_table(limit=15)
-                buf = io.StringIO()
-                temp_console = Console(file=buf, force_terminal=False, color_system=None, width=120)
-                temp_console.print(table)
-                self.query_one("#research_leaderboard_table", Static).update(
-                    buf.getvalue().strip()
-                )
-            except Exception as exc:
-                try:
-                    self.query_one("#research_leaderboard_table", Static).update(
-                        f"[yellow]Could not load leaderboard: {exc}[/yellow]"
-                    )
-                except Exception:
-                    pass
+            self._refresh_research_leaderboard_async()
 
         def _load_replay(self, run_path: Path) -> None:
             """Load a run for step-by-step replay."""
@@ -1621,8 +2315,7 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             if run_path and cmd_lower.startswith("/rlm run"):
                 path = Path(str(run_path))
                 if path.exists():
-                    self._refresh_research_dashboard(path)
-                    self._refresh_research_trajectory(path)
+                    self._refresh_research_run_async(path)
                     # Notify on run completion
                     try:
                         reward = ctx.get("rlm_last_reward", 0.0)
@@ -1635,7 +2328,11 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 self._refresh_research_leaderboard()
                 # Notify on bench completion
                 try:
-                    preset = cmd_lower.split("preset=")[-1].split()[0] if "preset=" in cmd_lower else "benchmark"
+                    preset = (
+                        cmd_lower.split("preset=")[-1].split()[0]
+                        if "preset=" in cmd_lower
+                        else "benchmark"
+                    )
                     notify_benchmark_complete(preset, cases=0, avg_reward=0.0)
                 except Exception:
                     pass
@@ -1675,6 +2372,9 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
 
         def action_toggle_single_view(self) -> None:
             self.single_view_mode = not self.single_view_mode
+            if self.single_view_mode:
+                # Keep one-screen mode optimized for conversation by default.
+                self.active_view = "chat"
             self._apply_view_mode()
             self._update_focus_buttons()
             self._update_status_panel()
@@ -1695,7 +2395,9 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
         def action_copy_last_response(self) -> None:
             last_response = self._get_last_assistant_response()
             if not last_response:
-                self._chat_log().write("[yellow]No assistant response or error available to copy yet.[/yellow]")
+                self._chat_log().write(
+                    "[yellow]No assistant response or error available to copy yet.[/yellow]"
+                )
                 return
             ok, message = self._copy_text_to_clipboard(last_response)
             if ok:
@@ -1707,9 +2409,7 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
         def _set_pane_hidden(self, class_name: str, hidden: bool, label: str) -> None:
             self.set_class(hidden, class_name)
             if not self.single_view_mode:
-                self._chat_log().write(
-                    f"[dim]{label} {'hidden' if hidden else 'visible'}[/dim]"
-                )
+                self._chat_log().write(f"[dim]{label} {'hidden' if hidden else 'visible'}[/dim]")
             self._update_status_panel()
 
         def action_toggle_files_pane(self) -> None:
@@ -1787,12 +2487,10 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 "replay_end_btn",
             ):
                 self._handle_replay_button(button_id)
-            elif button_id == "copy_last_btn":
-                self.action_copy_last_response()
             elif button_id == "single_mode_btn":
                 self.action_toggle_single_view()
-            elif button_id == "back_chat_btn":
-                self.action_back_to_chat()
+            elif button_id == "quit_btn":
+                self.action_quit_app()
 
         def on_input_changed(self, event: Input.Changed) -> None:
             if event.input.id == "palette_query":
@@ -1805,25 +2503,16 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 self._suppress_suggestions = False
                 return
 
-            text = event.value
-            self._prompt_helper.on_input_changed(text)
-
-            # Update mode indicator in input placeholder.
-            mode = self._prompt_helper.mode
-            chat_input = self._cached_chat_input or self.query_one("#chat_input", Input)
-            if mode.is_command:
-                chat_input.placeholder = "/ Slash command..."
-            elif mode.is_shell:
-                chat_input.placeholder = "$ Shell command..."
+            self._pending_input_text = event.value
+            if self._input_debounce_timer is not None:
+                self._input_debounce_timer.stop()
+            if self._input_debounce_seconds <= 0.0:
+                self._apply_pending_input_change()
             else:
-                chat_input.placeholder = "Ask, /command, !shell, or >shell..."
-
-            panel = self._cached_suggestion_panel or self.query_one("#suggestion_panel", Static)
-            if self._prompt_helper.suggestions.visible:
-                panel.update(self._prompt_helper.suggestions.render_text())
-                panel.add_class("-visible")
-            else:
-                panel.remove_class("-visible")
+                self._input_debounce_timer = self.set_timer(
+                    self._input_debounce_seconds,
+                    self._apply_pending_input_change,
+                )
 
         def on_key(self, event: events.Key) -> None:
             # Use cached refs to avoid costly DOM queries on every keystroke.
@@ -1833,20 +2522,19 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             if not chat_input.has_focus:
                 return
 
-            panel = self._cached_suggestion_panel
+            if not self._prompt_helper.suggestions.visible and event.key not in {"up", "down"}:
+                return
 
             # Handle suggestion navigation when the panel is visible.
             if self._prompt_helper.suggestions.visible:
                 if event.key == "down":
                     self._prompt_helper.on_arrow_down()
-                    if panel:
-                        panel.update(self._prompt_helper.suggestions.render_text())
+                    self._sync_prompt_ui()
                     event.prevent_default()
                     event.stop()
                 elif event.key == "up":
                     self._prompt_helper.on_arrow_up()
-                    if panel:
-                        panel.update(self._prompt_helper.suggestions.render_text())
+                    self._sync_prompt_ui()
                     event.prevent_default()
                     event.stop()
                 elif event.key == "tab":
@@ -1856,15 +2544,13 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                         self._suppress_suggestions = True
                         chat_input.value = completed + " "
                         chat_input.cursor_position = len(chat_input.value)
-                    if panel:
-                        panel.remove_class("-visible")
+                    self._sync_prompt_ui()
                     event.prevent_default()
                     event.stop()
                 elif event.key == "enter":
                     # Accept the selected suggestion and submit it immediately.
                     completed = self._prompt_helper.on_tab()
-                    if panel:
-                        panel.remove_class("-visible")
+                    self._sync_prompt_ui()
                     if completed:
                         self._suppress_suggestions = True
                         chat_input.value = completed
@@ -1888,8 +2574,7 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                         event.stop()
                 elif event.key == "escape":
                     self._prompt_helper.on_escape()
-                    if panel:
-                        panel.remove_class("-visible")
+                    self._sync_prompt_ui()
                     event.prevent_default()
                     event.stop()
                 return
@@ -1915,19 +2600,23 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             if not value:
                 return
 
+            if self._input_debounce_timer is not None:
+                self._input_debounce_timer.stop()
+                self._input_debounce_timer = None
+            self._pending_input_text = None
             event.input.value = ""
             # Record in history for up/down navigation.
             self._prompt_helper.add_to_history(value)
             # Clear suggestion panel on submit.
             self._suppress_suggestions = True
             self._prompt_helper.on_escape()
-            panel = self._cached_suggestion_panel
-            if panel:
-                panel.remove_class("-visible")
+            self._last_suggestion_state = None
+            self._sync_prompt_ui()
             # Reset placeholder to default after submit.
             chat_input = self._cached_chat_input
             if chat_input:
                 chat_input.placeholder = "Ask, /command, !shell, or >shell..."
+            self._last_prompt_mode = "chat"
 
             if event.input.id == "shell_input":
                 self._run_shell_command(value)
@@ -1954,7 +2643,26 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             self._render_user_prompt(value)
             self._generate_assistant_response(value)
 
+        def _normalize_slash_command(self, command: str) -> str:
+            stripped = command.strip()
+            if not stripped:
+                return command
+            head, sep, tail = stripped.partition(" ")
+            if head.lower() == "/rml":
+                return f"/rlm {tail}".strip() if sep else "/rlm"
+            return stripped
+
+        def _reset_chat_input(self) -> None:
+            chat_input = self._cached_chat_input or self.query_one("#chat_input", Input)
+            chat_input.value = ""
+            chat_input.placeholder = "Ask, /command, !shell, or >shell..."
+            self._prompt_helper.on_escape()
+            self._last_suggestion_state = None
+            self._sync_prompt_ui()
+            chat_input.focus()
+
         def _handle_slash_command(self, command: str) -> None:
+            command = self._normalize_slash_command(command)
             cmd_line = Text()
             cmd_line.append(f"{ICONS['shell']} ", style=PALETTE.warning)
             cmd_line.append("Command: ", style=f"bold {PALETTE.warning}")
@@ -1966,6 +2674,8 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
 
             if cmd == "/help":
                 self._show_help()
+            elif cmd == "/workflow":
+                self._show_rlm_workflow()
             elif cmd == "/status":
                 self._update_status_panel()
                 self._chat_log().write("[dim]Status panel refreshed[/dim]")
@@ -1997,6 +2707,7 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                     # Send to PTY terminal if available, otherwise run via PersistentShell.
                     try:
                         from .pty_terminal import TerminalPane
+
                         tp = self.query_one("#terminal_pane", TerminalPane)
                         tp.send_command(cmd_str)
                         self.action_view_shell()
@@ -2006,7 +2717,9 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                     # No args — just switch to Shell view.
                     self.action_view_shell()
             else:
-                if self._delegate_to_full_slash_handler(command):
+                if self._slash_handler is not None:
+                    self._set_command_running(command)
+                    self._delegate_to_full_slash_handler_async(command)
                     return
                 suggestions = suggest_command(cmd, self.palette_commands)
                 if suggestions:
@@ -2021,11 +2734,15 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             self._chat_log().write(title)
             help_lines = [
                 f"  {ICONS['shell']} /connect          Interactive keyboard picker",
+                f"  {ICONS['shell']} /connect acp      Direct ACP picker",
                 f"  {ICONS['shell']} /connect <p> <m>  Direct connection",
                 f"  {ICONS['search']} /models           List providers & models",
                 f"  {ICONS['agent']} /status           Refresh status panel",
                 f"  {ICONS['shell']} /sandbox          Sandbox management",
+                f"  {ICONS['agent']} /workflow         Show recommended RLM workflow",
                 f"  {ICONS['agent']} /rlm              Run experiments & benchmarks",
+                f"  {ICONS['agent']} /rml              Alias for /rlm",
+                f"  {ICONS['agent']} /harness          Tool-using coding harness",
                 f"  {ICONS['edit']} /clear            Clear logs",
                 f"  {ICONS['read']} /snapshot [file]  Save file baseline",
                 f"  {ICONS['edit']} /diff [file]      Show diff since snapshot",
@@ -2046,11 +2763,44 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             shortcut_lines = [
                 "  Ctrl+1..5 switch views    Tab/Shift+Tab cycle",
                 "  Ctrl+O one-screen toggle  Ctrl+K command palette",
-                f"  \u2191/\u2193 input history         Esc back to chat",
+                "  \u2191/\u2193 input history         Esc back to chat",
                 "  Ctrl+L clear logs         Ctrl+R refresh preview",
                 "  F7/Ctrl+Y copy last       Ctrl+Q quit",
             ]
             self._chat_log().write("\n".join(shortcut_lines))
+
+        def _show_rlm_workflow(self) -> None:
+            lines = [
+                "[bold cyan]RLM Workflow (Researcher Quick Path)[/bold cyan]",
+                "",
+                "[bold]1) Connect model[/bold]",
+                "  /connect",
+                "",
+                "[bold]2) Select secure pure-RLM backend[/bold]",
+                "  /sandbox profile secure",
+                "  /sandbox output-mode summarize",
+                "",
+                "[bold]3) Validate setup[/bold]",
+                "  /rlm doctor env=pure_rlm",
+                "  /rlm frameworks",
+                "",
+                "[bold]4) Run experiments[/bold]",
+                '  /rlm run "task" env=pure_rlm framework=native',
+                '  /rlm run "task" env=generic framework=dspy-rlm',
+                '  /rlm run "task" env=generic framework=google-adk',
+                "",
+                "[bold]4b) Run coding harness (OpenCode-style tool loop)[/bold]",
+                "  /harness tools",
+                '  /harness run "task" mcp=on',
+                "",
+                "[bold]5) Inspect outcomes[/bold]",
+                "  /rlm status",
+                "  /rlm replay <run_id>",
+                "  /rlm bench list",
+                "",
+                "[dim]Research Lab tab will show live Events and post-run trajectory/summary.[/dim]",
+            ]
+            self._chat_log().write("\n".join(lines))
 
         def _view_command(self, args: list[str]) -> None:
             if len(args) != 1:
@@ -2084,6 +2834,9 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 self._chat_log().write("[yellow]Usage: /layout <single|multi>[/yellow]")
                 return
             self.single_view_mode = args[0].lower() == "single"
+            if self.single_view_mode:
+                # Conversation-first default for single-screen layout.
+                self.active_view = "chat"
             self._apply_view_mode()
             self._update_focus_buttons()
             self._update_status_panel()
@@ -2148,12 +2901,29 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
 
         def _connect_command(self, args: list[str]) -> None:
             if len(args) == 0:
+                self._reset_chat_input()
                 self._start_connect_wizard()
                 return
 
+            if len(args) == 1:
+                mode = args[0].strip().lower()
+                if mode == "local":
+                    self._reset_chat_input()
+                    self._start_local_connect_picker()
+                    return
+                if mode == "byok":
+                    self._reset_chat_input()
+                    self._start_byok_connect_picker()
+                    return
+                if mode == "acp":
+                    self._reset_chat_input()
+                    self._acp_agents_cache_at = 0.0
+                    self._start_acp_connect_picker()
+                    return
+
             if len(args) < 2 or len(args) > 4:
                 self._chat_log().write(
-                    "[yellow]Usage: /connect <provider> <model> [api-key] [base-url][/yellow]"
+                    "[yellow]Usage: /connect [local|byok|acp] OR /connect <provider> <model> [api-key] [base-url][/yellow]"
                 )
                 return
 
@@ -2172,18 +2942,20 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             try:
                 self.connector.connect_to_model(model, provider, api_key, base_url)
                 self._acp_profile = None
+                self._configure_prompt_templates()
                 self._update_status_panel()
                 self._chat_log().write(
                     f"[green]Connected:[/green] {self.connector.current_model_id or model}"
                 )
+                self._reset_chat_input()
             except Exception as exc:
                 self._chat_log().write(f"[red]Connection failed:[/red] {exc}")
 
         def _start_connect_wizard(self) -> None:
             mode_options = [
-                ("local", "🏠 Local models (Ollama / LM Studio / vLLM / SGLang)"),
-                ("byok", "☁️ BYOK cloud providers"),
-                ("acp", "🧩 ACP profile connection"),
+                ("local", "Local models"),
+                ("byok", "Cloud providers (BYOK)"),
+                ("acp", "ACP"),
             ]
 
             def on_mode_selected(mode: str) -> None:
@@ -2215,10 +2987,13 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             def _on_done(result: str | None) -> None:
                 if result is None:
                     self._chat_log().write("[dim]Connect picker closed.[/dim]")
+                    self._reset_chat_input()
                     return
                 on_selected(result)
 
-            self.push_screen(ConnectPickerModal(title=title, subtitle=subtitle, options=options), _on_done)
+            self.push_screen(
+                ConnectPickerModal(title=title, subtitle=subtitle, options=options), _on_done
+            )
 
         def _start_local_connect_picker(self) -> None:
             discovered = self.connector.discover_local_providers()
@@ -2240,13 +3015,11 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 provider_id = str(spec.get("id", ""))
                 live = discovered_by_id.get(provider_id)
                 base_url = str(
-                    (live.get("base_url") if live else None)
-                    or spec.get("default_base_url")
-                    or "-"
+                    (live.get("base_url") if live else None) or spec.get("default_base_url") or "-"
                 )
                 models = list(live.get("models", []) if live else [])
                 if not models:
-                    models = self.connector.list_provider_example_models(provider_id, limit=16)
+                    models = self.connector.list_provider_example_models(provider_id, limit=12)
                 local_entries.append(
                     {
                         "provider_id": provider_id,
@@ -2262,14 +3035,9 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 return
 
             options: list[tuple[str, str]] = []
-            for idx, entry in enumerate(local_entries):
-                status = "🟢 live" if entry["live"] else "⚪ preset"
-                models = list(entry["models"])
-                preview = ", ".join(models[:2]) if models else "manual model entry"
-                label = (
-                    f"{idx + 1}. {status} {entry['name']} @ {entry['base_url']}  "
-                    f"({preview})"
-                )
+            for idx, entry in enumerate(local_entries[:20]):
+                status = "live" if entry["live"] else "preset"
+                label = f"{idx + 1}. {entry['name']} ({entry['provider_id']}) [{status}]"
                 options.append((str(idx), label))
 
             def on_provider(selected_idx: str) -> None:
@@ -2285,7 +3053,7 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
 
                 model_options = [
                     (model_name, f"{idx + 1}. {model_name}")
-                    for idx, model_name in enumerate(models[:20])
+                    for idx, model_name in enumerate(models[:12])
                 ]
 
                 def on_model(model_name: str) -> None:
@@ -2330,27 +3098,25 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 return
 
             options: list[tuple[str, str]] = []
-            for idx, provider in enumerate(providers):
+            for idx, provider in enumerate(providers[:30]):
                 provider_id = str(provider.get("id"))
-                configured = "✅" if provider.get("configured") else "⚠️"
-                examples = ", ".join(self.connector.list_provider_example_models(provider_id, limit=2))
-                label = (
-                    f"{idx + 1}. {configured} {provider.get('name')} "
-                    f"[{provider.get('category', '-')}]  {examples}"
-                )
+                configured = "ready" if provider.get("configured") else "setup"
+                label = f"{idx + 1}. {provider.get('name')} ({provider_id}) [{configured}]"
                 options.append((str(idx), label))
 
             def on_provider(selected_idx: str) -> None:
                 provider = providers[int(selected_idx)]
                 provider_id = str(provider.get("id", ""))
-                models = self.connector.list_provider_example_models(provider_id, limit=20)
+                models = self.connector.list_provider_example_models(provider_id, limit=12)
                 if not models:
-                    self._chat_log().write("[yellow]No models found for selected provider.[/yellow]")
+                    self._chat_log().write(
+                        "[yellow]No models found for selected provider.[/yellow]"
+                    )
                     return
 
                 model_options = [
                     (model_name, f"{idx + 1}. {model_name}")
-                    for idx, model_name in enumerate(models[:20])
+                    for idx, model_name in enumerate(models[:12])
                 ]
 
                 def on_model(model_name: str) -> None:
@@ -2371,20 +3137,66 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             )
 
         def _start_acp_connect_picker(self) -> None:
-            agents = self.connector.discover_acp_agents()
+            now = monotonic()
+            if (
+                self._acp_agents_cache
+                and (now - self._acp_agents_cache_at) <= self._acp_cache_ttl_seconds
+            ):
+                self._present_acp_connect_picker(self._acp_agents_cache)
+                return
+            self._set_command_running("/connect acp")
+            self._chat_log().write("[dim]Discovering ACP agents...[/dim]")
+            self._discover_acp_agents_async()
+
+        @work(thread=True)
+        def _discover_acp_agents_async(self) -> None:
+            try:
+                agents = self.connector.discover_acp_agents(
+                    timeout=self._acp_discovery_timeout_seconds
+                )
+            except Exception:
+                agents = []
+            self.call_from_thread(self._apply_acp_agents_discovery, agents)
+
+        def _apply_acp_agents_discovery(self, agents: list[dict[str, Any]]) -> None:
+            self._set_thinking_idle()
+            if agents:
+                self._acp_agents_cache = list(agents)
+                self._acp_agents_cache_at = monotonic()
+                self._present_acp_connect_picker(agents)
+                return
+            if self._acp_agents_cache:
+                self._chat_log().write(
+                    "[yellow]ACP discovery timed out; using cached ACP agents.[/yellow]"
+                )
+                self._present_acp_connect_picker(self._acp_agents_cache)
+                return
+            self._chat_log().write("[yellow]No ACP agents detected.[/yellow]")
+
+        @staticmethod
+        def _connection_badge(configured: bool) -> str:
+            return "🟢 configured" if configured else "🟠 needs config"
+
+        @staticmethod
+        def _install_badge(installed: bool) -> str:
+            return "🟢 installed" if installed else "🔴 missing"
+
+        def _present_acp_connect_picker(self, agents: list[dict[str, Any]]) -> None:
             if not agents:
                 self._chat_log().write("[yellow]No ACP agents detected.[/yellow]")
                 return
 
             options: list[tuple[str, str]] = []
-            for idx, agent in enumerate(agents):
+            for idx, agent in enumerate(agents[:30]):
                 agent_id = str(agent.get("agent_id", ""))
-                installed = "✅" if agent.get("installed") else "❌"
-                configured = "🟢" if agent.get("configured") else "🟡"
+                installed = bool(agent.get("installed"))
+                configured = bool(agent.get("configured"))
                 mapped_provider = self._acp_provider_map.get(agent_id, "manual")
+                install_badge = self._install_badge(installed)
+                config_badge = self._connection_badge(configured)
                 label = (
-                    f"{idx + 1}. {installed} {configured} "
-                    f"{agent.get('display_name', agent_id)}  -> {mapped_provider}"
+                    f"{idx + 1}. {agent.get('display_name', agent_id)}  "
+                    f"🧭 {mapped_provider}  [{install_badge} · {config_badge}]"
                 )
                 options.append((str(idx), label))
 
@@ -2392,7 +3204,7 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 agent = agents[int(selected_idx)]
                 if not agent.get("installed"):
                     self._chat_log().write(
-                        "[yellow]ACP agent not installed locally. Continuing with profile mapping.[/yellow]"
+                        "[yellow]ACP agent not installed locally. Continuing with ACP connection mapping.[/yellow]"
                     )
 
                 agent_id = str(agent.get("agent_id", ""))
@@ -2403,8 +3215,8 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 self._start_acp_model_picker(agent, provider_id)
 
             self._open_connect_picker(
-                title="🧩 ACP Profiles",
-                subtitle="Pick an ACP agent profile",
+                title="🧩 ACP",
+                subtitle="Pick ACP agent (🟢 ready  🟠 setup needed  🔴 missing)",
                 options=options,
                 on_selected=on_agent,
             )
@@ -2422,18 +3234,20 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 )
             )
             if not providers:
-                self._chat_log().write("[yellow]No BYOK providers available for ACP fallback.[/yellow]")
+                self._chat_log().write(
+                    "[yellow]No BYOK providers available for ACP fallback.[/yellow]"
+                )
                 return
 
             options: list[tuple[str, str]] = []
-            for idx, provider in enumerate(providers):
+            for idx, provider in enumerate(providers[:30]):
                 provider_id = str(provider.get("id", ""))
-                configured = "✅" if provider.get("configured") else "⚠️"
-                examples = ", ".join(self.connector.list_provider_example_models(provider_id, limit=2))
+                configured = bool(provider.get("configured"))
+                config_badge = self._connection_badge(configured)
                 options.append(
                     (
                         str(idx),
-                        f"{idx + 1}. {configured} {provider.get('name')} ({provider_id})  {examples}",
+                        f"{idx + 1}. {provider.get('name')} ({provider_id}) [{config_badge}]",
                     )
                 )
 
@@ -2450,7 +3264,7 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             )
 
         def _start_acp_model_picker(self, agent: dict[str, Any], provider_id: str) -> None:
-            models = self.connector.list_provider_example_models(provider_id, limit=20)
+            models = self.connector.list_provider_example_models(provider_id, limit=12)
             if not models:
                 self._chat_log().write(
                     f"[yellow]No models available for ACP provider {provider_id}. Use /connect {provider_id} <model> manually.[/yellow]"
@@ -2459,7 +3273,7 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
 
             model_options = [
                 (model_name, f"{idx + 1}. {model_name}")
-                for idx, model_name in enumerate(models[:20])
+                for idx, model_name in enumerate(models[:12])
             ]
 
             def on_model(model_name: str) -> None:
@@ -2493,10 +3307,12 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 self.connector.connect_to_model(model, provider, api_key, base_url)
                 if self._acp_profile and self._acp_profile.get("provider_id") != provider:
                     self._acp_profile = None
+                self._configure_prompt_templates()
                 self._update_status_panel()
                 self._chat_log().write(
                     f"[green]Connected:[/green] {self.connector.current_model_id or model}"
                 )
+                self._reset_chat_input()
                 return True
             except Exception as exc:
                 self._chat_log().write(f"[red]Connection failed:[/red] {exc}")
@@ -2520,9 +3336,7 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 lines.append("[bold magenta]BYOK[/bold magenta]")
             for provider in byok:
                 status = "configured" if provider["configured"] else "needs setup"
-                lines.append(
-                    f"- {provider['id']} ({provider['adapter']}): {status}"
-                )
+                lines.append(f"- {provider['id']} ({provider['adapter']}): {status}")
             if local:
                 lines.append("")
                 lines.append("[bold cyan]Local[/bold cyan]")
@@ -2535,9 +3349,7 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                     or provider.get("default_base_url")
                     or "-"
                 )
-                lines.append(
-                    f"- {state} {provider['id']} ({provider['adapter']}) @ {endpoint}"
-                )
+                lines.append(f"- {state} {provider['id']} ({provider['adapter']}) @ {endpoint}")
 
             try:
                 discovered = list(discovered_by_id.values())
@@ -2582,7 +3394,9 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 return
 
             self.file_snapshots[path] = content
-            self._chat_log().write(f"[green]Snapshot saved:[/green] {_display_path(path, max_width=72)}")
+            self._chat_log().write(
+                f"[green]Snapshot saved:[/green] {_display_path(path, max_width=72)}"
+            )
 
         def _diff_command(self, args: list[str]) -> None:
             path = self._resolve_file_arg(args)
@@ -2599,7 +3413,9 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             elif self.current_file:
                 path = self.current_file
             else:
-                self._chat_log().write("[yellow]No file selected. Select one or pass a path.[/yellow]")
+                self._chat_log().write(
+                    "[yellow]No file selected. Select one or pass a path.[/yellow]"
+                )
                 return None
 
             if not path.exists() or not path.is_file():
@@ -2687,15 +3503,20 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             if result.timed_out:
                 self._tool_log().write(f"[{PALETTE.error}]{ICONS['error']} Command timed out[/]")
             elif result.exit_code == 0:
-                self._tool_log().write(f"[{PALETTE.success}]{ICONS['complete']} exit {result.exit_code}[/]")
+                self._tool_log().write(
+                    f"[{PALETTE.success}]{ICONS['complete']} exit {result.exit_code}[/]"
+                )
             else:
-                self._tool_log().write(f"[{PALETTE.error}]{ICONS['error']} exit {result.exit_code}[/]")
+                self._tool_log().write(
+                    f"[{PALETTE.error}]{ICONS['error']} exit {result.exit_code}[/]"
+                )
 
             # If current file exists, refresh preview/diff quickly to reflect command side effects.
             if self.current_file and self.current_file.exists():
-                self._set_preview_file(self.current_file)
-                if self.current_file in self.file_snapshots:
-                    self._render_diff(self.current_file)
+                if self._has_file_changed_since_render(self.current_file):
+                    self._set_preview_file(self.current_file)
+                    if self.current_file in self.file_snapshots:
+                        self._render_diff(self.current_file)
 
         @work(thread=True)
         def _generate_assistant_response(self, user_text: str) -> None:
@@ -2705,7 +3526,18 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 response = "Hey. I am here and ready. Tell me what you want to build."
                 self.command_history.append({"role": "assistant", "content": response})
                 self.call_from_thread(self._set_thinking_idle)
-                self.call_from_thread(self._render_assistant_response_panel, response, 0.0)
+                self.call_from_thread(
+                    self._render_assistant_response_panel, response, 0.0, "shortcut"
+                )
+                return
+
+            if self._is_connection_status_query(user_text):
+                response = self._build_connection_status_response()
+                self.command_history.append({"role": "assistant", "content": response})
+                self.call_from_thread(self._set_thinking_idle)
+                self.call_from_thread(
+                    self._render_assistant_response_panel, response, 0.0, "shortcut"
+                )
                 return
 
             if not self.connector.current_model:
@@ -2738,42 +3570,90 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             def _thinking_feed() -> None:
                 spinner_frames = SPINNER_FRAMES
                 if SIMPLE_UI:
-                    spinner_frames = [".", "..", "..."]
+                    spinner_frames = ["-", "\\", "|", "/"]
+                phases = ("Planning", "Reasoning", "Checking", "Finalizing")
+                started = monotonic()
                 index = 0
                 position = 0
-                message = get_random_llm_message()
                 while not stop_thinking.wait(self._thinking_tick_seconds):
-                    if index % 12 == 0:
-                        message = get_random_llm_message()
                     spinner = spinner_frames[index % len(spinner_frames)]
+                    phase = phases[(index // 18) % len(phases)]
+                    elapsed = monotonic() - started
+                    message = f"{phase} with {model_label} ({elapsed:.1f}s)"
                     self.call_from_thread(
                         self._update_thinking_status,
                         spinner,
                         message,
                         position,
                     )
-                    position += 2
+                    position += 1
                     index += 1
 
             thinking_thread = Thread(target=_thinking_feed, daemon=True)
             thinking_thread.start()
 
             started_at = perf_counter()
+            routed_to_harness = False
             try:
-                response = self.connector.generate_response(
-                    user_text,
-                    system_prompt=system_prompt,
-                    context=context,
-                )
+                routed_to_harness = self._should_route_to_harness(user_text)
+                if routed_to_harness:
+                    self.call_from_thread(
+                        self._update_thinking_status,
+                        "◐",
+                        f"🛠 Running harness tools with {model_label}...",
+                        0,
+                    )
+                    harness_runner = getattr(self._slash_handler, "harness_runner", None)
+                    if harness_runner is None:
+                        raise RuntimeError("Harness runner is not initialized.")
+                    harness_result = harness_runner.run(
+                        task=user_text,
+                        max_steps=int(self._harness_auto_steps),
+                        include_mcp=bool(self._harness_auto_include_mcp),
+                    )
+                    response = self._format_harness_result_for_chat(harness_result)
+                else:
+                    response = self.connector.generate_response(
+                        user_text,
+                        system_prompt=system_prompt,
+                        context=context,
+                    )
             except ModelError as exc:
                 stop_thinking.set()
                 thinking_thread.join(timeout=0.2)
                 error_text = str(exc)
                 self.command_history.append({"role": "error", "content": error_text})
                 self.call_from_thread(self._set_thinking_idle)
-                self.call_from_thread(self._chat_log().write, f"[red]Model error:[/red] {error_text}")
+                self.call_from_thread(
+                    self._chat_log().write, f"[red]Model error:[/red] {error_text}"
+                )
                 return
             except Exception as exc:
+                if routed_to_harness:
+                    try:
+                        response = self.connector.generate_response(
+                            user_text,
+                            system_prompt=system_prompt,
+                            context=context,
+                        )
+                        stop_thinking.set()
+                        thinking_thread.join(timeout=0.2)
+                        elapsed = perf_counter() - started_at
+                        self.command_history.append({"role": "assistant", "content": response})
+                        self.call_from_thread(self._set_thinking_idle)
+                        self.call_from_thread(
+                            self._chat_log().write,
+                            f"[yellow]Harness auto-route failed; fell back to direct response:[/yellow] {exc}",
+                        )
+                        self.call_from_thread(
+                            self._render_assistant_response_panel,
+                            response,
+                            elapsed,
+                            "direct-llm",
+                        )
+                        return
+                    except Exception as fallback_exc:
+                        exc = fallback_exc
                 stop_thinking.set()
                 thinking_thread.join(timeout=0.2)
                 error_text = str(exc)
@@ -2787,12 +3667,16 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             elapsed = perf_counter() - started_at
             self.command_history.append({"role": "assistant", "content": response})
             self.call_from_thread(self._set_thinking_idle)
-            self.call_from_thread(self._render_assistant_response_panel, response, elapsed)
+            route_label = "harness-auto" if routed_to_harness else "direct-llm"
+            self.call_from_thread(
+                self._render_assistant_response_panel, response, elapsed, route_label
+            )
 
             # Desktop notification for long-running responses (>30s).
             if elapsed > 30:
                 try:
-                    from .notifications import notify, NotificationLevel
+                    from .notifications import NotificationLevel, notify
+
                     notify(
                         "RLM Code",
                         f"Response ready ({elapsed:.0f}s)",
@@ -2801,4 +3685,10 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 except Exception:
                     pass
 
-    RLMCodeTUIApp(config_manager).run()
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message=r"PureRLMEnvironment is using exec\(\)-based execution with limited isolation\..*",
+            category=UserWarning,
+        )
+        RLMCodeTUIApp(config_manager).run()

@@ -59,6 +59,7 @@ state we:
 from __future__ import annotations
 
 import ast
+import importlib.util
 import io
 import time
 from dataclasses import dataclass, field
@@ -77,17 +78,14 @@ _monty_available: bool | None = None
 def _check_monty() -> bool:
     global _monty_available
     if _monty_available is None:
-        try:
-            import pydantic_monty as _  # noqa: F811
-            _monty_available = True
-        except ImportError:
-            _monty_available = False
+        _monty_available = importlib.util.find_spec("pydantic_monty") is not None
     return _monty_available
 
 
 # ---------------------------------------------------------------------------
 # AST helpers
 # ---------------------------------------------------------------------------
+
 
 def _extract_assigned_names(code: str) -> set[str]:
     """
@@ -153,11 +151,13 @@ def _extract_referenced_names(code: str) -> set[str]:
 # Data types
 # ---------------------------------------------------------------------------
 
+
 @dataclass(slots=True)
 class MontyCodeResult(CodeResult):
     """
     Extended result that carries Monty-specific metadata.
     """
+
     final_output: dict[str, Any] | None = None
     submit_fields: dict[str, Any] | None = None
     type_errors: str | None = None
@@ -168,6 +168,7 @@ class MontyCodeResult(CodeResult):
 @dataclass(slots=True)
 class MontyExecutionStats:
     """Aggregate stats across an interpreter session."""
+
     total_executions: int = 0
     total_external_calls: int = 0
     total_time_secs: float = 0.0
@@ -181,27 +182,73 @@ class MontyExecutionStats:
 # ---------------------------------------------------------------------------
 
 # Names that should never leak into user-variable snapshots
-_INTERNAL_NAMES = frozenset({
-    "__builtins__",
-    "__name__",
-    "__doc__",
-    "__package__",
-    "__loader__",
-    "__spec__",
-    "__rlm_collect__",
-})
+_INTERNAL_NAMES = frozenset(
+    {
+        "__builtins__",
+        "__name__",
+        "__doc__",
+        "__package__",
+        "__loader__",
+        "__spec__",
+        "__rlm_collect__",
+    }
+)
 
 # Variables that Monty provides as builtins or that we inject
-_BUILTIN_NAMES = frozenset({
-    "True", "False", "None",
-    "int", "float", "str", "bool", "list", "dict", "tuple", "set",
-    "frozenset", "bytes", "bytearray",
-    "range", "enumerate", "zip", "map", "filter", "sorted", "reversed",
-    "iter", "next", "len", "min", "max", "sum", "abs", "round", "pow",
-    "divmod", "chr", "ord", "repr", "ascii", "format", "type",
-    "isinstance", "issubclass", "id", "hash", "callable", "print",
-    "any", "all", "slice", "complex", "hex", "oct", "bin",
-})
+_BUILTIN_NAMES = frozenset(
+    {
+        "True",
+        "False",
+        "None",
+        "int",
+        "float",
+        "str",
+        "bool",
+        "list",
+        "dict",
+        "tuple",
+        "set",
+        "frozenset",
+        "bytes",
+        "bytearray",
+        "range",
+        "enumerate",
+        "zip",
+        "map",
+        "filter",
+        "sorted",
+        "reversed",
+        "iter",
+        "next",
+        "len",
+        "min",
+        "max",
+        "sum",
+        "abs",
+        "round",
+        "pow",
+        "divmod",
+        "chr",
+        "ord",
+        "repr",
+        "ascii",
+        "format",
+        "type",
+        "isinstance",
+        "issubclass",
+        "id",
+        "hash",
+        "callable",
+        "print",
+        "any",
+        "all",
+        "slice",
+        "complex",
+        "hex",
+        "oct",
+        "bin",
+    }
+)
 
 
 class MontyInterpreter:
@@ -365,8 +412,7 @@ class MontyInterpreter:
         referenced = _extract_referenced_names(code)
         # Only inject variables that are actually used
         input_names = sorted(
-            name for name in self._variables
-            if name in referenced and name not in _BUILTIN_NAMES
+            name for name in self._variables if name in referenced and name not in _BUILTIN_NAMES
         )
 
         # Find new variables assigned in this code
@@ -384,9 +430,7 @@ class MontyInterpreter:
 
         # Build the collection call that captures variables at end of execution
         if all_collectible:
-            collect_dict_items = ", ".join(
-                f"'{name}': {name}" for name in all_collectible
-            )
+            collect_dict_items = ", ".join(f"'{name}': {name}" for name in all_collectible)
             collect_call = f"\n__rlm_collect__({{{collect_dict_items}}})"
         else:
             collect_call = "\n__rlm_collect__({})"
@@ -486,7 +530,9 @@ class MontyInterpreter:
                         var_name = fn_args[0] if fn_args else ""
                         var_value = self._variables.get(
                             var_name,
-                            collected_vars.get(var_name, f"<undefined: {var_name}>") if collected_vars else f"<undefined: {var_name}>"
+                            collected_vars.get(var_name, f"<undefined: {var_name}>")
+                            if collected_vars
+                            else f"<undefined: {var_name}>",
                         )
                         final_output = {"answer": var_value, "type": "variable", "var": var_name}
                         break
@@ -575,10 +621,7 @@ class MontyInterpreter:
         in a new ``MontyInterpreter`` instance (or a different process).
         """
         return {
-            "variables": {
-                k: v for k, v in self._variables.items()
-                if _is_serializable(v)
-            },
+            "variables": {k: v for k, v in self._variables.items() if _is_serializable(v)},
             "stats": {
                 "total_executions": self._stats.total_executions,
                 "total_external_calls": self._stats.total_external_calls,
@@ -620,8 +663,7 @@ class MontyInterpreter:
         # Determine inputs/external functions for validation context
         referenced = _extract_referenced_names(code)
         input_names = sorted(
-            name for name in self._variables
-            if name in referenced and name not in _BUILTIN_NAMES
+            name for name in self._variables if name in referenced and name not in _BUILTIN_NAMES
         )
         ext_fn_names = sorted(self._external_fns.keys())
 
@@ -689,6 +731,7 @@ class MontyInterpreter:
 # MontyCodeValidator -- standalone validation utility
 # ---------------------------------------------------------------------------
 
+
 class MontyCodeValidator:
     """
     Use Monty's Ruff-based parser and optional type checker to validate
@@ -754,6 +797,7 @@ class MontyCodeValidator:
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _is_serializable(value: Any) -> bool:
     """Check whether *value* can survive JSON round-tripping."""
     if value is None or isinstance(value, (bool, int, float, str)):
@@ -761,16 +805,14 @@ def _is_serializable(value: Any) -> bool:
     if isinstance(value, (list, tuple)):
         return all(_is_serializable(v) for v in value)
     if isinstance(value, dict):
-        return all(
-            isinstance(k, str) and _is_serializable(v)
-            for k, v in value.items()
-        )
+        return all(isinstance(k, str) and _is_serializable(v) for k, v in value.items())
     return False
 
 
 # ---------------------------------------------------------------------------
 # Factory: create a MontyInterpreter pre-configured for RLM usage
 # ---------------------------------------------------------------------------
+
 
 def create_rlm_monty_interpreter(
     *,
