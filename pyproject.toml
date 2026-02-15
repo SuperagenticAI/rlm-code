@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "rlm-code"
-version = "0.1.5"
+version = "0.1.0"
 description = "RLM Code: Research Playground & Evaluation OS for Recursive Language Model Agentic Systems"
 readme = "README.md"
 license = "Apache-2.0"
