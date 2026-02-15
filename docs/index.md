@@ -97,6 +97,14 @@ Risk assessment with **40+ rules**, 6 approval modes, and full audit logging to 
 
 ---
 
+## 🖼️ RLM Research Lab
+
+<p align="center">
+  <img src="https://github.com/SuperagenticAI/rlm-code/raw/main/assets/rlm-lab.png" alt="RLM Research Lab" style="max-width: 100%; border-radius: 12px;">
+</p>
+
+---
+
 ## 🚀 Quick Start
 
 <div class="rlm-quickstart" markdown>

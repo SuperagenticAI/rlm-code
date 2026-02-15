@@ -69,7 +69,7 @@ class PersistentShell:
         shell_base = Path(self.shell).name
         if shell_base == "zsh":
             rc_flags = ["--no-rcs", "--no-globalrcs"]
-        elif shell_base in ("bash", "sh"):
+        elif shell_base == "bash":
             rc_flags = ["--norc", "--noprofile"]
         else:
             rc_flags = []
@@ -114,10 +114,21 @@ class PersistentShell:
         wrapped = f'{command}\nprintf "{marker}:%s\\n" $?\n'
 
         with self._write_lock:
-            if self._proc.stdin is None:
-                raise RuntimeError("Shell stdin is unavailable.")
-            self._proc.stdin.write(wrapped)
-            self._proc.stdin.flush()
+            if self._proc.stdin is None or self._proc.poll() is not None:
+                return ShellResult(
+                    command=command,
+                    output="Shell process is not running.\n",
+                    exit_code=127,
+                )
+            try:
+                self._proc.stdin.write(wrapped)
+                self._proc.stdin.flush()
+            except (BrokenPipeError, OSError):
+                return ShellResult(
+                    command=command,
+                    output="Shell process pipe is closed.\n",
+                    exit_code=127,
+                )
 
         lines: list[str] = []
         exit_code = 1
