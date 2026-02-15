@@ -6,20 +6,18 @@
   </a>
 </p>
 
-<p align="center">
-  <a href="https://pypi.org/project/rlm-code/"><img alt="PyPI Version" src="https://img.shields.io/pypi/v/rlm-code"></a>
-  <a href="https://pypi.org/project/rlm-code/"><img alt="PyPI Python Versions" src="https://img.shields.io/pypi/pyversions/rlm-code"></a>
-  <a href="https://pypi.org/project/rlm-code/"><img alt="PyPI Downloads" src="https://img.shields.io/pypi/dm/rlm-code"></a>
-  <a href="https://pypi.org/project/rlm-code/"><img alt="PyPI Wheel" src="https://img.shields.io/pypi/wheel/rlm-code"></a>
-  <a href="LICENSE"><img alt="License" src="https://img.shields.io/pypi/l/rlm-code"></a>
-  <a href="https://github.com/SuperagenticAI/rlm-code/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/SuperagenticAI/rlm-code/actions/workflows/ci.yml/badge.svg"></a>
-  <a href="https://github.com/SuperagenticAI/rlm-code/actions/workflows/pre-commit.yml"><img alt="Pre-commit" src="https://github.com/SuperagenticAI/rlm-code/actions/workflows/pre-commit.yml/badge.svg"></a>
-  <a href="https://github.com/SuperagenticAI/rlm-code/actions/workflows/deploy-docs.yml"><img alt="Docs Deploy" src="https://github.com/SuperagenticAI/rlm-code/actions/workflows/deploy-docs.yml/badge.svg"></a>
-  <a href="https://github.com/SuperagenticAI/rlm-code/actions/workflows/release.yml"><img alt="Release" src="https://github.com/SuperagenticAI/rlm-code/actions/workflows/release.yml/badge.svg"></a>
-  <a href="https://github.com/SuperagenticAI/rlm-code/stargazers"><img alt="GitHub Stars" src="https://img.shields.io/github/stars/SuperagenticAI/rlm-code?style=social"></a>
-  <a href="https://github.com/SuperagenticAI/rlm-code/issues"><img alt="GitHub Issues" src="https://img.shields.io/github/issues/SuperagenticAI/rlm-code"></a>
-  <a href="https://github.com/SuperagenticAI/rlm-code/pulls"><img alt="GitHub Pull Requests" src="https://img.shields.io/github/issues-pr/SuperagenticAI/rlm-code"></a>
-</p>
+[![PyPI Version](https://img.shields.io/pypi/v/rlm-code.svg)](https://pypi.org/project/rlm-code/)
+[![Python Versions](https://img.shields.io/pypi/pyversions/rlm-code.svg)](https://pypi.org/project/rlm-code/)
+[![PyPI Wheel](https://img.shields.io/pypi/wheel/rlm-code.svg)](https://pypi.org/project/rlm-code/)
+[![License](https://img.shields.io/pypi/l/rlm-code.svg)](https://pypi.org/project/rlm-code/)
+[![CI](https://github.com/SuperagenticAI/rlm-code/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/SuperagenticAI/rlm-code/actions/workflows/ci.yml)
+[![Pre-commit](https://github.com/SuperagenticAI/rlm-code/actions/workflows/pre-commit.yml/badge.svg?branch=main)](https://github.com/SuperagenticAI/rlm-code/actions/workflows/pre-commit.yml)
+[![Docs Deploy](https://github.com/SuperagenticAI/rlm-code/actions/workflows/deploy-docs.yml/badge.svg?branch=main)](https://github.com/SuperagenticAI/rlm-code/actions/workflows/deploy-docs.yml)
+[![Release](https://github.com/SuperagenticAI/rlm-code/actions/workflows/release.yml/badge.svg?branch=main)](https://github.com/SuperagenticAI/rlm-code/actions/workflows/release.yml)
+[![Docs](https://img.shields.io/badge/docs-mkdocs-blue.svg)](https://superagenticai.github.io/rlm-code/)
+[![GitHub Stars](https://img.shields.io/github/stars/SuperagenticAI/rlm-code.svg)](https://github.com/SuperagenticAI/rlm-code/stargazers)
+[![GitHub Issues](https://img.shields.io/github/issues/SuperagenticAI/rlm-code.svg)](https://github.com/SuperagenticAI/rlm-code/issues)
+[![GitHub Pull Requests](https://img.shields.io/github/issues-pr/SuperagenticAI/rlm-code.svg)](https://github.com/SuperagenticAI/rlm-code/pulls)
 
 **Run LLM-powered agents in a REPL loop, benchmark them, and compare results.**
 
