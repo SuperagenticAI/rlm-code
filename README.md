@@ -2,13 +2,28 @@
 
 <p align="center">
   <a href="https://github.com/SuperagenticAI/rlm-code">
-    <img src="https://raw.githubusercontent.com/SuperagenticAI/rlm-code/main/assets/rlm-code-logo.png" alt="RLM Code logo" width="300">
+    <img src="https://github.com/SuperagenticAI/rlm-code/raw/main/assets/rlm-code-logo.png" alt="RLM Code logo" width="320">
   </a>
+</p>
+
+<p align="center">
+  <a href="https://pypi.org/project/rlm-code/"><img alt="PyPI Version" src="https://img.shields.io/pypi/v/rlm-code"></a>
+  <a href="https://pypi.org/project/rlm-code/"><img alt="PyPI Python Versions" src="https://img.shields.io/pypi/pyversions/rlm-code"></a>
+  <a href="https://pypi.org/project/rlm-code/"><img alt="PyPI Downloads" src="https://img.shields.io/pypi/dm/rlm-code"></a>
+  <a href="https://pypi.org/project/rlm-code/"><img alt="PyPI Wheel" src="https://img.shields.io/pypi/wheel/rlm-code"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/pypi/l/rlm-code"></a>
+  <a href="https://github.com/SuperagenticAI/rlm-code/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/SuperagenticAI/rlm-code/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/SuperagenticAI/rlm-code/actions/workflows/pre-commit.yml"><img alt="Pre-commit" src="https://github.com/SuperagenticAI/rlm-code/actions/workflows/pre-commit.yml/badge.svg"></a>
+  <a href="https://github.com/SuperagenticAI/rlm-code/actions/workflows/deploy-docs.yml"><img alt="Docs Deploy" src="https://github.com/SuperagenticAI/rlm-code/actions/workflows/deploy-docs.yml/badge.svg"></a>
+  <a href="https://github.com/SuperagenticAI/rlm-code/actions/workflows/release.yml"><img alt="Release" src="https://github.com/SuperagenticAI/rlm-code/actions/workflows/release.yml/badge.svg"></a>
+  <a href="https://github.com/SuperagenticAI/rlm-code/stargazers"><img alt="GitHub Stars" src="https://img.shields.io/github/stars/SuperagenticAI/rlm-code?style=social"></a>
+  <a href="https://github.com/SuperagenticAI/rlm-code/issues"><img alt="GitHub Issues" src="https://img.shields.io/github/issues/SuperagenticAI/rlm-code"></a>
+  <a href="https://github.com/SuperagenticAI/rlm-code/pulls"><img alt="GitHub Pull Requests" src="https://img.shields.io/github/issues-pr/SuperagenticAI/rlm-code"></a>
 </p>
 
 **Run LLM-powered agents in a REPL loop, benchmark them, and compare results.**
 
-RLM Code implements the [Recursive Language Models](https://arxiv.org/abs/2502.07503) (RLM) approach from the 2025 paper release. Instead of stuffing your entire document into the LLM's context window, RLM stores it as a Python variable and lets the LLM write code to analyze it — chunk by chunk, iteration by iteration. This is dramatically more token-efficient for large inputs.
+RLM Code implements the [Recursive Language Models](https://arxiv.org/abs/2502.07503) (RLM) approach from the 2025 paper release. Instead of stuffing your entire document into the LLM's context window, RLM stores it as a Python variable and lets the LLM write code to analyze it, chunk by chunk, iteration by iteration. This is dramatically more token-efficient for large inputs.
 
 RLM Code wraps this algorithm in an interactive terminal UI with built-in benchmarks, trajectory replay, and observability.
 
@@ -40,6 +55,10 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 pip install rlm-code[tui,llm-all]
 ```
 </details>
+
+<p align="center">
+  <img src="https://github.com/SuperagenticAI/rlm-code/raw/main/assets/rlm-lab.png" alt="RLM Research Lab view" width="980">
+</p>
 
 ## Quick Start
 
@@ -78,7 +97,7 @@ or for a free local model via [Ollama](https://ollama.com/):
 /connect ollama llama3.2
 ```
 
-> You need the matching API key in your environment (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`) or in a `.env` file in your project directory. Ollama needs no key — just a running Ollama server.
+> You need the matching API key in your environment (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`) or in a `.env` file in your project directory. Ollama needs no key, just a running Ollama server.
 
 Follow the interactive path with just `/connect` command instead: Check it worked:
 
@@ -126,7 +145,7 @@ After at least two benchmark runs, export a compare report:
 /rlm replay <run_id>
 ```
 
-Walk through the last run one step at a time — see what code the LLM wrote, what output it got, and what it did next.
+Walk through the last run one step at a time, see what code the LLM wrote, what output it got, and what it did next.
 
 ### 7. Use RLM Code as a coding agent (local/BYOK/ACP)
 
@@ -218,7 +237,7 @@ If a run is going out of hand:
 
 ## What You Can Do With It
 
-- **Analyze large documents**: Feed in a 500-page PDF and ask questions — the LLM reads it in chunks via code
+- **Analyze large documents**: Feed in a 500-page PDF and ask questions, then the LLM reads it in chunks via code
 - **Compare models**: Run the same benchmark with different providers and see who scores higher
 - **Compare paradigms**: Test Pure RLM vs CodeAct vs Traditional approaches on the same task
 - **Debug agent behavior**: Replay any run step-by-step to see exactly what the agent did

@@ -8,7 +8,7 @@ default_language_version:
 repos:
   # Ruff - Fast Python linter and formatter
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.4
+    rev: v0.15.1
     hooks:
       # Run the formatter only (no linting)
       - id: ruff-format
