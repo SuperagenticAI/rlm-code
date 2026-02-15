@@ -38,7 +38,7 @@ class HarnessRunResult:
 
 
 class HarnessRunner:
-    """Lightweight coding harness with OpenCode-style tool semantics."""
+    """Lightweight coding harness with tool-based semantics."""
 
     def __init__(
         self,

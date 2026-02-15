@@ -8,7 +8,7 @@ This guide covers how to install RLM Code, its optional dependencies, and how to
 
 | Requirement | Minimum | Recommended |
 |-------------|---------|-------------|
-| **Python** | 3.10 | 3.12+ |
+| **Python** | 3.11 | 3.12+ |
 | **OS** | Linux, macOS, Windows | macOS (Apple Silicon) or Linux |
 | **Memory** | 2 GB | 8 GB+ |
 | **Disk** | 200 MB | 1 GB+ (for traces and benchmark artifacts) |
@@ -28,7 +28,7 @@ brew install uv
 ```
 
 !!! tip "Why uv?"
-    `uv` is 10-100x faster than pip for dependency resolution. `uv tool install` creates an isolated environment for CLI tools — no virtualenv management needed. If you don't have Python 3.10+ installed, uv can install it for you:
+    `uv` is 10-100x faster than pip for dependency resolution. `uv tool install` creates an isolated environment for CLI tools — no virtualenv management needed. If you don't have Python 3.11+ installed, uv can install it for you:
 
     ```bash
     uv python install 3.12
@@ -156,6 +156,16 @@ The `dev` extra installs:
 
 ## Optional Dependencies
 
+### Runtime Backend Requirements
+
+Pick at least one secure backend before running serious experiments.
+
+| Backend | Install Requirement | Typical Use |
+|---|---|---|
+| `docker` | Install Docker Desktop / OrbStack / Colima | Recommended secure default |
+| `monty` | `pip install pydantic-monty` | Local secure pure-RLM backend without Docker |
+| `apple-container` | Install Apple's `container` CLI and verify `container system status` | macOS-only experimental runtime |
+
 ### Observability Integrations
 
 If you installed with `uv tool install`, use `uv tool install --with` to add extras, or reinstall with additional extras:
@@ -236,6 +246,34 @@ sudo apt-get install docker.io
 
 # Verify Docker is running
 docker info
+```
+
+### Monty Backend
+
+Monty is an optional secure backend for pure RLM execution:
+
+```bash
+pip install pydantic-monty
+```
+
+In TUI:
+
+```text
+/sandbox backend monty
+```
+
+### Apple Container Runtime (macOS, Experimental)
+
+```bash
+container --version
+container system status
+```
+
+In TUI:
+
+```text
+/sandbox apple on
+/sandbox use apple-container
 ```
 
 ### Documentation

@@ -4681,6 +4681,8 @@ dependencies = [
 [package.optional-dependencies]
 adk = [
     { name = "google-adk" },
+    { name = "google-genai" },
+    { name = "python-dotenv" },
 ]
 anthropic = [
     { name = "anthropic" },
@@ -4709,7 +4711,9 @@ docs = [
 frameworks = [
     { name = "deepagents" },
     { name = "google-adk" },
+    { name = "google-genai" },
     { name = "pydantic-ai" },
+    { name = "python-dotenv" },
 ]
 gemini = [
     { name = "google-genai" },
@@ -4767,6 +4771,8 @@ requires-dist = [
     { name = "dspy" },
     { name = "google-adk", marker = "extra == 'adk'" },
     { name = "google-adk", marker = "extra == 'frameworks'" },
+    { name = "google-genai", marker = "extra == 'adk'" },
+    { name = "google-genai", marker = "extra == 'frameworks'" },
     { name = "google-genai", marker = "extra == 'gemini'" },
     { name = "google-genai", marker = "extra == 'llm-all'" },
     { name = "httpx" },
@@ -4796,6 +4802,8 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'test'" },
     { name = "pytest-xdist", marker = "extra == 'dev'" },
     { name = "pytest-xdist", marker = "extra == 'test'" },
+    { name = "python-dotenv", marker = "extra == 'adk'" },
+    { name = "python-dotenv", marker = "extra == 'frameworks'" },
     { name = "pyyaml" },
     { name = "requests" },
     { name = "rich" },

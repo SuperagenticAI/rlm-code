@@ -2,8 +2,6 @@
 Cross-platform desktop notifications for the RLM Code TUI.
 
 Sends native OS notifications when long-running operations complete.
-Based on SuperQode's notifications.py pattern (macOS/Linux/Windows support,
-async version, sound mapping, convenience helpers).
 
 Fails silently on unsupported platforms.
 """

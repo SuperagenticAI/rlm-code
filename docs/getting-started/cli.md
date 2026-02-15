@@ -109,6 +109,7 @@ Shell shortcuts:
 | `/rlm frameworks` | Adapter readiness table |
 | `/rlm viz [run_id\|latest]` | Trajectory tree visualization |
 | `/rlm status [run_id]` | Run status |
+| `/rlm abort [run_id\|all]` | Cooperative cancel for active runs |
 | `/rlm replay <run_id>` | Replay stored trajectory |
 | `/rlm doctor [env=...] [--json]` | Environment diagnostics |
 | `/rlm chat <message> ...` | Persistent RLM chat sessions |
@@ -121,7 +122,7 @@ Shell shortcuts:
 | Command | Description |
 |---|---|
 | `/harness tools [mcp=on\|off]` | List harness tools (local + optional MCP) |
-| `/harness doctor` | OpenCode-parity style tool coverage report |
+| `/harness doctor` | Harness tool coverage report |
 | `/harness run <task> [steps=N] [mcp=on\|off] [tools=name[,name2]]` | Run tool-driven coding loop |
 
 ### Sandbox

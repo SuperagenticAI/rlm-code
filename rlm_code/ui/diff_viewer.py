@@ -4,10 +4,6 @@ Split-pane diff viewer for the RLM Code TUI.
 Renders diffs in side-by-side (split) or unified mode with line numbers,
 color-coded additions/deletions, character-level highlighting, and
 hatch patterns for missing lines.
-
-Based on Toad's diff_view.py (character-level diff, hatch patterns, edge
-indicators, split/unified toggle, async diff) and SuperQode's diff_view.py
-(three modes, file status icons, compact indicator bars).
 """
 
 from __future__ import annotations
@@ -72,7 +68,7 @@ LINE_COLORS: dict[LineType, tuple[str, str]] = {
     LineType.EMPTY: (PALETTE.text_disabled, PALETTE.bg_void),
 }
 
-# Edge indicator characters (from Toad's diff_view).
+# Edge indicator characters.
 EDGE_CHARS: dict[LineType, str] = {
     LineType.CONTEXT: " ",
     LineType.ADDED: "+",
@@ -82,7 +78,7 @@ EDGE_CHARS: dict[LineType, str] = {
     LineType.EMPTY: " ",
 }
 
-# Hatch fill character for missing lines in split view (from Toad).
+# Hatch fill character for missing lines in split view.
 HATCH_CHAR = "\u2572"  # ╲
 
 
@@ -101,7 +97,7 @@ def _highlight_char_diff(old: str, new: str) -> tuple[Text, Text]:
     """Highlight character-level differences between two lines.
 
     Returns styled Rich Text objects for the old and new lines with
-    changed characters highlighted (from Toad's _highlight_diff_lines).
+    changed characters highlighted.
     """
     fg_rm, bg_rm = LINE_COLORS[LineType.REMOVED]
     fg_add, bg_add = LINE_COLORS[LineType.ADDED]
@@ -334,7 +330,7 @@ class DiffRenderable:
         self.stats = _compute_stats(self.diff_lines)
 
     def __rich_console__(self, console: Console, options: ConsoleOptions) -> RenderResult:
-        # Auto-select mode based on width (from SuperQode's on_resize logic).
+        # Auto-select mode based on width.
         effective_mode = self.mode
         if effective_mode == DiffMode.SPLIT and options.max_width < 80:
             effective_mode = DiffMode.UNIFIED
@@ -510,7 +506,7 @@ class DiffRenderable:
         )
 
     def _render_compact(self) -> RenderResult:
-        """Render as a compact single-line indicator (from SuperQode's diff_indicator)."""
+        """Render as a compact single-line indicator."""
         yield self._compact_indicator()
 
     def _compact_indicator(self, bar_width: int = 20) -> Text:
@@ -554,7 +550,7 @@ class DiffRenderable:
 
 
 # ---------------------------------------------------------------------------
-# Multi-file diff support (from SuperQode's DiffViewer pattern)
+# Multi-file diff support.
 # ---------------------------------------------------------------------------
 
 

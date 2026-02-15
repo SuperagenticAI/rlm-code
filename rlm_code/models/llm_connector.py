@@ -542,7 +542,7 @@ class LLMConnector:
         """
         Return curated model list for a provider.
 
-        Prefers SuperQode-aligned model catalog, falls back to registry examples.
+        Prefers curated model catalog, falls back to registry examples.
         """
         provider = self.provider_registry.get(provider_name)
         if provider is None:
@@ -846,7 +846,7 @@ class LLMConnector:
         """
         Generate response via local OpenCode CLI.
 
-        This mirrors SuperQode's `opencode run` path for keyless/OpenCode-managed auth.
+        This uses the local `opencode run` path for keyless/OpenCode-managed auth.
         """
         full_prompt = self._build_prompt_with_context(prompt, system_prompt, context)
         command = ["opencode", "run", "--format", "json"]

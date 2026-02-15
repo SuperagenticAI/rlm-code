@@ -2579,7 +2579,7 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                     event.stop()
                 return
 
-            # History navigation (from Toad/SuperQode) when suggestions are hidden.
+            # History navigation when suggestions are hidden.
             if event.key == "up":
                 prev = self._prompt_helper.on_history_up(chat_input.value)
                 if prev is not None:
@@ -2623,7 +2623,7 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 return
 
             # Chat input path.
-            # Shell shortcuts: !cmd (Toad-style) and >cmd (SuperQode-style)
+            # Shell shortcuts: !cmd and >cmd.
             # run in chat area so researchers see output inline.
             if value.startswith("!"):
                 cmd = value[1:].strip()
@@ -2716,6 +2716,13 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 else:
                     # No args — just switch to Shell view.
                     self.action_view_shell()
+            elif cmd == "/rlm" and args and args[0].lower() == "abort":
+                if self._handle_rlm_abort_fast(args[1:]):
+                    return
+                if self._slash_handler is not None:
+                    self._set_command_running(command)
+                    self._delegate_to_full_slash_handler_async(command)
+                    return
             else:
                 if self._slash_handler is not None:
                     self._set_command_running(command)
@@ -2728,6 +2735,54 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                     )
                 else:
                     self._chat_log().write(f"[yellow]Unknown command {cmd}. Use /help[/yellow]")
+
+        def _handle_rlm_abort_fast(self, args: list[str]) -> bool:
+            """
+            Handle `/rlm abort` locally so cancellation is not blocked by the slash bridge lock.
+
+            Returns:
+                True when the command was handled locally.
+            """
+            if self._slash_handler is None:
+                return False
+
+            runner = getattr(self._slash_handler, "rlm_runner", None)
+            if runner is None or not hasattr(runner, "request_cancel"):
+                return False
+
+            run_id = args[0].strip() if args else ""
+            if run_id.lower() in {"", "all", "*"}:
+                run_id = ""
+
+            try:
+                payload = runner.request_cancel(run_id or None)
+            except Exception as exc:
+                self._chat_log().write(f"[red]Cancel request failed:[/red] {exc}")
+                return True
+
+            active_runs = payload.get("active_runs") or []
+            pending = payload.get("pending_run_cancels") or []
+
+            if run_id:
+                self._chat_log().write(
+                    f"[yellow]Requested cancellation for run '{run_id}'.[/yellow]"
+                )
+            else:
+                self._chat_log().write("[yellow]Requested cancellation for all active runs.[/yellow]")
+
+            if active_runs:
+                joined = ", ".join(str(item) for item in active_runs)
+                self._chat_log().write(f"[dim]Active runs:[/dim] {joined}")
+            else:
+                self._chat_log().write("[dim]No active runs right now.[/dim]")
+
+            if pending:
+                joined = ", ".join(str(item) for item in pending)
+                self._chat_log().write(
+                    f"[dim]Pending run-specific cancellations:[/dim] {joined}"
+                )
+
+            return True
 
         def _show_help(self) -> None:
             title = render_gradient_text("Commands", PURPLE_GRADIENT)
@@ -2752,8 +2807,8 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 f"  {ICONS['arrow_right']} /copy             Copy last response",
                 f"  {ICONS['shell']} /shell            Open Shell tab (PTY terminal)",
                 f"  {ICONS['shell']} /shell <cmd>      Run command in Shell tab",
-                f"  {ICONS['shell']} !<cmd>            Run inline in chat (Toad-style)",
-                f"  {ICONS['shell']} ><cmd>            Run inline in chat (SuperQode-style)",
+                f"  {ICONS['shell']} !<cmd>            Run inline in chat (shortcut !)",
+                f"  {ICONS['shell']} ><cmd>            Run inline in chat (shortcut >)",
                 f"  {ICONS['error']} /exit             Quit",
                 "",
             ]
@@ -2789,12 +2844,13 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 '  /rlm run "task" env=generic framework=dspy-rlm',
                 '  /rlm run "task" env=generic framework=google-adk',
                 "",
-                "[bold]4b) Run coding harness (OpenCode-style tool loop)[/bold]",
+                "[bold]4b) Run coding harness (tool-loop workflow)[/bold]",
                 "  /harness tools",
                 '  /harness run "task" mcp=on',
                 "",
                 "[bold]5) Inspect outcomes[/bold]",
                 "  /rlm status",
+                "  /rlm abort all",
                 "  /rlm replay <run_id>",
                 "  /rlm bench list",
                 "",
@@ -3440,7 +3496,7 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
         def _run_inline_shell(self, command: str) -> None:
             """Run a shell command and display output inline in the chat log.
 
-            Triggered by ! (Toad-style) or > (SuperQode-style) prefixes.
+            Triggered by ! or > prefixes.
             Shows the command, live output, and exit status directly in chat.
             """
             # Show command header in chat.

@@ -1671,7 +1671,7 @@ Your AI-powered DSPy development assistant. Build, optimize, and learn DSPy with
             return
 
     def _handle_general_query(self, user_input: str):
-        """Handle general queries by using LLM with rich context (Claude Code style)."""
+        """Handle general queries by using LLM with rich context."""
         # Always use LLM for responses - no static templates
         if not self.llm_connector.current_model:
             show_error_message("No model connected!")
@@ -1692,8 +1692,8 @@ Your AI-powered DSPy development assistant. Build, optimize, and learn DSPy with
         reference = self.reference_loader.get_relevant_examples("general")
         context = self._build_context(user_input, reference)
 
-        # Build conversational prompt (Claude Code style)
-        system_prompt = """You are an expert RLM Code assistant, similar to Claude Code.
+        # Build conversational prompt.
+        system_prompt = """You are an expert RLM Code assistant.
 Your job is to help users with agent-system development by:
 - Understanding their requests
 - Providing code generation when appropriate
@@ -2070,7 +2070,7 @@ Be conversational, helpful, and use the context to provide accurate information.
                 reference = self.reference_loader.get_relevant_examples("create_signature")
 
                 # Build comprehensive system prompt with framework context
-                system_prompt = """You are an expert code generator, similar to Claude Code or Gemini CLI.
+                system_prompt = """You are an expert code generator, similar to modern coding CLIs.
 Your job is to generate high-quality, production-ready signature/interface code based on the user's request.
 
 You have access to:
@@ -2102,12 +2102,12 @@ Generate COMPLETE, EXECUTABLE code that matches the user's ACTUAL task, using fi
                 # This is CRITICAL - provides real DSPy examples from user's installed version
                 context = self._build_context(user_input, reference)
 
-                # Build enhanced user prompt with rich framework context (Claude Code style)
+                # Build enhanced user prompt with rich framework context.
                 enhanced_prompt = f"""Generate COMPLETE, EXECUTABLE code for this request:
 
 {user_input}
 
-CRITICAL INSTRUCTIONS (Claude Code Style):
+CRITICAL INSTRUCTIONS:
 - You are an expert framework-aware code generator with access to comprehensive context
 - Use REAL framework source code examples as your PRIMARY reference (from user's installed version)
 - Template examples are provided as REFERENCE/GUIDANCE only - adapt them, don't copy them
@@ -2211,8 +2211,8 @@ Generate code that ACTUALLY solves the user's specific problem using the request
                 # Load framework reference for modules
                 reference = self.reference_loader.get_relevant_examples("create_module")
 
-                # Build comprehensive system prompt like Claude Code/Gemini CLI
-                system_prompt = """You are an expert code generator, similar to Claude Code or Gemini CLI.
+                # Build comprehensive system prompt.
+                system_prompt = """You are an expert code generator, similar to modern coding CLIs.
 Your job is to generate high-quality, production-ready module/program code based on the user's request.
 
 You have access to:
@@ -2235,12 +2235,12 @@ CRITICAL RULES - YOU MUST FOLLOW THESE EXACTLY:
                 # Build comprehensive context for generation
                 context = self._build_context(user_input, reference)
 
-                # Build enhanced user prompt with rich framework context (Claude Code style)
+                # Build enhanced user prompt with rich framework context.
                 enhanced_prompt = f"""Generate a COMPLETE, EXECUTABLE Python program based on this request:
 
 {user_input}
 
-CRITICAL INSTRUCTIONS (Claude Code Style):
+CRITICAL INSTRUCTIONS:
 - You are an expert framework-aware code generator with access to comprehensive context
 - Use REAL framework source code examples as your PRIMARY reference (from user's installed version)
 - Template examples are provided as REFERENCE/GUIDANCE only - adapt them, don't copy them

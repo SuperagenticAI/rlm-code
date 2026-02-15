@@ -23,6 +23,7 @@ class _FakeRunner:
         self.last_compare_kwargs = {}
         self.last_report_kwargs = {}
         self.last_viz_kwargs = {}
+        self.last_cancel_request = None
         self.framework_registry = SimpleNamespace(
             doctor=lambda: [
                 {
@@ -88,6 +89,7 @@ class _FakeRunner:
             "path": "/tmp/run_latest.jsonl",
             "steps": 2,
             "completed": True,
+            "cancelled": False,
             "total_reward": 1.2,
             "environment": "dspy",
             "task": "demo task",
@@ -272,6 +274,7 @@ class _FakeRunner:
             completed_cases=1,
             avg_reward=0.9,
             avg_steps=1.0,
+            cancelled=False,
             case_results=[
                 {
                     "case_id": "sig_essay",
@@ -283,6 +286,14 @@ class _FakeRunner:
                 }
             ],
         )
+
+    def request_cancel(self, run_id: str | None = None):
+        self.last_cancel_request = run_id
+        return {
+            "cancel_all": run_id is None,
+            "active_runs": ["run_test"],
+            "pending_run_cancels": [] if run_id is None else [run_id],
+        }
 
     def compare_benchmarks(
         self,
@@ -473,6 +484,12 @@ def test_rlm_status_and_replay_do_not_fail():
     handler = _build_handler()
     handler.cmd_rlm(["status"])
     handler.cmd_rlm(["replay", "run_latest"])
+
+
+def test_rlm_abort_requests_cancellation():
+    handler = _build_handler()
+    handler.cmd_rlm(["abort", "run_123"])
+    assert handler.rlm_runner.last_cancel_request == "run_123"
 
 
 def test_rlm_viz_updates_context_and_forwards_options():

@@ -1,8 +1,8 @@
 """
-SuperQode-aligned provider model catalog.
+Curated provider model catalog.
 
-This keeps RLM Code's interactive model pickers aligned with the curated
-provider/model lists used by SuperQode.
+This keeps RLM Code's interactive model pickers aligned with maintained,
+curated provider/model lists.
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Final
 
 # Provider IDs in this catalog are DSPy provider IDs.
-# `gemini` maps to SuperQode's `google` provider list.
+# `gemini` maps to the `google` provider list.
 SUPERQODE_MODEL_CATALOG: Final[dict[str, list[str]]] = {
     "anthropic": [
         "claude-opus-4-6",
@@ -157,5 +157,5 @@ SUPERQODE_MODEL_CATALOG: Final[dict[str, list[str]]] = {
 
 
 def get_superqode_models(provider_id: str) -> list[str]:
-    """Return curated SuperQode model list for a provider."""
+    """Return curated model list for a provider."""
     return list(SUPERQODE_MODEL_CATALOG.get(provider_id, []))

@@ -40,7 +40,7 @@ class RLMEnvironment(Protocol):
 
 ## PureRLMEnvironment
 
-The paper-compliant RLM environment implementing exact semantics from "Recursive Language Models" (Zhang, Kraska, Khattab, 2025).
+The paper-compliant RLM environment implementing exact semantics from "Recursive Language Models" (2025).
 
 ```python
 from rlm_code.rlm.pure_rlm_environment import PureRLMEnvironment, PureRLMConfig

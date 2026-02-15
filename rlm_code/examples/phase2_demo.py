@@ -282,7 +282,7 @@ def demo_deep_recursion():
     print("=" * 60)
 
     print("""
-The RLM paper (Zhang, Kraska, Khattab, 2025) has a limitation:
+The 2025 RLM paper has a limitation:
 "Recursion depth is currently limited to 1"
 
 RLM Code supports deeper recursion (max_depth=2+), enabling:

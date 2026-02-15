@@ -3,10 +3,6 @@ Agent collaboration / pipeline view for the RLM Code TUI.
 
 Visualizes multi-step RLM runs, delegation chains, and agent state
 as a Rich renderable that can be written into a RichLog.
-
-Based on SuperQode's agent_collab.py (predefined agent roles with icons/colors,
-animated active state, issue tracking, ASCII art boxes) and Toad's conversation
-widget patterns.
 """
 
 from __future__ import annotations
@@ -43,7 +39,7 @@ STATE_SYMBOLS: dict[AgentState, tuple[str, str]] = {
 }
 
 
-# Predefined agent roles (from SuperQode).
+# Predefined agent roles.
 @dataclass(frozen=True)
 class AgentRole:
     """A predefined role with icon and color."""

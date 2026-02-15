@@ -8,7 +8,7 @@ This guide walks you through launching RLM Code, connecting to an LLM, running y
 
 Before you begin, make sure you have:
 
-- [x] Python 3.10+ installed
+- [x] Python 3.11+ installed
 - [x] RLM Code installed (`uv tool install "rlm-code[tui,llm-all]"`)
 - [x] At least one LLM API key (OpenAI, Anthropic, or Gemini) or a local Ollama instance
 
@@ -162,6 +162,30 @@ You can load benchmarks from YAML, JSON, or JSONL files:
 
 Supported formats include explicit preset mappings, Pydantic-style dataset cases, Google ADK eval sets, and generic record datasets.
 
+### Safety and Budget Guardrails (Recommended)
+
+Before larger runs, keep strict limits:
+
+```text
+/rlm run "small scoped task" steps=4 timeout=30 budget=60
+```
+
+- `steps` caps planner iterations
+- `timeout` caps per-action execution time
+- `budget` caps total run time
+
+If a run is going out of control, cancel it:
+
+```text
+/rlm abort all
+```
+
+Or cancel one run by id:
+
+```text
+/rlm abort <run_id>
+```
+
 ---
 
 ## Step 5: Inspect Benchmark Results
@@ -248,6 +272,16 @@ RLM Code has 50+ slash commands. Here are the most useful ones to explore next:
 /harness run "fix failing tests" steps=8 mcp=on
 ```
 
+With ACP:
+
+```
+/connect acp
+/harness run "implement feature with tests" steps=8 mcp=on
+```
+
+In Local/BYOK modes, likely coding prompts can auto-route to harness.
+In ACP mode, auto-routing is intentionally disabled; use `/harness run ...` directly.
+
 ### File and Layout Commands
 
 ```
@@ -258,6 +292,8 @@ RLM Code has 50+ slash commands. Here are the most useful ones to explore next:
 /pane files show   # Show the files panel
 /focus chat        # Focus the chat input
 ```
+
+For the complete researcher command handbook, see [Researcher Onboarding](researcher-onboarding.md).
 
 ### Shell Access
 

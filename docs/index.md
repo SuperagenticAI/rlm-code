@@ -7,12 +7,28 @@
 <p class="rlm-tagline">Research Playground & Evaluation OS for Recursive Language Model Agentic Systems</p>
 
 <span class="rlm-badge rlm-badge--purple">v0.1.5</span>
-<span class="rlm-badge rlm-badge--green">Python 3.10+</span>
+<span class="rlm-badge rlm-badge--green">Python 3.11+</span>
 <span class="rlm-badge rlm-badge--blue">MIT License</span>
 
 </div>
 
 **RLM Code** is the definitive research operating system for building, running, evaluating, comparing, and optimizing LLM-based coding agents. It supports multiple agent paradigms including **Pure RLM**, **CodeAct**, and **Traditional** in a single unified platform with built-in safety, observability, and reproducibility.
+
+---
+
+## 🎯 What Problem RLM Code Solves
+
+RLM Code is designed for cases where standard chat-style prompting breaks down on large inputs.
+
+Core problems it targets:
+
+- **Long-context handling**: avoid forcing huge documents into one prompt window.
+- **Programmable context access**: treat context as data that can be inspected, filtered, chunked, and aggregated with code.
+- **Controlled recursion**: allow structured sub-calls through `llm_query()` and `llm_query_batched()` from inside REPL code.
+- **Reproducible evaluation**: compare execution patterns (`native`, `harness`, `direct-llm`) under the same benchmark tasks.
+- **Safety + operations**: run in secure sandbox backends with observability, replay, and benchmark reports.
+
+In short, it is a research platform for testing when **symbolic/programmatic context handling** is better than plain prompt expansion.
 
 ---
 
@@ -101,6 +117,13 @@ rlm-code
 
 ```
 /rlm bench preset=dspy_quick
+```
+
+### Keep runs bounded
+
+```
+/rlm run "small scoped task" steps=4 timeout=30 budget=60
+/rlm abort all
 ```
 
 ### Compare benchmark output

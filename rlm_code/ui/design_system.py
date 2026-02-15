@@ -4,10 +4,6 @@ Centralized design system for the RLM Code TUI.
 All colors, gradients, icons, semantic tokens, borders, themes, and animation
 frames live here so that tui_app.py and every widget module reference a single
 source of truth.
-
-Based on SuperQode's design_system.py pattern (themes, gradient system, icon
-registry, border helpers, render utilities, animation frames) and Toad's visual
-styling conventions.
 """
 
 from __future__ import annotations

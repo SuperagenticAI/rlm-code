@@ -6,7 +6,7 @@ Welcome to **RLM Code**, the Research Playground and Evaluation OS for Recursive
 
 ## 🧪 What is RLM Code?
 
-RLM Code implements the **Recursive Language Model** paradigm from the research paper *"Recursive Language Models"* (Zhang, Kraska, Khattab, 2025). It extends the paper's concepts with:
+RLM Code implements the **Recursive Language Model** paradigm from the 2025 *"Recursive Language Models"* paper. It extends the paper's concepts with:
 
 - 🧠 **Context-as-variable**: Context is stored as a REPL variable rather than in the token window, enabling unbounded output and token-efficient processing
 - 🔁 **Deep recursion**: Support for recursion depth > 1, exceeding the paper's original limitation
@@ -16,12 +16,26 @@ RLM Code implements the **Recursive Language Model** paradigm from the research 
 
 ---
 
+## 🎯 Problem Focus
+
+RLM Code is optimized for research workflows where:
+
+- Context is too large to fit comfortably in one prompt.
+- You need programmatic inspection and decomposition instead of full-context prompt injection.
+- You want to compare recursive symbolic execution against harness-style and direct baselines under the same benchmark suite.
+
+For detailed mode behavior and neutral tradeoff guidance, see [Execution Patterns](../core/execution-patterns.md).
+
+---
+
 ## 📚 Where to Go Next
 
 | Guide | Description |
 |-------|-------------|
+| [🧭 Start Here (Simple)](start-here.md) | Plain-language onboarding: what this is, what to install, and safe first run |
 | [📦 Installation](installation.md) | System requirements, package installation, optional dependencies, and verification |
 | [⚡ Quick Start](quickstart.md) | Launch the TUI, connect a model, run your first benchmark, explore the Research tab |
+| [🧑‍🔬 Researcher Onboarding](researcher-onboarding.md) | Researcher-first workflows and complete command handbook |
 | [💻 CLI Reference](cli.md) | Complete reference for the entry point and all 50+ slash commands |
 | [⚙️ Configuration](configuration.md) | Full `rlm_config.yaml` schema, environment variables, and ConfigManager API |
 

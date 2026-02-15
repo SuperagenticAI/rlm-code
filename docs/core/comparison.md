@@ -5,6 +5,8 @@
 
 The paradigm comparison module enables side-by-side empirical comparison of different RLM approaches on the same task. It directly addresses the debate around whether RLM provides real benefits over simpler approaches by measuring token usage, cost, execution time, and accuracy.
 
+For concept-level guidance on when to use each execution style, see [Execution Patterns](execution-patterns.md).
+
 ---
 
 ## Overview

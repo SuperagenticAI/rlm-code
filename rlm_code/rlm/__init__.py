@@ -2,7 +2,7 @@
 RLM runtime for RLM Code CLI.
 
 This module provides the core RLM (Recursive Language Model) runtime,
-implementing the paradigm from "Recursive Language Models" (Zhang, Kraska, Khattab, 2025).
+implementing the paradigm from "Recursive Language Models" (2025).
 
 Key components:
 - PureRLMEnvironment: Paper-compliant RLM with context-as-variable

@@ -36,6 +36,7 @@ class RLMBenchmarkResult:
     completed_cases: int
     avg_reward: float
     avg_steps: float
+    cancelled: bool
     case_results: list[dict[str, Any]]
 
 
@@ -180,7 +181,12 @@ class BenchmarkManagerMixin:
             cases = cases[: max(1, int(limit))]
 
         case_results: list[dict[str, Any]] = []
+        cancelled = False
         for case in cases:
+            is_cancel_requested = getattr(self, "_is_cancel_requested", None)
+            if callable(is_cancel_requested) and is_cancel_requested():
+                cancelled = True
+                break
             case_started = self._utc_now()
             case_started_monotonic = time.perf_counter()
             chosen_env = (environment or case.environment).strip().lower()
@@ -237,14 +243,19 @@ class BenchmarkManagerMixin:
                         "error": str(exc),
                     }
                 )
+            is_cancel_requested = getattr(self, "_is_cancel_requested", None)
+            if callable(is_cancel_requested) and is_cancel_requested():
+                cancelled = True
+                break
 
         finished_at = self._utc_now()
-        total_cases = len(case_results)
+        total_cases = len(cases)
+        attempted_cases = len(case_results)
         completed_cases = len([entry for entry in case_results if bool(entry.get("completed"))])
         total_rewards = [float(entry.get("total_reward", 0.0)) for entry in case_results]
         total_steps = [int(entry.get("steps", 0)) for entry in case_results]
-        avg_reward = (sum(total_rewards) / total_cases) if total_cases else 0.0
-        avg_steps = (sum(total_steps) / total_cases) if total_cases else 0.0
+        avg_reward = (sum(total_rewards) / attempted_cases) if attempted_cases else 0.0
+        avg_steps = (sum(total_steps) / attempted_cases) if attempted_cases else 0.0
         durations = [float(entry.get("duration_seconds", 0.0) or 0.0) for entry in case_results]
         duration_stats = self._summarize_distribution(durations)
         usage_totals = self._aggregate_usage_totals(case_results)
@@ -260,11 +271,13 @@ class BenchmarkManagerMixin:
             "finished_at": finished_at,
             "duration_seconds": round(max(0.0, time.perf_counter() - started_monotonic), 4),
             "total_cases": total_cases,
+            "attempted_cases": attempted_cases,
             "completed_cases": completed_cases,
             "avg_reward": round(avg_reward, 4),
             "avg_steps": round(avg_steps, 2),
             "latency_seconds": duration_stats,
             "usage_totals": usage_totals,
+            "cancelled": bool(cancelled),
             "case_results": case_results,
         }
         summary_path = self._benchmarks_dir() / f"{benchmark_id}.json"
@@ -282,6 +295,7 @@ class BenchmarkManagerMixin:
             completed_cases=completed_cases,
             avg_reward=round(avg_reward, 4),
             avg_steps=round(avg_steps, 2),
+            cancelled=bool(cancelled),
             case_results=case_results,
         )
 

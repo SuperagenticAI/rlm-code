@@ -6,8 +6,7 @@ Enables side-by-side comparison of different RLM approaches:
 - CodeAct style (context-in-tokens)
 - Traditional coding agent (orchestrator-managed subagents)
 
-This directly addresses the X thread debate: "Is RLM just grep in a subagent?"
-by providing empirical data on token usage, cost, and accuracy.
+This provides empirical data on token usage, cost, and accuracy across paradigms.
 """
 
 from __future__ import annotations
@@ -234,7 +233,7 @@ class ParadigmComparator:
     """
     Runs side-by-side comparison of different RLM paradigms.
 
-    This empirically tests the X thread debate by measuring:
+    This empirically tests paradigm differences by measuring:
     - Token usage (context vs total)
     - Cost
     - Execution time

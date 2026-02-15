@@ -4,10 +4,6 @@ PTY-based terminal widget for the RLM Code TUI.
 Provides a real pseudo-terminal with ANSI color support, cursor
 handling, and proper input routing. Falls back to the marker-based
 PersistentShell when PTY is unavailable.
-
-Based on Toad's terminal.py (async subprocess, ANSI state, LRU cache, alternate
-screen buffer, double-tap escape) and SuperQode's pty_shell.py (ShellManager,
-key->sequence mapping, force color env vars, line buffering).
 """
 
 from __future__ import annotations
@@ -83,7 +79,7 @@ _SGR_BG_MAP: dict[int, str] = {
     107: "#eeeeec",
 }
 
-# Key event to terminal escape sequence mapping (from SuperQode).
+# Key event to terminal escape sequence mapping.
 KEY_SEQUENCES: dict[str, str] = {
     "enter": "\r",
     "tab": "\t",
@@ -234,7 +230,7 @@ class PTYProcess:
             env = os.environ.copy()
             env["TERM"] = "xterm-256color"
             env["COLORTERM"] = "truecolor"
-            # Force color support (from Toad's command_pane.py).
+            # Force color support.
             env["FORCE_COLOR"] = "1"
             env["CLICOLOR"] = "1"
             env["RLM_CODE"] = "1"
@@ -253,7 +249,7 @@ class PTYProcess:
             self._pid = pid
             self._alive = True
 
-            # Set non-blocking reads on master (from Toad).
+            # Set non-blocking reads on master.
             import fcntl as _fcntl
 
             flags = _fcntl.fcntl(master_fd, _fcntl.F_GETFL)
@@ -357,7 +353,7 @@ class PTYProcess:
 
 
 # ---------------------------------------------------------------------------
-# Shell Manager (from SuperQode's pty_shell.py pattern)
+# Shell Manager
 # ---------------------------------------------------------------------------
 
 
@@ -423,7 +419,7 @@ def is_pty_available() -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Textual Terminal Widget (Toad-style interactive PTY in the Shell tab)
+# Textual terminal widget for interactive PTY in the Shell tab.
 # ---------------------------------------------------------------------------
 
 try:
@@ -447,7 +443,7 @@ if _HAS_TEXTUAL:
         Spawns a real shell via PTY, streams output with ANSI colors into a
         RichLog, and forwards all keyboard input directly to the PTY.
 
-        Features (from Toad + SuperQode):
+        Features:
         - Real PTY with ANSI color rendering
         - Arrow keys, Ctrl sequences, tab completion work natively
         - Double-tap Escape to blur (return focus to parent)

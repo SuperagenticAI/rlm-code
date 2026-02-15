@@ -3,7 +3,7 @@
 Pure RLM Demo - Demonstrates the paper-compliant RLM paradigm.
 
 This example shows how RLM Code implements the exact semantics from:
-"Recursive Language Models" (Zhang, Kraska, Khattab, 2025)
+"Recursive Language Models" (2025)
 
 Key features demonstrated:
 1. Context stored as variable (not in token window)

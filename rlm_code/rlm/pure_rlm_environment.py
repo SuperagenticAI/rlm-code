@@ -2,7 +2,7 @@
 Pure RLM Environment implementing the exact paper semantics.
 
 This environment implements the Recursive Language Model paradigm from:
-"Recursive Language Models" (Zhang, Kraska, Khattab, 2025)
+"Recursive Language Models" (2025)
 
 Key differences from traditional coding agents:
 1. Context stored as REPL variable, not in token window

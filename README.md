@@ -2,7 +2,7 @@
 
 **Run LLM-powered agents in a REPL loop, benchmark them, and compare results.**
 
-RLM Code implements the [Recursive Language Models](https://arxiv.org/abs/2502.07503) (RLM) paper by Zhang, Kraska & Khattab. Instead of stuffing your entire document into the LLM's context window, RLM stores it as a Python variable and lets the LLM write code to analyze it — chunk by chunk, iteration by iteration. This is dramatically more token-efficient for large inputs.
+RLM Code implements the [Recursive Language Models](https://arxiv.org/abs/2502.07503) (RLM) approach from the 2025 paper release. Instead of stuffing your entire document into the LLM's context window, RLM stores it as a Python variable and lets the LLM write code to analyze it — chunk by chunk, iteration by iteration. This is dramatically more token-efficient for large inputs.
 
 RLM Code wraps this algorithm in an interactive terminal UI with built-in benchmarks, trajectory replay, and observability.
 
@@ -13,6 +13,13 @@ uv tool install "rlm-code[tui,llm-all]"
 ```
 
 This installs `rlm-code` as a globally available command with its own isolated environment. You get the TUI and all LLM provider clients (OpenAI, Anthropic, Gemini).
+
+Requirements:
+
+- Python 3.11+
+- `uv` (recommended) or `pip`
+- one model route (BYOK API key or local server like Ollama)
+- one secure execution backend (Docker recommended; Monty optional)
 
 Don't have uv? Install it first:
 
@@ -115,6 +122,27 @@ After at least two benchmark runs, export a compare report:
 
 Walk through the last run one step at a time — see what code the LLM wrote, what output it got, and what it did next.
 
+### 7. Use RLM Code as a coding agent (local/BYOK/ACP)
+
+RLM Code can also be used as a coding-agent harness in the TUI:
+
+```text
+/harness tools
+/harness run "fix failing tests and add regression test" steps=8 mcp=on
+```
+
+ACP is supported too:
+
+```text
+/connect acp
+/harness run "implement feature X with tests" steps=8 mcp=on
+```
+
+Notes:
+
+- In Local/BYOK connection modes, likely coding prompts in chat can auto-route to harness.
+- In ACP mode, auto-routing is intentionally off; use `/harness run ...` explicitly.
+
 ## How the RLM Loop Works
 
 Traditional LLM usage: paste your document into the prompt, ask a question, hope the model doesn't lose details in the middle.
@@ -129,6 +157,21 @@ RLM approach:
 
 This means the LLM can handle documents much larger than its context window, because it reads them in chunks through code rather than all at once through the prompt.
 
+## What This Is (and Is Not)
+
+RLM Code is:
+
+- a research playground for recursive/model-assisted coding workflows
+- a benchmarking and replay tool for reproducible experiments
+
+RLM Code is not:
+
+- a no-config consumer chat app
+- guaranteed cheap (recursive runs can be expensive)
+- safe to run with unrestricted execution settings
+
+Use secure backend defaults (`/sandbox profile secure`) for normal use.
+
 ## Key Commands
 
 | Command | What it does |
@@ -141,10 +184,31 @@ This means the LLM can handle documents much larger than its context window, bec
 | `/rlm bench preset=<name>` | Run a benchmark preset |
 | `/rlm bench list` | List available benchmarks |
 | `/rlm bench compare` | Compare latest benchmark run with previous run |
+| `/rlm abort [run_id\|all]` | Cancel active run(s) cooperatively |
 | `/harness run "<task>"` | Run tool-using coding harness loop |
 | `/rlm replay` | Step through the last run |
 | `/rlm chat "<question>"` | Ask the LLM a question about your project |
 | `/help` | Show all available commands |
+
+## Cost and Safety Guardrails
+
+Start bounded:
+
+```text
+/rlm run "small scoped task" steps=4 timeout=30 budget=60
+```
+
+For benchmarks, start with small limits:
+
+```text
+/rlm bench preset=dspy_quick limit=1
+```
+
+If a run is going out of hand:
+
+```text
+/rlm abort all
+```
 
 ## What You Can Do With It
 

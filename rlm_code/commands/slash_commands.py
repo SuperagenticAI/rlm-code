@@ -344,7 +344,7 @@ class SlashCommandHandler:
         console.print("[bold cyan]🔌 Connect Wizard[/bold cyan]")
         console.print("  [1] [bold]Local[/bold] (Ollama / LM Studio / vLLM / SGLang)")
         console.print("  [2] [bold]BYOK Cloud[/bold] (OpenAI, Anthropic, Gemini, OpenRouter, ...)")
-        console.print("  [3] [bold]ACP[/bold] (Gemini CLI, Claude Code, Codex, ...)")
+        console.print("  [3] [bold]ACP[/bold] (ACP-compatible local agents)")
         console.print("  [q] Cancel")
         choice = console.input("[cyan]Select connection mode [1/2/3/q]: [/cyan]").strip().lower()
 
@@ -385,7 +385,7 @@ class SlashCommandHandler:
             console.print(
                 "  [2] [bold]BYOK Cloud[/bold] (OpenAI, Anthropic, Gemini, OpenRouter, ...)"
             )
-            console.print("  [3] [bold]ACP Agents[/bold] (Gemini CLI, Claude Code, Codex, ...)")
+            console.print("  [3] [bold]ACP Agents[/bold] (ACP-compatible local agents)")
             console.print("  [q] Cancel")
             choice = console.input("[cyan]Select source [1/2/3/q]: [/cyan]").strip().lower()
 
@@ -714,7 +714,7 @@ class SlashCommandHandler:
         models = self.llm_connector.list_provider_example_models(provider_id, limit=12)
         if models:
             console.print()
-            console.print(f"[bold cyan]SuperQode model list for {provider_id}:[/bold cyan]")
+            console.print(f"[bold cyan]Suggested model list for {provider_id}:[/bold cyan]")
             for idx, model_name in enumerate(models[:10], start=1):
                 console.print(f"  [cyan]{idx}.[/cyan] {model_name}")
             model_selection = console.input(
@@ -1668,6 +1668,7 @@ class SlashCommandHandler:
             /rlm frameworks
             /rlm viz [run_id|latest] [depth=N] [children=on|off] [--json]
             /rlm status [run_id]
+            /rlm abort [run_id|all]
             /rlm replay <run_id>
             /rlm doctor [env=generic|dspy|pure_rlm] [--json]
             /rlm chat <message> [session=name] [env=generic|dspy|pure_rlm] [branch=N] [depth=N] [children=N] [parallel=N] [budget=N] [framework=<see /rlm frameworks>] [sub=provider/model]
@@ -1711,6 +1712,7 @@ class SlashCommandHandler:
                 "  [yellow]/rlm viz [run_id|latest] [depth=N] [children=on|off] [--json][/yellow]"
             )
             console.print("  [yellow]/rlm status [run_id][/yellow]")
+            console.print("  [yellow]/rlm abort [run_id|all][/yellow]")
             console.print("  [yellow]/rlm replay <run_id>[/yellow]")
             console.print("  [yellow]/rlm doctor [env=generic|dspy|pure_rlm] [--json][/yellow]")
             console.print(
@@ -2713,9 +2715,15 @@ class SlashCommandHandler:
             self.current_context["rlm_last_benchmark_preset"] = benchmark.preset
             self.current_context["rlm_last_benchmark_mode"] = benchmark.mode
 
-            show_success_message(
-                f"RLM benchmark complete: {benchmark.completed_cases}/{benchmark.total_cases} completed"
-            )
+            if benchmark.cancelled:
+                show_warning_message(
+                    "RLM benchmark cancelled by user request "
+                    f"after {benchmark.completed_cases}/{benchmark.total_cases} completed case(s)."
+                )
+            else:
+                show_success_message(
+                    f"RLM benchmark complete: {benchmark.completed_cases}/{benchmark.total_cases} completed"
+                )
             console.print(
                 f"[dim]Benchmark:[/dim] {benchmark.benchmark_id}  "
                 f"[dim]Mode:[/dim] {benchmark.mode}  "
@@ -2942,6 +2950,7 @@ class SlashCommandHandler:
             table.add_column("Steps", justify="right")
             table.add_column("Env", justify="center")
             table.add_column("Completed", justify="center")
+            table.add_column("Cancelled", justify="center")
             table.add_column("Reward", justify="right")
             table.add_column("Started", style="dim")
             table.add_column("Finished", style="dim")
@@ -2950,6 +2959,7 @@ class SlashCommandHandler:
                 str(status["steps"]),
                 str(status.get("environment", "unknown")),
                 "yes" if status["completed"] else "no",
+                "yes" if bool(status.get("cancelled")) else "no",
                 f"{float(status['total_reward']):.2f}",
                 str(status["started_at"]),
                 str(status["finished_at"]),
@@ -2967,6 +2977,27 @@ class SlashCommandHandler:
                 console.print(f"[dim]Task:[/dim] {status['task']}")
             console.print(f"[dim]Trace:[/dim] {status['path']}")
             console.print()
+            return
+
+        if action == "abort":
+            run_id = args[1].strip() if len(args) > 1 else ""
+            if run_id.lower() in {"", "all", "*"}:
+                run_id = ""
+            payload = self.rlm_runner.request_cancel(run_id or None)
+            active_runs = payload.get("active_runs") or []
+            pending = payload.get("pending_run_cancels") or []
+            if run_id:
+                show_warning_message(f"Requested cancellation for run '{run_id}'.")
+            else:
+                show_warning_message("Requested cancellation for all active RLM runs.")
+            if active_runs:
+                show_info_message(f"Active runs: {', '.join(str(item) for item in active_runs)}")
+            else:
+                show_info_message("No active runs right now. New runs are not affected.")
+            if pending:
+                show_info_message(
+                    f"Pending run-specific cancellations: {', '.join(str(item) for item in pending)}"
+                )
             return
 
         if action == "replay":
@@ -3337,7 +3368,7 @@ class SlashCommandHandler:
             return
 
         show_error_message(
-            "Usage: /rlm <run|bench|import-evals|judge|frameworks|viz|status|replay|doctor|chat|observability>"
+            "Usage: /rlm <run|bench|import-evals|judge|frameworks|viz|status|abort|replay|doctor|chat|observability>"
         )
 
     def cmd_save(self, args: list):
@@ -4365,6 +4396,7 @@ class SlashCommandHandler:
   [yellow]/rlm frameworks[/yellow]                    - Show adapter readiness and framework IDs
   [yellow]/rlm viz[/yellow] [run_id|latest] [depth=N] [children=on|off] [--json] - Visualize trajectory tree, failures, and changes
   [yellow]/rlm status[/yellow] [run_id]                - Show latest/specific run status
+  [yellow]/rlm abort[/yellow] [run_id|all]             - Cancel active run(s) cooperatively
   [yellow]/rlm replay[/yellow] <run_id>                - Replay stored trajectory
   [yellow]/rlm doctor[/yellow] [env=generic|dspy|pure_rlm] [--json] - Validate RLM environment readiness
   [yellow]/rlm chat[/yellow] <message> [session=name] [env=generic|dspy|pure_rlm] [branch=N] [depth=N] [children=N] [parallel=N] [budget=N] [framework=native|dspy-rlm|adk-rlm|pydantic-ai|google-adk|deepagents] [sub=provider/model] - Persistent RLM chat turn
@@ -4372,7 +4404,7 @@ class SlashCommandHandler:
   [yellow]/rlm chat reset[/yellow] [session=name]       - Clear persistent chat memory
   [yellow]/rlm observability[/yellow]                   - Show local/MLflow observability sink status
   [yellow]/harness tools[/yellow] [mcp=on|off]         - List coding harness tools (local + MCP)
-  [yellow]/harness doctor[/yellow]                     - Show OpenCode-parity coverage report
+  [yellow]/harness doctor[/yellow]                     - Show harness tool coverage report
   [yellow]/harness run[/yellow] <task> [steps=N] [mcp=on|off] [tools=name[,name2]] - Run tool-using coding harness
 
 [bold magenta]Optimization (GEPA):[/bold magenta]

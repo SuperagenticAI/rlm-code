@@ -71,6 +71,11 @@ The Research tab is where experiment data lives. It has **5 internal sub-tabs**:
 
 See [🔬 Research Tab](research.md) for full details.
 
+!!! note "Mode Routing in Chat"
+    In Local/BYOK connection modes, the Chat tab can auto-route likely coding prompts to the harness loop.
+    ACP is supported via `/connect acp`, but ACP keeps harness auto-routing off by default.
+    For controlled pure-recursive experiments, set `RLM_TUI_HARNESS_AUTO=0` before launching the TUI.
+
 ---
 
 ## ⌨️ Keyboard Shortcuts

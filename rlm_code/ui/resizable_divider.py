@@ -3,10 +3,6 @@ Resizable panel divider for the RLM Code TUI.
 
 Provides draggable divider widgets that let users resize adjacent panels
 by clicking and dragging with the mouse, plus keyboard shortcuts.
-
-Based on SuperQode's resizable_sidebar.py (mouse drag, min/max constraints,
-keyboard shortcuts, collapse/expand toggle, visual feedback) and split_view.py
-(percentage-based splits, SplitDivider).
 """
 
 from __future__ import annotations
@@ -381,7 +377,7 @@ class ResizableVerticalSplit(Container):
 
 
 # ---------------------------------------------------------------------------
-# Percentage-based split (from SuperQode's SplitView pattern)
+# Percentage-based split.
 # ---------------------------------------------------------------------------
 
 
@@ -389,7 +385,7 @@ class PercentageSplit(Container):
     """A horizontal split that uses percentage-based positioning.
 
     More intuitive for equal-weight splits. The split_pct reactive controls
-    the left/right ratio (20-80 range, from SuperQode).
+    the left/right ratio (20-80 range).
     """
 
     DEFAULT_CSS = """

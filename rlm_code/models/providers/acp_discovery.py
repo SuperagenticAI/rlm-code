@@ -54,7 +54,7 @@ class ACPDiscovery:
         ),
         ACPAgentSpec(
             agent_id="claude-code",
-            display_name="Claude Code",
+            display_name="Claude ACP",
             command=["claude", "--acp"],
             fallback_commands=[["npx", "-y", "@anthropic-ai/claude-code", "--acp"]],
             api_key_env_vars=["ANTHROPIC_API_KEY"],

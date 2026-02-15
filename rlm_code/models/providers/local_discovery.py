@@ -34,7 +34,7 @@ class LocalProviderDiscovery:
     """
     Discover local model providers by probing known endpoints.
 
-    The probe list intentionally mirrors common SuperQode local setups.
+    The probe list intentionally mirrors common local development setups.
     """
 
     _PROBES: list[dict[str, str]] = [

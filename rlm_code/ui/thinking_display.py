@@ -3,9 +3,6 @@ Thinking / reasoning display for the RLM Code TUI.
 
 Classifies streamed LLM output into thought types and provides a
 collapsible visual widget for rendering agent reasoning in the chat log.
-
-Based on SuperQode's thinking_display.py (12 thought types, UnifiedThinkingManager,
-ThinkingIndicator, session tracking) and Toad's conversation rendering patterns.
 """
 
 from __future__ import annotations

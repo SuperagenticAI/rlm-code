@@ -1,6 +1,6 @@
 # Core Engine
 
-The Core Engine is the heart of RLM Code. It implements the **Recursive Language Model** paradigm from the research paper by Zhang, Kraska, and Khattab (2025), providing a complete runtime for context-as-variable reasoning, iterative code execution, reward-driven optimization, and multi-paradigm orchestration.
+The Core Engine is the heart of RLM Code. It implements the **Recursive Language Model** paradigm from the 2025 research paper, providing a complete runtime for context-as-variable reasoning, iterative code execution, reward-driven optimization, and multi-paradigm orchestration.
 
 ---
 
@@ -39,6 +39,7 @@ The Core Engine is composed of several tightly integrated subsystems:
 |---|---|---|
 | [Runner](runner.md) | `rlm_code.rlm.runner` | Multi-paradigm orchestrator with trajectory persistence |
 | [Environments](environments.md) | `rlm_code.rlm.environments`, `rlm_code.rlm.pure_rlm_environment` | Execution environments with reward profiles |
+| [Execution Patterns](execution-patterns.md) | `rlm_code.rlm.runner`, `rlm_code.harness.runner` | How to run pure recursive mode vs harness vs direct baseline |
 | [Event System](events.md) | `rlm_code.rlm.events` | Pub-sub event bus for observability and UI |
 | [Termination](termination.md) | `rlm_code.rlm.termination` | FINAL/FINAL_VAR termination patterns |
 | [Memory Compaction](memory-compaction.md) | `rlm_code.rlm.memory_compaction` | Context window management via summarization |

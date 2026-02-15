@@ -98,14 +98,17 @@ nav:
   - "\U0001F3E0 Home": index.md
   - "\U0001F680 Getting Started":
     - getting-started/index.md
+    - "\U0001F9ED Start Here": getting-started/start-here.md
     - "\U0001F4E6 Installation": getting-started/installation.md
     - "\u26A1 Quick Start": getting-started/quickstart.md
+    - "\U0001F9D1\U0001F52C Researcher Onboarding": getting-started/researcher-onboarding.md
     - "\U0001F4BB CLI Reference": getting-started/cli.md
     - "\u2699\uFE0F Configuration": getting-started/configuration.md
   - "\U0001F9E0 Core Engine":
     - core/index.md
     - "\U0001F504 RLM Runner": core/runner.md
     - "\U0001F30D Environments": core/environments.md
+    - "\U0001F9ED Execution Patterns": core/execution-patterns.md
     - "\U0001F4E1 Event System": core/events.md
     - "\U0001F6D1 Termination": core/termination.md
     - "\U0001F9F9 Memory Compaction": core/memory-compaction.md

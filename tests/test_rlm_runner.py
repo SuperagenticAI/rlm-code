@@ -2,6 +2,7 @@
 
 import json
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -86,6 +87,16 @@ class _ConfigurableExecutionEngine(_FakeExecutionEngine):
         self.config_manager = SimpleNamespace(
             config=SimpleNamespace(sandbox=SimpleNamespace(**sandbox_defaults))
         )
+
+
+class _SlowExecutionEngine(_FakeExecutionEngine):
+    def __init__(self, delay_seconds: float = 0.03):
+        super().__init__()
+        self.delay_seconds = float(delay_seconds)
+
+    def execute_code(self, code: str, timeout: int = 30):
+        time.sleep(self.delay_seconds)
+        return super().execute_code(code=code, timeout=timeout)
 
 
 class _RoutingConnector:
@@ -248,6 +259,57 @@ def test_rlm_status_and_events(tmp_path):
 
     events = runner.load_run_events(result.run_id)
     assert len(events) >= 1
+
+
+def test_rlm_run_task_can_be_cancelled(tmp_path):
+    connector = _FakeConnector(
+        responses=[
+            '{"action":"run_python","code":"print(\\"tick\\")","done":false}'
+            for _ in range(200)
+        ]
+    )
+    engine = _SlowExecutionEngine(delay_seconds=0.03)
+    runner = RLMRunner(llm_connector=connector, execution_engine=engine, run_dir=tmp_path)
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(runner.run_task, "long running task", max_steps=200, exec_timeout=5)
+
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline and not runner.active_run_ids():
+            time.sleep(0.01)
+
+        payload = runner.request_cancel()
+        assert payload["active_runs"]
+        result = future.result(timeout=15)
+
+    assert result.completed is False
+    assert "Stopped by user cancellation request." in result.final_response
+    assert runner.active_run_ids() == []
+
+    status = runner.get_run_status(result.run_id)
+    assert status is not None
+    assert status["cancelled"] is True
+
+    events = runner.load_run_events(result.run_id)
+    final = next(event for event in reversed(events) if event.get("type") == "final")
+    assert final.get("cancelled") is True
+
+
+def test_rlm_request_cancel_all_without_active_runs_does_not_latch(tmp_path):
+    connector = _FakeConnector(
+        responses=['{"action":"final","done":true,"final_response":"done"}']
+    )
+    engine = _FakeExecutionEngine()
+    runner = RLMRunner(llm_connector=connector, execution_engine=engine, run_dir=tmp_path)
+
+    payload = runner.request_cancel()
+    assert payload["cancel_all"] is False
+    assert payload["active_runs"] == []
+
+    result = runner.run_task("quick", max_steps=1, exec_timeout=5)
+    status = runner.get_run_status(result.run_id)
+    assert status is not None
+    assert status["cancelled"] is False
 
 
 def test_rlm_run_task_with_dspy_environment_write_file(tmp_path):

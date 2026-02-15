@@ -200,6 +200,10 @@ class RLMRunner(BenchmarkManagerMixin, ChatSessionMixin, DelegationMixin, Action
         self.context_store = LazyFileContext(workdir=self.workdir)
         self._max_parallelism = max(1, int(max_parallelism))
         self._parallel_semaphore = threading.BoundedSemaphore(value=self._max_parallelism)
+        self._cancel_lock = threading.RLock()
+        self._cancel_all_requested = False
+        self._cancel_requested_runs: set[str] = set()
+        self._active_run_ids: set[str] = set()
         self.framework_registry = FrameworkAdapterRegistry.default(workdir=str(self.workdir))
         default_run_dir = self.workdir / ".rlm_code" / "rlm" / "runs"
         legacy_run_dirs = [
@@ -287,6 +291,58 @@ class RLMRunner(BenchmarkManagerMixin, ChatSessionMixin, DelegationMixin, Action
         manager = getattr(self.execution_engine, "config_manager", None)
         config = getattr(manager, "config", None)
         return getattr(config, "sandbox", None)
+
+    def request_cancel(self, run_id: str | None = None) -> dict[str, Any]:
+        """
+        Request cooperative cancellation for active runs.
+
+        Args:
+            run_id: Specific run id to cancel. When omitted, cancels all active runs.
+
+        Returns:
+            A status dictionary summarizing cancellation state.
+        """
+        normalized = str(run_id or "").strip()
+        with self._cancel_lock:
+            if normalized:
+                self._cancel_requested_runs.add(normalized)
+            else:
+                # "Cancel all" is only meaningful for currently active runs.
+                # If nothing is running, leave future runs unaffected.
+                if self._active_run_ids:
+                    self._cancel_all_requested = True
+            active = sorted(self._active_run_ids)
+            pending = sorted(self._cancel_requested_runs)
+            return {
+                "cancel_all": bool(self._cancel_all_requested),
+                "active_runs": active,
+                "pending_run_cancels": pending,
+            }
+
+    def active_run_ids(self) -> list[str]:
+        """Return active run ids currently executing in this process."""
+        with self._cancel_lock:
+            return sorted(self._active_run_ids)
+
+    def _register_active_run(self, run_id: str) -> None:
+        with self._cancel_lock:
+            self._active_run_ids.add(str(run_id))
+
+    def _clear_cancel_request_for_run(self, run_id: str) -> None:
+        with self._cancel_lock:
+            self._cancel_requested_runs.discard(str(run_id))
+            self._active_run_ids.discard(str(run_id))
+            if self._cancel_all_requested and not self._active_run_ids:
+                self._cancel_all_requested = False
+
+    def _is_cancel_requested(self, run_id: str | None = None) -> bool:
+        normalized = str(run_id or "").strip()
+        with self._cancel_lock:
+            if self._cancel_all_requested:
+                return True
+            if normalized and normalized in self._cancel_requested_runs:
+                return True
+            return False
 
     def _configure_pure_rlm_settings(self) -> None:
         sandbox_cfg = self._sandbox_config()
@@ -517,11 +573,13 @@ class RLMRunner(BenchmarkManagerMixin, ChatSessionMixin, DelegationMixin, Action
 
         started = self._utc_now()
         run_id = self._new_run_id()
+        self._register_active_run(run_id)
         run_path = self.run_dir / f"{run_id}.jsonl"
         memory: list[str] = []
         total_reward = 0.0
         completed = False
         final_response = ""
+        cancelled = False
         trajectory: list[dict[str, Any]] = []
         usage_start = self._usage_snapshot()
         self.observability.on_run_start(
@@ -559,6 +617,9 @@ class RLMRunner(BenchmarkManagerMixin, ChatSessionMixin, DelegationMixin, Action
 
         try:
             for step_index in range(1, max_steps + 1):
+                if self._is_cancel_requested(run_id):
+                    cancelled = True
+                    break
                 if (
                     recursion_state.deadline_monotonic is not None
                     and time.monotonic() > recursion_state.deadline_monotonic
@@ -699,9 +760,12 @@ class RLMRunner(BenchmarkManagerMixin, ChatSessionMixin, DelegationMixin, Action
         finally:
             with recursion_state.lock:
                 recursion_state.active_task_hashes.discard(task_hash)
+            self._clear_cancel_request_for_run(run_id)
 
         if not final_response:
-            if (
+            if cancelled:
+                final_response = "Stopped by user cancellation request."
+            elif (
                 recursion_state.deadline_monotonic is not None
                 and time.monotonic() > recursion_state.deadline_monotonic
             ):
@@ -731,6 +795,7 @@ class RLMRunner(BenchmarkManagerMixin, ChatSessionMixin, DelegationMixin, Action
             "usage": run_usage,
             "depth": _depth,
             "parent_run_id": _parent_run_id,
+            "cancelled": cancelled,
         }
         self._append_event(run_path, final_event)
         result = RLMRunResult(
@@ -761,6 +826,7 @@ class RLMRunner(BenchmarkManagerMixin, ChatSessionMixin, DelegationMixin, Action
                 "framework": native_framework,
                 "depth": _depth,
                 "parent_run_id": _parent_run_id,
+                "cancelled": bool(cancelled),
             },
         )
         return result
@@ -948,6 +1014,7 @@ class RLMRunner(BenchmarkManagerMixin, ChatSessionMixin, DelegationMixin, Action
             "path": str(target),
             "steps": step_count,
             "completed": completed,
+            "cancelled": bool(final_event.get("cancelled", False)),
             "total_reward": total_reward,
             "environment": str(final_event.get("environment", "unknown")),
             "framework": str(final_event.get("framework", "native")),

@@ -3,10 +3,6 @@ Enhanced prompt widget for the RLM Code TUI.
 
 Provides slash command suggestions, fuzzy matching, path completion,
 history navigation, shell mode detection, and multi-line input support.
-
-Based on Toad's prompt.py (multi-modal prompt, tab completion, shell mode
-detection, syntax highlighting) and SuperQode's prompt.py (history navigation,
-prefix display, mode suffix).
 """
 
 from __future__ import annotations
@@ -17,7 +13,7 @@ from rich.text import Text
 
 from .design_system import PALETTE
 
-# Shell commands that trigger auto-detection (from Toad's likely_shell pattern).
+# Shell commands that trigger auto-detection.
 _SHELL_COMMANDS = frozenset(
     {
         "ls",
@@ -188,7 +184,7 @@ class PromptMode:
 
     @property
     def prompt_symbol(self) -> str:
-        """Prompt prefix symbol (like Toad's PROMPT_SHELL / PROMPT_AI)."""
+        """Prompt prefix symbol for current mode."""
         if self.mode == self.COMMAND:
             return "/"
         if self.mode == self.SHELL:
@@ -209,7 +205,7 @@ class PromptMode:
 
     @staticmethod
     def _looks_like_shell(text: str) -> bool:
-        """Detect likely shell commands (from Toad's likely_shell pattern)."""
+        """Detect likely shell commands."""
         first_word = text.split(" ", 1)[0].lower() if text else ""
         return first_word in _SHELL_COMMANDS
 
@@ -298,7 +294,7 @@ class PromptHelper:
         self.suggestions = SuggestionState()
         self._command_templates: dict[str, list[str]] = {}
 
-        # History navigation (from Toad/SuperQode).
+        # History navigation.
         self._history: list[str] = []
         self._history_index: int = -1
         self._history_stash: str = ""  # Stash current input before navigating
@@ -421,7 +417,7 @@ class PromptHelper:
     def on_escape(self) -> None:
         self.suggestions.clear()
 
-    # ---- History navigation (from Toad/SuperQode) ----
+    # ---- History navigation ----
 
     def on_history_up(self, current_text: str = "") -> str | None:
         """Navigate backwards in history. Returns the previous input or None."""

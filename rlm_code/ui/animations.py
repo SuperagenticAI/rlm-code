@@ -1,6 +1,5 @@
 """
 Enhanced animations and loading indicators for RLM Code.
-Inspired by Claude Code's engaging animation system.
 """
 
 import os
@@ -373,7 +372,7 @@ class EnhancedThinkingAnimation:
 class ProgressiveThinkingAnimation:
     """
     Progressive animation that shows multiple stages with engaging visuals.
-    Similar to Claude Code's multi-stage progress indicators.
+    Similar to multi-stage progress indicators.
     """
 
     def __init__(self, stages: list[str] | None = None, message_type: str = "llm"):

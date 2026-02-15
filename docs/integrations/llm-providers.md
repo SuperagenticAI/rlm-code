@@ -565,7 +565,7 @@ models = get_superqode_models("anthropic")
 # ["claude-opus-4-6", "claude-opus-4-5-20251101", ...]
 ```
 
-The catalog is aligned with SuperQode's provider/model lists and takes priority
+The catalog uses curated provider/model lists and takes priority
 over the `example_models` field in `ProviderSpec`.
 
 ---

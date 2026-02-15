@@ -219,12 +219,12 @@ class HarnessToolRegistry:
             ),
             "plan_enter": HarnessToolSpec(
                 name="plan_enter",
-                description="Enter plan mode for compatibility with OpenCode parity.",
+                description="Enter plan mode for compatibility with external harness flows.",
                 input_schema={"type": "object", "properties": {}, "additionalProperties": False},
             ),
             "plan_exit": HarnessToolSpec(
                 name="plan_exit",
-                description="Exit plan mode for compatibility with OpenCode parity.",
+                description="Exit plan mode for compatibility with external harness flows.",
                 input_schema={"type": "object", "properties": {}, "additionalProperties": False},
             ),
             "websearch": HarnessToolSpec(
