@@ -42,6 +42,9 @@ theme:
   logo: assets/logo.png
   favicon: assets/favicon.png
 
+copyright: >
+  Brought to You by <a href="https://super-agentic.ai" target="_blank" rel="noopener">Superagentic AI</a>
+
 markdown_extensions:
   - admonition
   - pymdownx.details

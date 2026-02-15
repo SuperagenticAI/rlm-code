@@ -5,14 +5,14 @@ build-backend = "hatchling.build"
 [project]
 name = "rlm-code"
 version = "0.1.5"
-description = "RLM Code: AI-powered interactive development environment for agent systems"
+description = "RLM Code: Research Playground & Evaluation OS for Recursive Language Model Agentic Systems"
 readme = "README.md"
 license = "Apache-2.0"
 authors = [
-    {name = "Shashi Jagtap", email = "info@super-agentic.ai"}
+    {name = "Shashi Jagtap", email = "shashi@super-agentic.ai"}
 ]
 maintainers = [
-    {name = "Shashi Jagtap", email = "info@super-agentic.ai"}
+    {name = "Shashi Jagtap", email = "shashi@super-agentic.ai"}
 ]
 keywords = ["dspy", "code", "ai", "nlp", "language-models", "interactive", "claude"]
 classifiers = [

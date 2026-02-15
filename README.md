@@ -74,7 +74,7 @@ or for a free local model via [Ollama](https://ollama.com/):
 
 > You need the matching API key in your environment (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`) or in a `.env` file in your project directory. Ollama needs no key — just a running Ollama server.
 
-Check it worked:
+Follow the interactive path with just `/connect` command instead: Check it worked:
 
 ```
 /status
@@ -106,7 +106,7 @@ See all available benchmarks:
 
 ### 5. View results
 
-Use the **Research** tab (`Ctrl+5`) for live benchmark and trajectory views.  
+Use the **Research** tab (`Ctrl+5`) for live benchmark and trajectory views.
 After at least two benchmark runs, export a compare report:
 
 ```
@@ -124,7 +124,7 @@ Walk through the last run one step at a time — see what code the LLM wrote, wh
 
 ### 7. Use RLM Code as a coding agent (local/BYOK/ACP)
 
-RLM Code can also be used as a coding-agent harness in the TUI:
+RLM Code can also be used as a coding-agent harness in the TUI, Just like Claude Code, Codex etc. It has mimimal harnesss to steer the model to write the code.
 
 ```text
 /harness tools
@@ -292,3 +292,7 @@ See `CONTRIBUTING.md`.
 ## License
 
 Apache-2.0
+
+---
+
+**Brought to You by [Superagentic AI](https://super-agentic.ai)**
