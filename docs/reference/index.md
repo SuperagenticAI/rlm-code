@@ -80,7 +80,7 @@ RLM Code is organized into the following top-level packages. Each module is docu
 
 | Module | Description | Docs |
 |---|---|---|
-| `rlm_code.ui.tui_app` | Unified TUI with 5 tabs (Chat, Files, Details, Shell, Research) | [📋 Tab Reference](../tui/tabs.md) |
+| `rlm_code.ui.tui_app` | Unified TUI with 5 tabs (RLM, Files, Details, Shell, Research) | [📋 Tab Reference](../tui/tabs.md) |
 | `rlm_code.rlm.research_tui.widgets` | Reusable research widgets (MetricsPanel, SparklineChart, etc.) | [🔬 Research Tab](../tui/research.md) |
 
 ---

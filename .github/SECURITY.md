@@ -49,4 +49,4 @@ Security updates will be released as patch versions (e.g., 0.1.1 → 0.1.2) and 
 * Review dependencies for known vulnerabilities
 * Keep dependencies up to date
 
-Thank you for helping keep DSPy Code secure! 🔒
+Thank you for helping keep RLM Code secure! 🔒

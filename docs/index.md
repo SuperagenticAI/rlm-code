@@ -8,7 +8,7 @@
 
 <span class="rlm-badge rlm-badge--purple">v0.1.5</span>
 <span class="rlm-badge rlm-badge--green">Python 3.11+</span>
-<span class="rlm-badge rlm-badge--blue">MIT License</span>
+<span class="rlm-badge rlm-badge--blue">Apache-2.0</span>
 
 </div>
 
@@ -16,19 +16,20 @@
 
 ---
 
-## 🎯 What Problem RLM Code Solves
+## 🎯 What RLM Code Solves
 
-RLM Code is designed for cases where standard chat-style prompting breaks down on large inputs.
+The underlying long-context reasoning problem is what **RLM (the method)** addresses.
+**RLM Code** addresses the tooling and workflow problem around using that method in practice.
 
-Core problems it targets:
+Core product problems it targets:
 
-- **Long-context handling**: avoid forcing huge documents into one prompt window.
-- **Programmable context access**: treat context as data that can be inspected, filtered, chunked, and aggregated with code.
-- **Controlled recursion**: allow structured sub-calls through `llm_query()` and `llm_query_batched()` from inside REPL code.
-- **Reproducible evaluation**: compare execution patterns (`native`, `harness`, `direct-llm`) under the same benchmark tasks.
-- **Safety + operations**: run in secure sandbox backends with observability, replay, and benchmark reports.
+- **Implementation friction**: provide a runnable RLM environment (`llm_query`, REPL, run loop) without custom scaffolding.
+- **Experiment management**: run, replay, compare, and benchmark experiments in one place.
+- **Safety controls**: route execution through secure backends and explicit runtime settings.
+- **Reproducibility**: store traces, metrics, and benchmark artifacts for repeatable research.
+- **Operational visibility**: expose observability, status, and diagnostics for debugging experiments.
 
-In short, it is a research platform for testing when **symbolic/programmatic context handling** is better than plain prompt expansion.
+In short, RLM Code is a research tooling layer for building and evaluating RLM-style workflows.
 
 ---
 
@@ -146,7 +147,7 @@ Press `Ctrl+5` or `F6` to open the **Research** tab to see your run's dashboard,
 graph TB
     CLI["🚀 rlm-code CLI"]
     CLI --> TUI["🖥️ Unified TUI"]
-    TUI --> CHAT["💬 Chat"]
+    TUI --> RLM["🔁 RLM"]
     TUI --> FILES["📁 Files"]
     TUI --> DETAILS["📋 Details"]
     TUI --> SHELL["⚡ Shell"]
@@ -210,7 +211,7 @@ RLM Code ships a **single unified TUI** with **5 tabs**:
 
 | Tab | Shortcut | Purpose |
 |-----|----------|---------|
-| 💬 **Chat** | `Ctrl+1` / `F2` | Converse with LLMs, run slash commands |
+| 🔁 **RLM** | `Ctrl+1` / `F2` | Converse with LLMs, run slash commands |
 | 📁 **Files** | `Ctrl+2` / `F3` | Browse project files with syntax preview |
 | 📋 **Details** | `Ctrl+3` / `F4` | Status panel, diff viewer |
 | ⚡ **Shell** | `Ctrl+4` / `F5` | Persistent stateful shell |

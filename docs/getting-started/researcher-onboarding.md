@@ -95,7 +95,7 @@ These are handled directly by the Textual app and are optimized for interaction 
 | `/status` | Refresh status strip |
 | `/snapshot [file]` | Save baseline for diffing |
 | `/diff [file]` | Show changes vs snapshot |
-| `/view <chat\|files\|details\|shell\|research\|next\|prev>` | Switch active view |
+| `/view <chat\|files\|details\|shell\|research\|next\|prev>` | Switch active view (`chat` route opens the **RLM** tab) |
 | `/layout <single\|multi>` | One-screen vs multi-pane mode |
 | `/pane <files\|details\|shell> [show\|hide\|toggle]` | Toggle pane visibility |
 | `/focus <chat\|default>` | Focus controls |
@@ -116,8 +116,7 @@ This is the complete slash-command surface currently registered in `rlm_code/com
 |---|---|
 | `/init` | Initialize project configuration |
 | `/project info` | Show project context summary |
-| `/connect <provider> <model> [api-key] [base-url]` | Connect to a model |
-| `/model` | Interactive model picker |
+| `/connect [provider model [api-key] [base-url]]` | Connect directly, or run with no args for interactive picker |
 | `/models` | List model/provider options |
 | `/status` | Connection + runtime status |
 | `/disconnect` | Disconnect current model |

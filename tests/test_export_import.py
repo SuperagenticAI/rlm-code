@@ -173,8 +173,8 @@ def test_package_metadata():
     )
 
     assert metadata.name == "test-package"
-    assert metadata.python_requires == ">=3.10"
-    assert metadata.license == "MIT"
+    assert metadata.python_requires == ">=3.11"
+    assert metadata.license == "Apache-2.0"
 
 
 def test_build_package(package_builder, sample_code, temp_export_dir):

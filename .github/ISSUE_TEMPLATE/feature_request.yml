@@ -53,7 +53,7 @@ body:
       render: python
       placeholder: |
         # Example code or command
-        dspy-code /new-command
+        rlm-code /new-command
 
   - type: dropdown
     id: priority

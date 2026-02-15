@@ -33,7 +33,7 @@ rlm-code
 !!! warning "Directory Safety Check"
     RLM Code performs a safety check on startup. It will warn you if you are running from your home directory, Desktop, Documents, or a system directory. Always run from a dedicated project directory.
 
-You should see the **RLM Research Lab** TUI with 5 tabs: Chat, Files, Details, Shell, and Research. The Chat tab is active by default.
+You should see the **RLM Research Lab** TUI with 5 tabs: RLM, Files, Details, Shell, and Research. The RLM tab is active by default.
 
 ---
 
@@ -94,10 +94,10 @@ Use the `/connect` command to connect to an LLM provider:
 For an interactive keyboard-driven model selection experience:
 
 ```
-/model
+/connect
 ```
 
-This presents a guided picker that lets you choose provider and model interactively.
+Run `/connect` with no arguments to open the guided picker and choose mode/provider/model interactively.
 
 ### Verify Connection
 

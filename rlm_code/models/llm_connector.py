@@ -802,6 +802,26 @@ class LLMConnector:
                 model_name=self.current_model,
             )
             return payload.get("response", "")
+        except requests.HTTPError as exc:
+            detail = ""
+            try:
+                payload = response.json()
+                # Ollama returns {"error": "..."} on many failures.
+                detail = str(payload.get("error") or payload)[:260]
+            except Exception:
+                detail = (response.text or "")[:260] if response is not None else str(exc)
+            guidance = ""
+            if detail:
+                lowered = detail.lower()
+                if "not found" in lowered or "model" in lowered and "pull" in lowered:
+                    guidance = (
+                        f". Verify model name '{self.current_model}' and run `ollama pull {self.current_model}`"
+                    )
+                elif "insufficient" in lowered or "memory" in lowered:
+                    guidance = (
+                        ". Model may be too large for local memory; try a smaller model or increase resources"
+                    )
+            raise ModelError(f"Ollama generation failed: {detail or exc}{guidance}") from exc
 
         except Exception as e:
             logger.error(f"Ollama generation error: {e}")

@@ -228,8 +228,7 @@ def cli(verbose: bool, debug: bool, version: bool, skip_safety_check: bool):
 
     Core commands:
     • /init - Initialize or scan your project
-    • /connect - Connect to any LLM (ACP/BYOK/Local)
-    • /model - Interactive model selection
+    • /connect - Connect to any LLM (ACP/BYOK/Local); no args opens picker
     • /rlm - Run recursive workflows and benchmarks
     • /optimize - Optimize with GEPA
     • /run - Execute your programs

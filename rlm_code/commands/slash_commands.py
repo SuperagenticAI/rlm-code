@@ -1669,7 +1669,7 @@ class SlashCommandHandler:
             /rlm viz [run_id|latest] [depth=N] [children=on|off] [--json]
             /rlm status [run_id]
             /rlm abort [run_id|all]
-            /rlm replay <run_id>
+            /rlm replay [run_id|latest]
             /rlm doctor [env=generic|dspy|pure_rlm] [--json]
             /rlm chat <message> [session=name] [env=generic|dspy|pure_rlm] [branch=N] [depth=N] [children=N] [parallel=N] [budget=N] [framework=<see /rlm frameworks>] [sub=provider/model]
             /rlm chat status [session=name]
@@ -1713,7 +1713,7 @@ class SlashCommandHandler:
             )
             console.print("  [yellow]/rlm status [run_id][/yellow]")
             console.print("  [yellow]/rlm abort [run_id|all][/yellow]")
-            console.print("  [yellow]/rlm replay <run_id>[/yellow]")
+            console.print("  [yellow]/rlm replay [run_id|latest][/yellow]")
             console.print("  [yellow]/rlm doctor [env=generic|dspy|pure_rlm] [--json][/yellow]")
             console.print(
                 "  [yellow]/rlm chat <message> [session=name] [env=generic|dspy|pure_rlm] [branch=N] [depth=N] "
@@ -3001,14 +3001,40 @@ class SlashCommandHandler:
             return
 
         if action == "replay":
-            if len(args) < 2:
-                show_error_message("Usage: /rlm replay <run_id>")
-                return
-            run_id = args[1]
+            run_ref = args[1].strip() if len(args) > 1 else "latest"
+            if not run_ref:
+                run_ref = "latest"
+            run_id = run_ref
+            if run_ref.lower() == "latest":
+                status = self.rlm_runner.get_run_status(None)
+                if not status:
+                    show_error_message("No RLM runs found yet. Run /rlm run first.")
+                    return
+                run_id = str(status.get("run_id") or "").strip()
+                if not run_id:
+                    show_error_message("Could not resolve latest run id.")
+                    return
             events = self.rlm_runner.load_run_events(run_id)
             if not events:
                 show_error_message(f"Run not found: {run_id}")
                 return
+
+            self.current_context["rlm_last_run_id"] = run_id
+            run_path = ""
+            try:
+                if hasattr(self.rlm_runner, "run_dir"):
+                    run_path = str(self.rlm_runner.run_dir / f"{run_id}.jsonl")
+            except Exception:
+                run_path = ""
+            if not run_path and run_ref.lower() == "latest":
+                try:
+                    latest_status = self.rlm_runner.get_run_status(run_id)
+                except Exception:
+                    latest_status = None
+                if isinstance(latest_status, dict):
+                    run_path = str(latest_status.get("path") or "")
+            if run_path:
+                self.current_context["rlm_last_run_path"] = run_path
 
             console.print()
             console.print(f"[bold cyan]📼 RLM Replay: {run_id}[/bold cyan]")
@@ -4397,7 +4423,7 @@ class SlashCommandHandler:
   [yellow]/rlm viz[/yellow] [run_id|latest] [depth=N] [children=on|off] [--json] - Visualize trajectory tree, failures, and changes
   [yellow]/rlm status[/yellow] [run_id]                - Show latest/specific run status
   [yellow]/rlm abort[/yellow] [run_id|all]             - Cancel active run(s) cooperatively
-  [yellow]/rlm replay[/yellow] <run_id>                - Replay stored trajectory
+  [yellow]/rlm replay[/yellow] [run_id|latest]         - Replay stored trajectory
   [yellow]/rlm doctor[/yellow] [env=generic|dspy|pure_rlm] [--json] - Validate RLM environment readiness
   [yellow]/rlm chat[/yellow] <message> [session=name] [env=generic|dspy|pure_rlm] [branch=N] [depth=N] [children=N] [parallel=N] [budget=N] [framework=native|dspy-rlm|adk-rlm|pydantic-ai|google-adk|deepagents] [sub=provider/model] - Persistent RLM chat turn
   [yellow]/rlm chat status[/yellow] [session=name]      - Show persistent chat memory stats

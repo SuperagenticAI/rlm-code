@@ -9,7 +9,7 @@ This page reflects the **current implementation** in `rlm_code/main.py`, `rlm_co
 
 ### `rlm-code`
 
-Launch the unified TUI (Chat, Files, Details, Shell, Research).
+Launch the unified TUI (RLM, Files, Details, Shell, Research).
 
 ```bash
 rlm-code [OPTIONS]
@@ -61,7 +61,7 @@ RLM Code has two command layers in the TUI:
 | `/status` | Refresh status panel |
 | `/snapshot [file]` | Snapshot file/project baseline |
 | `/diff [file]` | Diff against snapshot |
-| `/view <chat\|files\|details\|shell\|research\|next\|prev>` | Switch active view |
+| `/view <chat\|files\|details\|shell\|research\|next\|prev>` | Switch active view (`chat` route opens the **RLM** tab) |
 | `/layout <single\|multi>` | Toggle one-screen vs multi-pane layout |
 | `/pane <files\|details\|shell> [show\|hide\|toggle]` | Pane visibility |
 | `/focus <chat\|default>` | Focus controls |
@@ -84,8 +84,7 @@ Shell shortcuts:
 | Command | Description |
 |---|---|
 | `/init` | Initialize project config and scan workspace |
-| `/connect [provider model [api-key] [base-url]]` | Connect model directly or via picker |
-| `/model` | Model picker |
+| `/connect [provider model [api-key] [base-url]]` | Connect directly, or run with no args for interactive picker |
 | `/models` | Model/provider listing |
 | `/status` | Connection + runtime status |
 | `/disconnect` | Disconnect current model |

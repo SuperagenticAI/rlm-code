@@ -78,4 +78,4 @@ pytest tests/
 By submitting this PR, I confirm that:
 - [ ] I have read the [Contributing Guide](../CONTRIBUTING.md)
 - [ ] My contribution is original or properly attributed
-- [ ] I agree to license my contribution under the MIT License
+- [ ] I agree to license my contribution under the Apache-2.0 License

@@ -14,6 +14,24 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
+def _resolve_marker_shell(requested: str | None) -> str:
+    """Choose a shell compatible with marker-based status protocol ($?)."""
+    if requested:
+        base = Path(requested).name
+        if base in {"zsh", "bash", "sh"} and Path(requested).exists():
+            return requested
+
+    env_shell = os.environ.get("SHELL", "")
+    env_base = Path(env_shell).name
+    if env_base in {"zsh", "bash", "sh"} and Path(env_shell).exists():
+        return env_shell
+
+    for candidate in ("/bin/zsh", "/bin/bash", "/bin/sh"):
+        if Path(candidate).exists():
+            return candidate
+    return "/bin/sh"
+
+
 @dataclass
 class ShellResult:
     """Result from a shell command."""
@@ -33,7 +51,7 @@ class PersistentShell:
 
     def __init__(self, cwd: Path | None = None, shell: str | None = None):
         self.cwd = cwd or Path.cwd()
-        self.shell = shell or os.environ.get("SHELL", "/bin/sh")
+        self.shell = _resolve_marker_shell(shell)
         self._output_queue: queue.Queue[str] = queue.Queue()
         self._closed = False
         self._write_lock = threading.Lock()

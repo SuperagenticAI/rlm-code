@@ -1,9 +1,9 @@
 """
 PTY-based terminal widget for the RLM Code TUI.
 
-Provides a real pseudo-terminal with ANSI color support, cursor
-handling, and proper input routing. Falls back to the marker-based
-PersistentShell when PTY is unavailable.
+Provides a real pseudo-terminal with plain-text output, cursor handling,
+and proper input routing. Falls back to the marker-based PersistentShell
+when PTY is unavailable.
 """
 
 from __future__ import annotations
@@ -29,14 +29,33 @@ _HAS_PTY = hasattr(os, "openpty")
 # ---- ANSI escape code stripper (for plain-text fallback) ----
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]|\x1b\].*?\x07|\x1b\[.*?[a-zA-Z]")
-_TERM_CONTROL_RE = re.compile(
-    r"\x1b\[\d*[ABCDJKHG]|\x1b\[\d*;\d*[Hf]|\x1b\[\??\d*[hl]|\x1b\[[\d;]*r|\r"
-)
-
-
 def strip_ansi(text: str) -> str:
     """Remove ANSI escape sequences from text."""
     return _ANSI_RE.sub("", text)
+
+
+def normalize_terminal_text(text: str) -> str:
+    """Normalize carriage-return/backspace terminal behavior into readable text."""
+    text = text.replace("\r\n", "\n")
+    out_lines: list[str] = []
+    current: list[str] = []
+
+    for ch in text:
+        if ch == "\r":
+            # Cursor return: line is rewritten, so reset current line buffer.
+            current.clear()
+        elif ch == "\b":
+            if current:
+                current.pop()
+        elif ch == "\n":
+            out_lines.append("".join(current))
+            current.clear()
+        else:
+            current.append(ch)
+
+    if current:
+        out_lines.append("".join(current))
+    return "\n".join(out_lines)
 
 
 # ---- Simple ANSI-to-Rich color mapping ----
@@ -229,19 +248,30 @@ class PTYProcess:
             os.chdir(str(self.cwd))
             env = os.environ.copy()
             env["TERM"] = "xterm-256color"
-            env["COLORTERM"] = "truecolor"
-            # Force color support.
-            env["FORCE_COLOR"] = "1"
-            env["CLICOLOR"] = "1"
+            # Keep shell output low-noise in the embedded terminal.
+            env["NO_COLOR"] = "1"
+            env["CLICOLOR"] = "0"
+            env["CLICOLOR_FORCE"] = "0"
+            env["FORCE_COLOR"] = "0"
+            env["PS1"] = "$ "
+            env["PS2"] = "> "
+            env["PROMPT_COMMAND"] = ""
+            env["PROMPT"] = "%# "
+            env["RPROMPT"] = ""
+            env["RPS1"] = ""
+            env["DISABLE_AUTO_TITLE"] = "true"
+            env["HISTFILE"] = ""
             env["RLM_CODE"] = "1"
 
             shell_base = Path(self.shell).name
             if shell_base == "zsh":
-                os.execvpe(self.shell, [self.shell, "--no-rcs", "--no-globalrcs"], env)
-            elif shell_base in ("bash", "sh"):
-                os.execvpe(self.shell, [self.shell, "--norc", "--noprofile"], env)
+                os.execvpe(self.shell, [self.shell, "-f", "-i"], env)
+            elif shell_base == "bash":
+                os.execvpe(self.shell, [self.shell, "--norc", "--noprofile", "-i"], env)
+            elif shell_base == "sh":
+                os.execvpe(self.shell, [self.shell, "-i"], env)
             else:
-                os.execvpe(self.shell, [self.shell], env)
+                os.execvpe(self.shell, [self.shell, "-i"], env)
         else:
             # Parent process.
             os.close(slave_fd)
@@ -440,11 +470,11 @@ if _HAS_TEXTUAL:
     class TerminalPane(Widget, can_focus=True):
         """Interactive PTY terminal widget for the Shell tab.
 
-        Spawns a real shell via PTY, streams output with ANSI colors into a
+        Spawns a real shell via PTY, streams output as plain text into a
         RichLog, and forwards all keyboard input directly to the PTY.
 
         Features:
-        - Real PTY with ANSI color rendering
+        - Real PTY with plain shell output
         - Arrow keys, Ctrl sequences, tab completion work natively
         - Double-tap Escape to blur (return focus to parent)
         - Auto-resize PTY on widget resize
@@ -477,6 +507,7 @@ if _HAS_TEXTUAL:
 
         BINDINGS = [
             Binding("ctrl+c", "interrupt", "Interrupt", show=False, priority=True),
+            Binding("ctrl+l", "clear_output", "Clear", show=False),
         ]
 
         is_running: reactive[bool] = reactive(False)
@@ -484,8 +515,9 @@ if _HAS_TEXTUAL:
         _POLL_INTERVAL = 0.05  # 50ms — responsive without burning CPU.
         _ACTIVE_POLL_INTERVAL = 0.03
         _IDLE_POLL_INTERVAL = 0.14
-        _MAX_LINES = 5000  # Scrollback limit.
+        _MAX_LINES = 2000  # Scrollback limit.
         _ESC_DOUBLE_TAP = 0.3  # Seconds between Esc presses to blur.
+        _MAX_STATUS_INPUT_CHARS = 72
 
         def __init__(self, cwd: Path | None = None, **kwargs: Any) -> None:
             super().__init__(**kwargs)
@@ -498,6 +530,7 @@ if _HAS_TEXTUAL:
             self._last_esc: float = 0.0
             self._idle_ticks = 0
             self._poll_interval_current = self._POLL_INTERVAL
+            self._typed_buffer: str = ""
 
         def compose(self) -> ComposeResult:
             yield RichLog(id="term_output", wrap=True, markup=False)
@@ -578,13 +611,15 @@ if _HAS_TEXTUAL:
             if out is None:
                 return
 
-            # Strip cursor movement / screen clear codes but keep SGR colors.
-            cleaned = _TERM_CONTROL_RE.sub("", raw)
-            if not cleaned:
+            plain = strip_ansi(raw)
+            if not plain:
                 return
-            out.write(ansi_to_rich_text(cleaned))
-            self._line_count += cleaned.count("\n") + (
-                1 if cleaned and not cleaned.endswith("\n") else 0
+            normalized = normalize_terminal_text(plain)
+            if not normalized:
+                return
+            out.write(Text(normalized))
+            self._line_count += normalized.count("\n") + (
+                1 if normalized and not normalized.endswith("\n") else 0
             )
 
             # Trim scrollback.
@@ -598,13 +633,17 @@ if _HAS_TEXTUAL:
             if st is None:
                 return
             if self.is_running:
-                shell_name = Path(self._pty.shell if self._pty else "shell").name
-                st.update(
-                    f" [bold #a78bfa]$[/] {shell_name}  "
-                    f"[dim]Esc×2 blur  Ctrl+C interrupt  Ctrl+D exit[/]"
-                )
+                display = self._typed_buffer
+                if len(display) > self._MAX_STATUS_INPUT_CHARS:
+                    display = "..." + display[-(self._MAX_STATUS_INPUT_CHARS - 3) :]
+                prompt = Text()
+                prompt.append("> ", style=f"bold {PALETTE.primary_lighter}")
+                if display:
+                    prompt.append(display, style=PALETTE.text_primary)
+                prompt.append("▌", style=PALETTE.text_muted)
+                st.update(prompt)
             else:
-                st.update(" [dim]Shell exited.[/]  [bold #a78bfa]Press Enter to restart[/]")
+                st.update(" Shell exited. Press Enter to restart")
 
         def on_resize(self, event: events.Resize) -> None:
             """Resize the PTY to match the widget."""
@@ -648,9 +687,32 @@ if _HAS_TEXTUAL:
             # Forward to PTY.
             if event.key == "ctrl+c":
                 pty.interrupt()
+                self._typed_buffer = ""
+                self._update_status()
                 event.stop()
                 event.prevent_default()
                 return
+
+            if event.key == "ctrl+u":
+                self._typed_buffer = ""
+                self._update_status()
+
+            if event.key == "enter":
+                self._typed_buffer = ""
+                self._update_status()
+            elif event.key == "backspace":
+                self._typed_buffer = self._typed_buffer[:-1]
+                self._update_status()
+            elif event.key == "delete":
+                # Keep behavior simple and conservative for status preview.
+                self._update_status()
+            elif event.key in {"up", "down", "left", "right", "home", "end", "page_up", "page_down"}:
+                # Cursor/history edits are hard to mirror exactly; reset preview to avoid stale text.
+                self._typed_buffer = ""
+                self._update_status()
+            elif event.character and event.character.isprintable():
+                self._typed_buffer += event.character
+                self._update_status()
 
             if pty.write_key(event.key):
                 event.stop()
@@ -665,6 +727,14 @@ if _HAS_TEXTUAL:
             if self._pty and self._pty.alive:
                 self._pty.interrupt()
 
+        def action_clear_output(self) -> None:
+            """Clear terminal output and reset local counters."""
+            if self._output is not None:
+                self._output.clear()
+                self._line_count = 0
+            self._typed_buffer = ""
+            self._update_status()
+
         def on_unmount(self) -> None:
             """Clean up when widget is removed."""
             if self._poll_timer:
@@ -675,4 +745,6 @@ if _HAS_TEXTUAL:
         def send_command(self, command: str) -> None:
             """Programmatically send a command to the shell (from other parts of the TUI)."""
             if self._pty and self._pty.alive:
+                self._typed_buffer = ""
+                self._update_status()
                 self._pty.write(command + "\n")

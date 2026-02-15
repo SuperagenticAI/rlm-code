@@ -124,6 +124,16 @@ PURPLE_GRADIENT = [
     PALETTE.primary_glow,
 ]
 
+LAB_TITLE_GRADIENT = [
+    PALETTE.primary,
+    PALETTE.primary_light,
+    "#d946ef",
+    PALETTE.secondary,
+    "#f97316",
+    PALETTE.warning,
+    "#fbbf24",
+]
+
 MAGENTA_GRADIENT = [
     "#4a044e",
     "#701a75",

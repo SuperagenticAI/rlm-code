@@ -64,9 +64,9 @@ body:
       description: Please provide your environment details.
       value: |
         - OS: [e.g., Ubuntu 22.04, macOS 14.0, Windows 11]
-        - Python version: [e.g., 3.10.5]
-        - DSPy Code version: [e.g., 0.1.0]
-        - DSPy version: [e.g., 3.0.4]
+        - Python version: [e.g., 3.11.9]
+        - RLM Code version: [e.g., 0.1.5]
+        - DSPy version (if relevant): [e.g., 3.0.4]
         - Installation method: [e.g., pip, uv, source]
     validations:
       required: true
@@ -87,5 +87,5 @@ body:
           required: true
         - label: I have provided all requested information
           required: true
-        - label: I am using the latest version of DSPy Code
+        - label: I am using the latest version of RLM Code
           required: false

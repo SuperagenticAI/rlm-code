@@ -11,7 +11,7 @@ import hashlib
 import json
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, is_dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -1389,7 +1389,34 @@ class RLMRunner(BenchmarkManagerMixin, ChatSessionMixin, DelegationMixin, Action
     def _append_event(self, run_path: Path, event: dict[str, Any]) -> None:
         run_path.parent.mkdir(parents=True, exist_ok=True)
         with run_path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(event, ensure_ascii=True) + "\n")
+            handle.write(
+                json.dumps(
+                    event,
+                    ensure_ascii=True,
+                    default=self._json_default,
+                )
+                + "\n"
+            )
+
+    @staticmethod
+    def _json_default(value: Any) -> Any:
+        """Best-effort serializer for non-JSON runtime payloads."""
+        if is_dataclass(value):
+            try:
+                return asdict(value)
+            except Exception:
+                return str(value)
+        if isinstance(value, Path):
+            return str(value)
+        if isinstance(value, set):
+            return list(value)
+        to_dict = getattr(value, "to_dict", None)
+        if callable(to_dict):
+            try:
+                return to_dict()
+            except Exception:
+                return str(value)
+        return str(value)
 
     def _usage_snapshot(self) -> dict[str, int] | None:
         connector = self.llm_connector

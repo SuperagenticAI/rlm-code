@@ -16,7 +16,7 @@ Before creating bug reports, please check the [issue tracker](https://github.com
 * Exact steps to reproduce the problem
 * Expected vs actual behavior
 * Screenshots (if applicable)
-* Environment details (OS, Python version, DSPy version)
+* Environment details (OS, Python version, RLM Code version)
 
 ### Suggesting Enhancements
 
@@ -39,7 +39,7 @@ See [AI-GENERATED-CODE-POLICY.md](AI-GENERATED-CODE-POLICY.md) for our rules abo
 
 ### Prerequisites
 
-* Python 3.10 or higher (we support Python 3.10, 3.11, 3.12, and 3.13)
+* Python 3.11 or higher (we support Python 3.11, 3.12, and 3.13)
 * [uv](https://github.com/astral-sh/uv) (recommended) or pip
 * Git
 
@@ -166,7 +166,7 @@ Then create a pull request on GitHub.
 
 **CI/CD Expectations:**
 * All PRs must pass CI checks (linting, formatting, tests)
-* Tests must pass on all supported Python versions (3.10, 3.11, 3.12, 3.13)
+* Tests must pass on all supported Python versions (3.11, 3.12, 3.13)
 * Code must pass Ruff linting and formatting checks
 * Coverage should not decrease significantly
 * Fix any CI failures before requesting review
@@ -398,7 +398,7 @@ Instead, please report them via email to **team@super-agentic.ai** with:
 
 We will acknowledge receipt within 48 hours and provide a timeline for addressing the issue.
 
-For more details, see our [Security documentation](https://superagenticai.github.io/rlm-code/reference/security/).
+For more details, see our [Security documentation](https://superagenticai.github.io/rlm-code/security/).
 
 ## Dependency Management
 
@@ -406,7 +406,7 @@ For more details, see our [Security documentation](https://superagenticai.github
 * Dependencies are managed in `pyproject.toml`
 * When adding new dependencies:
   * Justify why it's needed
-  * Check for license compatibility (MIT-compatible preferred)
+  * Check for license compatibility (Apache-2.0-compatible preferred)
   * Consider the dependency's maintenance status
   * Update version constraints appropriately
 * Security updates are handled via Dependabot
@@ -453,7 +453,7 @@ All contributors are recognized in:
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the MIT License.
+By contributing, you agree that your contributions will be licensed under the Apache-2.0 License.
 
 ---
 

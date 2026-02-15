@@ -18,7 +18,10 @@ RLM Code implements the **Recursive Language Model** paradigm from the 2025 *"Re
 
 ## 🎯 Problem Focus
 
-RLM Code is optimized for research workflows where:
+RLM (the method) addresses long-context reasoning.
+RLM Code is the tooling layer for researchers who want to implement, evaluate, and operate that workflow.
+
+RLM Code is optimized for workflows where:
 
 - Context is too large to fit comfortably in one prompt.
 - You need programmatic inspection and decomposition instead of full-context prompt injection.
@@ -60,4 +63,4 @@ rlm-code
     Start with the [📦 Installation](installation.md) guide to set up your environment, then follow the [⚡ Quick Start](quickstart.md) for a hands-on walkthrough.
 
 !!! info "🖥️ Unified TUI"
-    RLM Code ships a **single TUI** with 5 tabs: **💬 Chat**, **📁 Files**, **📋 Details**, **⚡ Shell**, and **🔬 Research**. Use `rlm-code` to launch, and press `Ctrl+5` to access the Research tab for experiment tracking, benchmarks, and session replay.
+    RLM Code ships a **single TUI** with 5 tabs: **🔁 RLM**, **📁 Files**, **📋 Details**, **⚡ Shell**, and **🔬 Research**. Use `rlm-code` to launch, and press `Ctrl+5` to access the Research tab for experiment tracking, benchmarks, and session replay.

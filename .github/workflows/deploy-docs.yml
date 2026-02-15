@@ -33,7 +33,7 @@ jobs:
         run: uv sync --locked --extra docs
 
       - name: Build and deploy documentation
-        run: uv run mkdocs gh-deploy --force --clean --verbose
+        run: uv run mkdocs gh-deploy --force --clean --verbose --remote-branch gh-pages
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

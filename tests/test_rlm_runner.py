@@ -10,6 +10,7 @@ from rlm_code.rlm import RLMRunner
 from rlm_code.rlm.benchmarks import load_benchmark_packs
 from rlm_code.rlm.context_store import ContextRef, LazyFileContext
 from rlm_code.rlm.frameworks import FrameworkEpisodeResult, FrameworkStepRecord
+from rlm_code.rlm.termination import FinalDetection
 
 
 class _FakeConnector:
@@ -1488,3 +1489,36 @@ def test_rlm_run_task_framework_dspy_alias_routes_to_registry_adapter(tmp_path):
     final_event = next(event for event in events if event.get("type") == "final")
     assert final_event.get("framework") == "dspy-rlm"
     assert final_event.get("environment") == "generic"
+
+
+def test_rlm_append_event_serializes_dataclass_payloads(tmp_path):
+    runner = RLMRunner(
+        llm_connector=_FakeConnector(responses=[]),
+        execution_engine=_FakeExecutionEngine(),
+        run_dir=tmp_path / "runs",
+        workdir=tmp_path,
+    )
+    run_path = tmp_path / "runs" / "serialization.jsonl"
+
+    event = {
+        "type": "step",
+        "run_id": "run_serialization",
+        "action": {
+            "action": "run_repl",
+            "_final_in_text": FinalDetection(
+                detected=True,
+                final_type="direct",
+                content="done",
+                raw_match="FINAL(done)",
+            ),
+        },
+    }
+
+    runner._append_event(run_path, event)
+
+    line = run_path.read_text(encoding="utf-8").strip()
+    payload = json.loads(line)
+    final = payload["action"]["_final_in_text"]
+    assert final["detected"] is True
+    assert final["final_type"] == "direct"
+    assert final["content"] == "done"

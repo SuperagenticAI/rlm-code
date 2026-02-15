@@ -72,26 +72,40 @@ In TUI:
 
 ---
 
-## Use It as a Coding Agent Too
+## Use It as a Coding Agent (Simple)
 
-RLM Code is not only for benchmarks. You can use it as a coding harness in TUI:
+You can use RLM Code like a coding assistant without running harness commands first.
+
+Just connect once, then ask coding tasks directly in chat.
 
 ```text
-/harness tools
-/harness run "fix lint errors and add tests" steps=8 mcp=on
+/connect
 ```
 
-ACP also works:
+or
 
 ```text
 /connect acp
-/harness run "implement parser and tests" steps=8 mcp=on
 ```
 
-Behavior note:
+Then type normal prompts in chat, for example:
 
-- Local/BYOK can auto-route likely coding prompts to harness.
-- ACP keeps auto-routing off; run `/harness run ...` explicitly.
+```text
+fix failing tests in this repo and explain the root cause
+```
+
+```text
+implement a parser for this config format and add unit tests
+```
+
+```text
+refactor this module for readability and keep behavior unchanged
+```
+
+Optional advanced mode:
+
+- Use `/harness run ...` when you want explicit tool-loop control.
+- Use `/rlm run ...` when you want explicit recursive experiment control.
 
 ---
 
@@ -135,7 +149,8 @@ Use `/rlm status` to monitor the run and confirm whether it completed or was can
 | `/rlm bench list` | Show available benchmark presets |
 | `/rlm bench preset=<name> limit=1` | Run a small benchmark first |
 | `/connect acp` | Connect through ACP profile |
-| `/harness run "<task>" steps=8 mcp=on` | Coding-agent harness loop |
+| `type coding task in chat` | Default coding-agent flow (no harness command required) |
+| `/harness run "<task>" steps=8 mcp=on` | Optional explicit tool-loop mode |
 | `/rlm status` | Check latest run |
 | `/rlm abort [run_id|all]` | Cancel active run(s) |
 | `/rlm replay <run_id>` | Inspect full trajectory |

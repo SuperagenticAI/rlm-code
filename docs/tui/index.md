@@ -26,8 +26,8 @@ That's it. One command, one TUI, everything in one place.
 
 | Tab | Shortcut | F-Key | Purpose |
 |-----|----------|-------|---------|
-| 💬 **Chat** | `Ctrl+1` | `F2` | Converse with LLMs, run slash commands |
-| 📁 **Files** | `Ctrl+2` | `F3` | Browse project tree, syntax-highlighted preview |
+| 🔁 **RLM** | `Ctrl+1` | `F2` | Converse with LLMs, run slash commands |
+| 📁 **Files** | `Ctrl+2` | `F3` | Browse project tree, syntax-highlighted preview (draggable split in one-screen mode) |
 | 📋 **Details** | `Ctrl+3` | `F4` | Status panel, snapshot diff viewer |
 | ⚡ **Shell** | `Ctrl+4` | `F5` | Persistent stateful shell (env preserved) |
 | 🔬 **Research** | `Ctrl+5` | `F6` | Dashboard, trajectory, benchmarks, replay, events |
@@ -64,15 +64,15 @@ The Research tab is where experiment data lives. It has **5 internal sub-tabs**:
 | 📡 **Events** | Live event stream from the RLM event bus |
 
 !!! tip "🔬 See It in Action"
-    1. Run `/rlm bench preset=dspy_quick` in the Chat tab
+    1. Run `/rlm bench preset=dspy_quick` in the RLM tab
     2. Press `Ctrl+5` to switch to Research
     3. Dashboard populates with real run metrics and sparkline
     4. Click **Trajectory** to see the step-by-step breakdown
 
 See [🔬 Research Tab](research.md) for full details.
 
-!!! note "Mode Routing in Chat"
-    In Local/BYOK connection modes, the Chat tab can auto-route likely coding prompts to the harness loop.
+!!! note "Mode Routing in RLM"
+    In Local/BYOK connection modes, the RLM tab can auto-route likely coding prompts to the harness loop.
     ACP is supported via `/connect acp`, but ACP keeps harness auto-routing off by default.
     For controlled pure-recursive experiments, set `RLM_TUI_HARNESS_AUTO=0` before launching the TUI.
 
@@ -84,14 +84,14 @@ See [🔬 Research Tab](research.md) for full details.
 
 | Shortcut | Action |
 |----------|--------|
-| `Ctrl+1` / `F2` | 💬 Chat |
+| `Ctrl+1` / `F2` | 🔁 RLM |
 | `Ctrl+2` / `F3` | 📁 Files |
 | `Ctrl+3` / `F4` | 📋 Details |
 | `Ctrl+4` / `F5` | ⚡ Shell |
 | `Ctrl+5` / `F6` | 🔬 Research |
 | `Tab` | Cycle to next tab |
 | `Shift+Tab` | Cycle to previous tab |
-| `Escape` | Back to Chat |
+| `Escape` | Back to RLM |
 
 ### ⚡ Actions
 
@@ -100,7 +100,7 @@ See [🔬 Research Tab](research.md) for full details.
 | `F7` / `Ctrl+Y` | 📋 Copy last response |
 | `Ctrl+O` | 🔀 Toggle one-screen mode |
 | `Ctrl+K` | 🔍 Open command palette |
-| `Ctrl+G` | 💬 Focus chat input |
+| `Ctrl+G` | 🔁 Focus RLM input |
 | `Ctrl+L` | 🧹 Clear logs |
 | `Ctrl+R` | 🔄 Refresh preview |
 | `Ctrl+Q` | 🚪 Quit |
@@ -127,7 +127,7 @@ inspired by the research aesthetic:
 | Accent | Purple | `#7c3aed` |
 | Active accent | Bright purple | `#a78bfa` |
 | Title text | Cyan | `#8de7ff` |
-| Chat text | Light blue-white | `#dce7f3` |
+| RLM text | Light blue-white | `#dce7f3` |
 
 ---
 
@@ -144,7 +144,7 @@ See [🧩 Widgets](widgets.md) for the full API reference.
 
 ## 📚 Next Steps
 
-- [📋 Tab Reference](tabs.md): Detailed docs for each tab (Chat, Files, Details, Shell)
+- [📋 Tab Reference](tabs.md): Detailed docs for each tab (RLM, Files, Details, Shell)
 - [🔬 Research Tab](research.md): Dashboard, trajectory, replay, events
 - [🧩 Widgets](widgets.md): Full widget API reference
 - [🎨 Theme System](theme.md): Colors, icons, animation constants

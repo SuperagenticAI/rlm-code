@@ -6,7 +6,7 @@ see [🔬 Research Tab](research.md).
 
 ---
 
-## 💬 Chat Tab
+## 🔁 RLM Tab
 
 The central hub for interacting with LLMs and running slash commands.
 
@@ -16,9 +16,9 @@ The central hub for interacting with LLMs and running slash commands.
 
 ### What's Inside
 
-- **Chat log**: `RichLog` widget showing the conversation
-- **Chat input**: Text input at the bottom for messages and commands
-- **Status strip**: Compact one-line status bar above the chat
+- **Conversation log**: `RichLog` widget showing the conversation
+- **RLM input**: Text input at the bottom for messages and commands
+- **Status strip**: Compact one-line status bar above the conversation
 
 ### Message Rendering
 
@@ -29,7 +29,7 @@ The central hub for interacting with LLMs and running slash commands.
 
 ### Slash Commands
 
-Type any `/command` in the chat input. All 50+ slash commands work here.
+Type any `/command` in the RLM input. All 50+ slash commands work here.
 Unknown commands are delegated to the full `SlashCommandHandler`.
 
 !!! tip "⚡ Shell Shortcut"
@@ -49,6 +49,7 @@ Project file browser with syntax-highlighted code preview.
 
 - **Directory tree**: Textual `DirectoryTree` rooted at the working directory
 - **Code preview**: Syntax-highlighted file viewer with Monokai theme
+- **Draggable split**: In one-screen Files view, drag the vertical splitter between tree and preview to resize both areas
 
 ### Supported Languages
 
@@ -62,6 +63,12 @@ Project file browser with syntax-highlighted code preview.
 
 Click a file in the tree to preview it. Line numbers and indent guides are
 enabled.
+
+### Resizing the Files Layout
+
+- Switch to Files (`Ctrl+2`) in one-screen mode.
+- Drag the vertical divider between the left file tree and right preview panel.
+- The sidebar width updates live; preview width adjusts automatically.
 
 ---
 
@@ -91,15 +98,15 @@ The diff uses the `diff` syntax highlighter with Monokai theme.
 
 ## ⚡ Shell Tab
 
-Persistent, stateful shell for running commands.
+Terminal-first shell workspace for running commands.
 
 | Shortcut | `Ctrl+4` / `F5` |
 |----------|------------------|
 
 ### What's Inside
 
-- **Shell log**: `RichLog` showing command output with color support
-- **Shell input**: Text input for entering commands
+- **PTY terminal**: Interactive terminal pane with keyboard input, history, and tab completion behavior from your shell
+- **Prompt line**: Minimal `>` typing line shown in the terminal status area
 
 ### 🔧 Persistent State
 
@@ -108,22 +115,16 @@ Powered by `PersistentShell`, a long-running shell process that preserves:
 - ✅ **Environment variables** set by previous commands
 - ✅ **Working directory** changes (`cd`)
 - ✅ **Shell aliases and functions** (within the session)
-- ✅ **Exit codes**: Color-coded (🟢 green for 0, 🔴 red for non-zero)
+- ✅ **Exit codes** for inline shell shortcuts (`!cmd`, `>cmd`) and shell command runner
 
 ### Shell Detection
 
-The shell automatically detects your default shell and uses the correct
-initialization flags:
+Inline shell execution uses a marker-compatible shell backend (`zsh`, `bash`, or `sh`) for reliable completion detection.
+PTY shell view uses your configured/default shell in interactive mode.
 
-| Shell | Flags |
-|-------|-------|
-| `zsh` | `--no-rcs --no-globalrcs` |
-| `bash` / `sh` | `--norc --noprofile` |
+This keeps shell output predictable while preserving interactive behavior.
 
-This ensures clean output without prompt decorations or rc-file side effects.
-
-After each command, the TUI automatically refreshes the file preview and diff
-panels if a file is selected.
+When a shell command modifies selected files, preview/diff panes are refreshed automatically.
 
 ---
 
@@ -189,7 +190,7 @@ Examples:
 
 ---
 
-## 💬 Greeting Detection
+## 👋 Greeting Detection
 
 The TUI detects simple greetings (hi, hello, hey, yo, sup) and responds
 instantly without an LLM call:
@@ -246,7 +247,7 @@ This avoids unnecessary API calls for trivial interactions.
 | `RLM_TUI_HARNESS_AUTO_STEPS` | `8` | 🛠 Max steps for auto harness runs |
 | `RLM_TUI_HARNESS_PREVIEW_STEPS` | `6` | 🛠 Steps shown in harness preview |
 | `RLM_TUI_INPUT_DEBOUNCE_SECONDS` | `0.0` | ⌨️ Input debounce delay |
-| `RLM_TUI_CHAT_MAX_LINES` | `2200` | 💬 Chat log line cap |
+| `RLM_TUI_CHAT_MAX_LINES` | `2200` | 🔁 RLM log line cap |
 | `RLM_TUI_TOOL_MAX_LINES` | `1600` | 🧰 Tool log line cap |
 | `RLM_TUI_EVENT_MAX_LINES` | `3200` | 📡 Event log line cap |
 

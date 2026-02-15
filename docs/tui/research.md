@@ -50,7 +50,7 @@ The default sub-tab. Shows a high-level summary of the most recent RLM run.
 
 ### How It Populates
 
-1. Run `/rlm run "your task"` or `/rlm bench preset=dspy_quick` in the Chat tab
+1. Run `/rlm run "your task"` or `/rlm bench preset=dspy_quick` in the RLM tab
 2. When the run completes, the Dashboard auto-populates via `build_run_visualization()`
 3. The MetricsPanel updates its reactive properties (run_id, status, reward, steps, etc.)
 4. The SparklineChart fills with cumulative reward values from the trajectory
@@ -215,7 +215,7 @@ def _on_raw_rlm_event(self, event):
 
 ## 🔗 Integration with Slash Commands
 
-The Research tab auto-updates when you run RLM commands in the Chat tab:
+The Research tab auto-updates when you run RLM commands in the RLM tab:
 
 | Command | What Updates |
 |---------|-------------|

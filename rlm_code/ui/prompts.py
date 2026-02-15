@@ -160,7 +160,7 @@ def get_user_input(
 
     # Show the fancy input box
     input_panel = Panel(
-        "[dim]Describe what to build, or run a command like /model, /connect, /optimize, /run[/dim]",
+        "[dim]Describe what to build, or run a command like /connect, /optimize, /run[/dim]",
         title=input_header,
         border_style="cyan",
         box=ROUNDED,

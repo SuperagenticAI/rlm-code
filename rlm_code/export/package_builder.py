@@ -22,8 +22,8 @@ class PackageMetadata:
     description: str
     author: str
     dependencies: list[str]
-    python_requires: str = ">=3.10"
-    license: str = "MIT"
+    python_requires: str = ">=3.11"
+    license: str = "Apache-2.0"
 
 
 class PackageBuilder:
@@ -131,10 +131,11 @@ setup(
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",
-        "License :: OSI Approved :: MIT License",
+        "License :: OSI Approved :: Apache Software License",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
     ],
 )
 '''
