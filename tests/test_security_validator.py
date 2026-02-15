@@ -209,6 +209,6 @@ class TestGeneratedCodeSafety:
         validator = SecurityValidator()
 
         # Check module code (where calculator_tool is defined)
-        assert not validator.has_eval(program.module_code), (
-            f"Generated module code should not contain eval():\n{program.module_code}"
-        )
+        assert not validator.has_eval(
+            program.module_code
+        ), f"Generated module code should not contain eval():\n{program.module_code}"

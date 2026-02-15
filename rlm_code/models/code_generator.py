@@ -152,7 +152,7 @@ def calculator_tool(expression: str) -> str:
     """Evaluate simple mathematical expressions safely."""
     import ast
     import operator
-    
+
     # Safe operators for basic math
     ops = {{
         ast.Add: operator.add,
@@ -162,7 +162,7 @@ def calculator_tool(expression: str) -> str:
         ast.Pow: operator.pow,
         ast.USub: operator.neg,
     }}
-    
+
     def safe_eval(node):
         if isinstance(node, ast.Constant):
             return node.value
@@ -172,7 +172,7 @@ def calculator_tool(expression: str) -> str:
             return ops[type(node.op)](safe_eval(node.operand))
         else:
             raise ValueError(f"Unsupported operation")
-    
+
     try:
         tree = ast.parse(expression, mode='eval')
         result = safe_eval(tree.body)

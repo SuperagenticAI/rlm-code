@@ -83,9 +83,9 @@ class TestRetryController:
         with pytest.raises(ValueError):
             controller.execute_sync_with_retry(failing_operation, "test_op")
 
-        assert attempt_count == max_attempts, (
-            f"Expected {max_attempts} attempts, got {attempt_count}"
-        )
+        assert (
+            attempt_count == max_attempts
+        ), f"Expected {max_attempts} attempts, got {attempt_count}"
 
     @pytest.mark.asyncio
     async def test_async_retry_respects_max_attempts(self):

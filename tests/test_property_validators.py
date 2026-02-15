@@ -80,7 +80,7 @@ class TestSignatureValidatorProperties:
 
 class {class_name}(dspy.Signature):
     """{docstring}"""
-    
+
     {input_field_name} = dspy.InputField(desc="{input_desc}")
     {output_field_name} = dspy.OutputField(desc="{output_desc}")
 '''
@@ -137,11 +137,11 @@ class {signature_name}(dspy.Signature):
 
 class {module_name}(dspy.Module):
     """{docstring}"""
-    
+
     def __init__(self):
         super().__init__()
         self.predictor = dspy.Predict({signature_name})
-    
+
     def forward(self, {input_field}):
         """Execute the task."""
         return self.predictor({input_field}={input_field})

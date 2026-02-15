@@ -40,7 +40,7 @@ def sample_dspy_signature_code():
 
 class SentimentAnalysis(dspy.Signature):
     """Analyze the sentiment of text."""
-    
+
     text = dspy.InputField(desc="The text to analyze")
     sentiment = dspy.OutputField(desc="The sentiment: positive, negative, or neutral")
 '''
@@ -58,11 +58,11 @@ class SentimentSignature(dspy.Signature):
 
 class SentimentModule(dspy.Module):
     """A module for sentiment analysis."""
-    
+
     def __init__(self):
         super().__init__()
         self.predictor = dspy.Predict(SentimentSignature)
-    
+
     def forward(self, text):
         """Analyze the sentiment of the given text."""
         return self.predictor(text=text)
