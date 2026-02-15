@@ -167,7 +167,7 @@
 }
 
 .rlm-hero-logo {
-  width: 180px;
+  width: min(340px, 72vw);
   height: auto;
   margin-bottom: 0.5em;
   filter: drop-shadow(0 0 24px rgba(124, 58, 237, 0.35));
@@ -241,11 +241,6 @@
 
 [data-md-color-scheme="slate"] .rlm-quickstart {
   background: #050510;
-}
-
-.rlm-quickstart h3 {
-  margin-top: 0;
-  color: #a855f7;
 }
 
 /* Badge pills */

@@ -370,9 +370,9 @@ class TestPaperCompatibleBenchmarks:
         for preset in ["oolong_style", "browsecomp_style", "token_efficiency"]:
             cases = get_benchmark_cases(preset)
             for case in cases:
-                assert case.environment == "pure_rlm", (
-                    f"{preset}/{case.case_id} should use pure_rlm"
-                )
+                assert (
+                    case.environment == "pure_rlm"
+                ), f"{preset}/{case.case_id} should use pure_rlm"
 
     def test_benchmark_cases_have_reasonable_timeouts(self):
         """Test that paper benchmarks have appropriate timeouts."""

@@ -8,7 +8,7 @@
 
 <span class="rlm-badge rlm-badge--purple">v0.1.5</span>
 <span class="rlm-badge rlm-badge--green">Python 3.11+</span>
-<span class="rlm-badge rlm-badge--blue">Apache-2.0</span>
+<span class="rlm-badge rlm-badge--blue">Apache 2.0</span>
 
 </div>
 
@@ -101,39 +101,39 @@ Risk assessment with **40+ rules**, 6 approval modes, and full audit logging to 
 
 <div class="rlm-quickstart" markdown>
 
-### Install & Launch
+**Install and launch**
 
 ```bash
 uv tool install "rlm-code[tui,llm-all]"
 rlm-code
 ```
 
-### Connect to a model
+**Connect to a model**
 
-```
+```text
 /connect anthropic claude-opus-4-6
 ```
 
-### Run your first benchmark
+**Run your first benchmark**
 
-```
+```text
 /rlm bench preset=dspy_quick
 ```
 
-### Keep runs bounded
+**Keep runs bounded**
 
-```
+```text
 /rlm run "small scoped task" steps=4 timeout=30 budget=60
 /rlm abort all
 ```
 
-### Compare benchmark output
+**Compare benchmark output**
 
-```
+```text
 /rlm bench compare candidate=latest baseline=previous
 ```
 
-### Switch to the Research tab
+**Switch to the Research tab**
 
 Press `Ctrl+5` or `F6` to open the **Research** tab to see your run's dashboard, trajectory, reward curves, and live events.
 
@@ -181,27 +181,27 @@ graph TB
 
 ## 📋 Feature Matrix
 
-| Feature | Status | Module |
-|---------|--------|--------|
-| 🧠 RLM Runner (multi-paradigm) | ✅ | `rlm_code.rlm.runner` |
-| 🧪 Pure RLM Environment | ✅ | `rlm_code.rlm.pure_rlm_environment` |
-| 📡 Event System (27+ types) | ✅ | `rlm_code.rlm.events` |
-| 🎯 Policy Lab (16 policies) | ✅ | `rlm_code.rlm.policies` |
-| 🔒 HITL Approval Gates | ✅ | `rlm_code.rlm.approval` |
-| 📊 Observability (7 sinks) | ✅ | `rlm_code.rlm.observability` |
-| 🏆 Benchmarks (10 presets) | ✅ | `rlm_code.rlm.benchmarks` |
-| 📊 Leaderboard | ✅ | `rlm_code.rlm.leaderboard` |
-| ⏪ Session Replay | ✅ | `rlm_code.rlm.session_replay` |
-| 🔁 Paradigm Comparison | ✅ | `rlm_code.rlm.comparison` |
-| 📈 Trajectory Logging | ✅ | `rlm_code.rlm.trajectory` |
-| 🧹 Memory Compaction | ✅ | `rlm_code.rlm.memory_compaction` |
-| 📦 6 Sandbox Runtimes | ✅ | `rlm_code.sandbox.runtimes` |
-| 🤖 12+ LLM Providers | ✅ | `rlm_code.models` |
-| 🔌 MCP Server | ✅ | `rlm_code.mcp` |
-| 🖥️ Unified TUI (5 tabs) | ✅ | `rlm_code.ui.tui_app` |
-| ⌨️ 50+ Slash Commands | ✅ | `rlm_code.commands` |
-| ✅ Code Validation | ✅ | `rlm_code.validation` |
-| 🧩 Framework Adapters | ✅ | `rlm_code.rlm.frameworks` |
+| Feature | Module |
+|---------|--------|
+| 🧠 RLM Runner (multi-paradigm) | `rlm_code.rlm.runner` |
+| 🧪 Pure RLM Environment | `rlm_code.rlm.pure_rlm_environment` |
+| 📡 Event System (27+ types) | `rlm_code.rlm.events` |
+| 🎯 Policy Lab (16 policies) | `rlm_code.rlm.policies` |
+| 🔒 HITL Approval Gates | `rlm_code.rlm.approval` |
+| 📊 Observability (7 sinks) | `rlm_code.rlm.observability` |
+| 🏆 Benchmarks (10 presets) | `rlm_code.rlm.benchmarks` |
+| 📊 Leaderboard | `rlm_code.rlm.leaderboard` |
+| ⏪ Session Replay | `rlm_code.rlm.session_replay` |
+| 🔁 Paradigm Comparison | `rlm_code.rlm.comparison` |
+| 📈 Trajectory Logging | `rlm_code.rlm.trajectory` |
+| 🧹 Memory Compaction | `rlm_code.rlm.memory_compaction` |
+| 📦 6 Sandbox Runtimes | `rlm_code.sandbox.runtimes` |
+| 🤖 12+ LLM Providers | `rlm_code.models` |
+| 🔌 MCP Server | `rlm_code.mcp` |
+| 🖥️ Unified TUI (5 tabs) | `rlm_code.ui.tui_app` |
+| ⌨️ 50+ Slash Commands | `rlm_code.commands` |
+| Code Validation | `rlm_code.validation` |
+| 🧩 Framework Adapters | `rlm_code.rlm.frameworks` |
 
 ---
 

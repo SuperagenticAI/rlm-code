@@ -28,7 +28,7 @@ brew install uv
 ```
 
 !!! tip "Why uv?"
-    `uv` is 10-100x faster than pip for dependency resolution. `uv tool install` creates an isolated environment for CLI tools — no virtualenv management needed. If you don't have Python 3.11+ installed, uv can install it for you:
+    `uv` is 10-100x faster than pip for dependency resolution. `uv tool install` creates an isolated environment for CLI tools - no virtualenv management needed. If you don't have Python 3.11+ installed, uv can install it for you:
 
     ```bash
     uv python install 3.12
@@ -44,7 +44,7 @@ brew install uv
     uv tool install "rlm-code[tui,llm-all]"
     ```
 
-    This installs `rlm-code` as a globally available command in its own isolated environment. No virtualenv activation needed — just run `rlm-code` from anywhere.
+    This installs `rlm-code` as a globally available command in its own isolated environment. No virtualenv activation needed - just run `rlm-code` from anywhere.
 
 === "uv pip install"
 

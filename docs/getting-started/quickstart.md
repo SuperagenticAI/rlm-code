@@ -1,6 +1,6 @@
 # Quick Start
 
-This guide walks you through launching RLM Code, connecting to an LLM, running your first benchmark, validating results, and exploring the Research tab — all in under 10 minutes.
+This guide walks you through launching RLM Code, connecting to an LLM, running your first benchmark, validating results, and exploring the Research tab - all in under 10 minutes.
 
 ---
 
