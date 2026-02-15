@@ -1,5 +1,11 @@
 # RLM Code
 
+<p align="center">
+  <a href="https://github.com/SuperagenticAI/rlm-code">
+    <img src="https://raw.githubusercontent.com/SuperagenticAI/rlm-code/main/assets/rlm-code-logo.png" alt="RLM Code logo" width="300">
+  </a>
+</p>
+
 **Run LLM-powered agents in a REPL loop, benchmark them, and compare results.**
 
 RLM Code implements the [Recursive Language Models](https://arxiv.org/abs/2502.07503) (RLM) approach from the 2025 paper release. Instead of stuffing your entire document into the LLM's context window, RLM stores it as a Python variable and lets the LLM write code to analyze it — chunk by chunk, iteration by iteration. This is dramatically more token-efficient for large inputs.

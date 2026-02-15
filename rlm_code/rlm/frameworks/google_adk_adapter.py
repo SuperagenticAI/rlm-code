@@ -5,6 +5,7 @@ Google ADK framework adapter.
 from __future__ import annotations
 
 import asyncio
+import sys
 from dataclasses import dataclass
 from typing import Any
 
@@ -21,6 +22,14 @@ class GoogleADKFrameworkAdapter:
     reference_impl: str = "google.adk (installed package)"
 
     def doctor(self) -> tuple[bool, str]:
+        cached = sys.modules.get("google.adk")
+        if cached is not None:
+            return (True, "google-adk available")
+        if "google.adk" in sys.modules and cached is None:
+            return (
+                False,
+                "google-adk not installed. Install with: pip install 'rlm-code[adk]'",
+            )
         try:
             import google.adk  # noqa: F401
         except Exception:

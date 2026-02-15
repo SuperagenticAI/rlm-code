@@ -1316,7 +1316,9 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
 
         def _render_status_snapshot(self, *, title: str = "Status Snapshot") -> None:
             connected = bool(self.connector.current_model)
-            model = self.connector.current_model_id or self.connector.current_model or "disconnected"
+            model = (
+                self.connector.current_model_id or self.connector.current_model or "disconnected"
+            )
             provider = self.connector.model_type or "-"
             mode = self._resolve_connection_mode()
             route = str(self._last_response_route or "direct-llm").strip().lower() or "direct-llm"
@@ -1357,7 +1359,7 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             if connected:
                 tips.append("/models", style=f"bold {PALETTE.info}")
                 tips.append("  ", style=PALETTE.text_dim)
-                tips.append("/rlm run \"task\" steps=4", style=f"bold {PALETTE.success}")
+                tips.append('/rlm run "task" steps=4', style=f"bold {PALETTE.success}")
                 tips.append("  ", style=PALETTE.text_dim)
                 tips.append("/connect", style=f"bold {PALETTE.warning}")
             else:
@@ -1386,7 +1388,7 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             steps.append("Ready: ", style=f"bold {PALETTE.success}")
             steps.append("/status", style=f"bold {PALETTE.info}")
             steps.append("  ", style=PALETTE.text_dim)
-            steps.append("/rlm run \"your task\" steps=6", style=f"bold {PALETTE.success}")
+            steps.append('/rlm run "your task" steps=6', style=f"bold {PALETTE.success}")
             steps.append("  ", style=PALETTE.text_dim)
             steps.append("/models", style=f"bold {PALETTE.info}")
 
@@ -1444,7 +1446,9 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 )
             )
             try:
-                summary = self._cached_research_summary or self.query_one("#research_summary", Static)
+                summary = self._cached_research_summary or self.query_one(
+                    "#research_summary", Static
+                )
                 summary.update(
                     "[yellow]Run started...[/yellow] waiting for runtime events. "
                     "Open [cyan]Research Lab -> Events[/cyan] for live logs."
@@ -1499,7 +1503,9 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 except Exception:
                     pass
                 try:
-                    state["reward"] = float(payload.get("total_reward", state.get("reward", 0.0)) or 0.0)
+                    state["reward"] = float(
+                        payload.get("total_reward", state.get("reward", 0.0)) or 0.0
+                    )
                 except Exception:
                     pass
             else:
@@ -1535,7 +1541,9 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 pass
 
             try:
-                summary = self._cached_research_summary or self.query_one("#research_summary", Static)
+                summary = self._cached_research_summary or self.query_one(
+                    "#research_summary", Static
+                )
                 summary.update(
                     f"{status_text} | Reward: [bold]{reward:.3f}[/bold] | "
                     f"Steps: {steps} | Run: [dim]{run_id}[/dim]{task_line}"
@@ -1581,8 +1589,12 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             body.add_column()
             body.add_row(lines)
             if final_response:
-                preview = final_response if len(final_response) <= 320 else f"{final_response[:317]}..."
-                body.add_row(Panel(preview, title="Final Response (preview)", border_style="#3b82f6"))
+                preview = (
+                    final_response if len(final_response) <= 320 else f"{final_response[:317]}..."
+                )
+                body.add_row(
+                    Panel(preview, title="Final Response (preview)", border_style="#3b82f6")
+                )
             body.add_row(tail)
 
             self._chat_log().write(
@@ -2197,9 +2209,7 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             status.append(f"Running {short}", style=PALETTE.text_secondary)
             self._thinking_status().update(status)
 
-        def _render_slash_footer(
-            self, command: str, *, handled: bool, error: str | None
-        ) -> None:
+        def _render_slash_footer(self, command: str, *, handled: bool, error: str | None) -> None:
             started = self._active_slash_started_at
             elapsed = None
             if started is not None:
@@ -3390,7 +3400,9 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                     f"[yellow]Requested cancellation for run '{run_id}'.[/yellow]"
                 )
             else:
-                self._chat_log().write("[yellow]Requested cancellation for all active runs.[/yellow]")
+                self._chat_log().write(
+                    "[yellow]Requested cancellation for all active runs.[/yellow]"
+                )
 
             if active_runs:
                 joined = ", ".join(str(item) for item in active_runs)
@@ -3400,9 +3412,7 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
 
             if pending:
                 joined = ", ".join(str(item) for item in pending)
-                self._chat_log().write(
-                    f"[dim]Pending run-specific cancellations:[/dim] {joined}"
-                )
+                self._chat_log().write(f"[dim]Pending run-specific cancellations:[/dim] {joined}")
 
             return True
 

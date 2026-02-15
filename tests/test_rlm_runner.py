@@ -265,8 +265,7 @@ def test_rlm_status_and_events(tmp_path):
 def test_rlm_run_task_can_be_cancelled(tmp_path):
     connector = _FakeConnector(
         responses=[
-            '{"action":"run_python","code":"print(\\"tick\\")","done":false}'
-            for _ in range(200)
+            '{"action":"run_python","code":"print(\\"tick\\")","done":false}' for _ in range(200)
         ]
     )
     engine = _SlowExecutionEngine(delay_seconds=0.03)
@@ -297,9 +296,7 @@ def test_rlm_run_task_can_be_cancelled(tmp_path):
 
 
 def test_rlm_request_cancel_all_without_active_runs_does_not_latch(tmp_path):
-    connector = _FakeConnector(
-        responses=['{"action":"final","done":true,"final_response":"done"}']
-    )
+    connector = _FakeConnector(responses=['{"action":"final","done":true,"final_response":"done"}'])
     engine = _FakeExecutionEngine()
     runner = RLMRunner(llm_connector=connector, execution_engine=engine, run_dir=tmp_path)
 

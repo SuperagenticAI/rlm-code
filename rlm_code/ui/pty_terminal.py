@@ -29,6 +29,8 @@ _HAS_PTY = hasattr(os, "openpty")
 # ---- ANSI escape code stripper (for plain-text fallback) ----
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]|\x1b\].*?\x07|\x1b\[.*?[a-zA-Z]")
+
+
 def strip_ansi(text: str) -> str:
     """Remove ANSI escape sequences from text."""
     return _ANSI_RE.sub("", text)
@@ -706,7 +708,16 @@ if _HAS_TEXTUAL:
             elif event.key == "delete":
                 # Keep behavior simple and conservative for status preview.
                 self._update_status()
-            elif event.key in {"up", "down", "left", "right", "home", "end", "page_up", "page_down"}:
+            elif event.key in {
+                "up",
+                "down",
+                "left",
+                "right",
+                "home",
+                "end",
+                "page_up",
+                "page_down",
+            }:
                 # Cursor/history edits are hard to mirror exactly; reset preview to avoid stale text.
                 self._typed_buffer = ""
                 self._update_status()
