@@ -32,6 +32,7 @@ Execution flow:
 | Runtime | Isolation | Notes |
 |---|---|---|
 | `local` | none | Fastest; development only |
+| `monty` | in-process sandbox | Sandboxed Rust interpreter via `pydantic-monty`; Python subset |
 | `docker` | container | Recommended default for secure local execution |
 | `apple-container` | container | macOS-only, behind enable gate |
 | `modal` | remote | Requires Modal SDK/auth |
@@ -153,9 +154,12 @@ If configured in `sandbox.docker.extra_args`, runtime creation fails with `Confi
 
 ## Monty and Pure RLM Backend
 
-Monty is used as a **pure RLM interpreter backend** (`/sandbox backend monty`), not a general `sandbox.runtime` ID.
+Monty can now be used in both places:
 
-Use it when you want secure in-process pure RLM execution without Docker.
+- Superbox runtime via `/sandbox use monty`
+- Pure RLM interpreter backend via `/sandbox backend monty`
+
+Use Monty when you want secure in-process execution without Docker.
 
 ---
 

@@ -306,6 +306,7 @@ class TestCloudRuntimeRegistry:
 
         # All runtimes should have health entries
         assert "local" in health
+        assert "monty" in health
         assert "docker" in health
         assert "modal" in health
         assert "e2b" in health

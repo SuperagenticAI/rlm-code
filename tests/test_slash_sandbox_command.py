@@ -58,6 +58,7 @@ def test_sandbox_use_updates_config_and_engine(monkeypatch):
 
     health = {
         "local": RuntimeHealth(runtime="local", available=True, detail="ok"),
+        "monty": RuntimeHealth(runtime="monty", available=True, detail="ok"),
         "docker": RuntimeHealth(runtime="docker", available=True, detail="ok"),
         "apple-container": RuntimeHealth(
             runtime="apple-container", available=False, detail="missing"
@@ -77,6 +78,7 @@ def test_sandbox_status_runs_without_error(monkeypatch):
 
     health = {
         "local": RuntimeHealth(runtime="local", available=True, detail="ok"),
+        "monty": RuntimeHealth(runtime="monty", available=False, detail="missing dependency"),
         "docker": RuntimeHealth(runtime="docker", available=False, detail="down"),
         "apple-container": RuntimeHealth(
             runtime="apple-container", available=False, detail="missing"
@@ -204,6 +206,7 @@ def test_sandbox_manual_override_marks_profile_custom(monkeypatch):
 
     health = {
         "local": RuntimeHealth(runtime="local", available=True, detail="ok"),
+        "monty": RuntimeHealth(runtime="monty", available=True, detail="ok"),
         "docker": RuntimeHealth(runtime="docker", available=True, detail="ok"),
         "apple-container": RuntimeHealth(
             runtime="apple-container", available=False, detail="missing"
@@ -214,3 +217,23 @@ def test_sandbox_manual_override_marks_profile_custom(monkeypatch):
 
     assert handler.config_manager.config.sandbox.superbox_profile == "custom"
     assert handler.config_manager.saved is True
+
+
+def test_sandbox_use_monty_updates_config_and_engine(monkeypatch):
+    handler = _build_handler()
+
+    health = {
+        "local": RuntimeHealth(runtime="local", available=True, detail="ok"),
+        "monty": RuntimeHealth(runtime="monty", available=True, detail="ok"),
+        "docker": RuntimeHealth(runtime="docker", available=True, detail="ok"),
+        "apple-container": RuntimeHealth(
+            runtime="apple-container", available=False, detail="missing"
+        ),
+    }
+    monkeypatch.setattr("rlm_code.commands.slash_commands.detect_runtime_health", lambda: health)
+
+    handler.cmd_sandbox(["use", "monty"])
+
+    assert handler.config_manager.config.sandbox.runtime == "monty"
+    assert handler.config_manager.saved is True
+    assert handler.execution_engine.get_runtime_name() == "monty"

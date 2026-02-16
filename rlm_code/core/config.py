@@ -102,7 +102,7 @@ class SandboxAppleContainerConfig:
 class SandboxConfig:
     """Execution sandbox runtime configuration."""
 
-    runtime: str = "docker"  # local | docker | apple-container | daytona | e2b
+    runtime: str = "docker"  # local | monty | docker | apple-container | daytona | e2b
     default_timeout_seconds: int = 30
     memory_limit_mb: int = 512
     allowed_mount_roots: list[str] = field(

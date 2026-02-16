@@ -14,7 +14,7 @@
 [![Pre-commit](https://github.com/SuperagenticAI/rlm-code/actions/workflows/pre-commit.yml/badge.svg?branch=main)](https://github.com/SuperagenticAI/rlm-code/actions/workflows/pre-commit.yml)
 [![Docs Deploy](https://github.com/SuperagenticAI/rlm-code/actions/workflows/deploy-docs.yml/badge.svg?branch=main)](https://github.com/SuperagenticAI/rlm-code/actions/workflows/deploy-docs.yml)
 [![Release](https://github.com/SuperagenticAI/rlm-code/actions/workflows/release.yml/badge.svg?branch=main)](https://github.com/SuperagenticAI/rlm-code/actions/workflows/release.yml)
-[![Docs](https://img.shields.io/badge/docs-mkdocs-blue.svg)](https://superagenticai.github.io/rlm-code/)
+[![Docs](https://img.shields.io/badge/Docs-RLM%20Code-ff7a18.svg?logo=readthedocs&logoColor=white)](https://superagenticai.github.io/rlm-code/)
 [![GitHub Stars](https://img.shields.io/github/stars/SuperagenticAI/rlm-code.svg)](https://github.com/SuperagenticAI/rlm-code/stargazers)
 [![GitHub Issues](https://img.shields.io/github/issues/SuperagenticAI/rlm-code.svg)](https://github.com/SuperagenticAI/rlm-code/issues)
 [![GitHub Pull Requests](https://img.shields.io/github/issues-pr/SuperagenticAI/rlm-code.svg)](https://github.com/SuperagenticAI/rlm-code/pulls)
@@ -24,6 +24,18 @@
 RLM Code implements the [Recursive Language Models](https://arxiv.org/abs/2502.07503) (RLM) approach from the 2025 paper release. Instead of stuffing your entire document into the LLM's context window, RLM stores it as a Python variable and lets the LLM write code to analyze it, chunk by chunk, iteration by iteration. This is dramatically more token-efficient for large inputs.
 
 RLM Code wraps this algorithm in an interactive terminal UI with built-in benchmarks, trajectory replay, and observability.
+
+## Documentation
+
+<p align="center">
+  <a href="https://superagenticai.github.io/rlm-code/">
+    <img alt="Read the RLM Code Docs" src="https://img.shields.io/badge/Read%20the%20Docs-RLM%20Code-ff7a18?style=for-the-badge&logo=readthedocs&logoColor=white">
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://superagenticai.github.io/rlm-code/"><strong>Open the full documentation</strong></a>
+</p>
 
 ## Install
 
@@ -304,7 +316,7 @@ rlm_code/
   harness/          # Tool-using coding harness (/harness)
 ```
 
-## Documentation
+## Resources
 
 Full docs: https://superagenticai.github.io/rlm-code/
 

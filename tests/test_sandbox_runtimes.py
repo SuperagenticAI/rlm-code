@@ -1,6 +1,7 @@
 """Tests for sandbox runtime registry and execution delegation."""
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from textwrap import dedent
 
 import pytest
@@ -9,6 +10,7 @@ from rlm_code.core.config import ProjectConfig
 from rlm_code.core.exceptions import ConfigurationError
 from rlm_code.execution.sandbox import ExecutionSandbox
 from rlm_code.sandbox.runtimes import (
+    RuntimeExecutionRequest,
     RuntimeExecutionResult,
     create_runtime,
     detect_runtime_health,
@@ -52,6 +54,11 @@ def test_create_runtime_local():
     assert runtime.name == "local"
 
 
+def test_create_runtime_monty():
+    runtime = create_runtime("monty", _SandboxCfg())
+    assert runtime.name == "monty"
+
+
 def test_create_runtime_docker_config_applied():
     runtime = create_runtime("docker", _SandboxCfg())
     assert runtime.name == "docker"
@@ -66,6 +73,45 @@ def test_detect_runtime_health_includes_local():
     health = detect_runtime_health()
     assert "local" in health
     assert health["local"].available is True
+    assert "monty" in health
+
+
+def test_monty_runtime_executes_and_maps_result(monkeypatch, tmp_path):
+    class _FakeResult:
+        output = "hello from monty\n"
+        error = None
+        type_errors = None
+
+    class _FakeMontyInterpreter:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def execute(self, code: str):
+            assert "print" in code
+            return _FakeResult()
+
+    monkeypatch.setattr(
+        "rlm_code.rlm.monty_interpreter.MontyInterpreter",
+        _FakeMontyInterpreter,
+    )
+
+    code_file = tmp_path / "generated_code.py"
+    code_file.write_text("print('hello from monty')", encoding="utf-8")
+
+    runtime = create_runtime("monty", _SandboxCfg())
+    result = runtime.execute(
+        RuntimeExecutionRequest(
+            code_file=code_file,
+            workdir=tmp_path,
+            timeout_seconds=5,
+            python_executable=Path("/usr/bin/python3"),
+            env={},
+        )
+    )
+
+    assert result.return_code == 0
+    assert result.stdout == "hello from monty\n"
+    assert result.stderr == ""
 
 
 def test_execution_sandbox_uses_runtime_override(monkeypatch):

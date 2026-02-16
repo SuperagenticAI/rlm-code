@@ -16,6 +16,7 @@ from .apple_container_runtime import AppleContainerRuntime
 from .base import SandboxRuntime
 from .docker_runtime import DockerSandboxRuntime
 from .local_runtime import LocalSandboxRuntime
+from .monty_runtime import MontySandboxRuntime
 
 # Cloud runtimes (optional dependencies)
 try:
@@ -42,7 +43,7 @@ except ImportError:
 logger = get_logger(__name__)
 
 # Base runtimes always available
-SUPPORTED_RUNTIMES = {"local", "docker", "apple-container"}
+SUPPORTED_RUNTIMES = {"local", "monty", "docker", "apple-container"}
 
 # Cloud runtimes (added if dependencies are available)
 CLOUD_RUNTIMES = {"modal", "e2b", "daytona"}
@@ -110,6 +111,13 @@ def create_runtime(runtime_name: str, sandbox_config: Any = None) -> SandboxRunt
             cpus=getattr(docker_cfg, "cpus", 1.0),
             network_enabled=bool(getattr(docker_cfg, "network_enabled", False)),
             extra_args=extra_args,
+        )
+
+    if normalized == "monty":
+        return MontySandboxRuntime(
+            type_check=bool(getattr(sandbox_config, "monty_type_check", False)),
+            max_allocations=getattr(sandbox_config, "monty_max_allocations", None),
+            max_memory=getattr(sandbox_config, "monty_max_memory", None),
         )
 
     if normalized == "apple-container":
@@ -183,6 +191,10 @@ def detect_runtime_health() -> dict[str, RuntimeHealth]:
     # Docker runtime
     docker_ok, docker_detail = DockerSandboxRuntime.check_health()
     results.append(RuntimeHealth(runtime="docker", available=docker_ok, detail=docker_detail))
+
+    # Monty runtime
+    monty_ok, monty_detail = MontySandboxRuntime.check_health()
+    results.append(RuntimeHealth(runtime="monty", available=monty_ok, detail=monty_detail))
 
     # Apple Container runtime
     apple_ok, apple_detail = AppleContainerRuntime.check_health()
@@ -300,6 +312,20 @@ def run_runtime_doctor(
                 recommendation="Keep env_allowlist minimal to reduce secret exposure.",
             )
         )
+
+    if runtime_name == "monty":
+        monty_ok, monty_detail = MontySandboxRuntime.check_health()
+        checks.append(
+            RuntimeDoctorCheck(
+                name="monty_runtime",
+                status="pass" if monty_ok else "fail",
+                detail=monty_detail,
+                recommendation=(
+                    None if monty_ok else "Install dependency: pip install pydantic-monty"
+                ),
+            )
+        )
+        return checks
 
     if runtime_name not in {"docker", "apple-container"}:
         return checks

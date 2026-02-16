@@ -340,7 +340,7 @@ class TestConfigIntegration:
 
     def test_config_with_all_runtimes(self):
         """Test configuration with different runtimes."""
-        runtimes = ["local", "docker", "modal", "e2b", "daytona"]
+        runtimes = ["local", "monty", "docker", "modal", "e2b", "daytona"]
 
         for runtime in runtimes:
             config = RLMConfig.from_dict({"sandbox": {"runtime": runtime}})
