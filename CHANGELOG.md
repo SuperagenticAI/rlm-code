@@ -5,7 +5,7 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.2] - 2026-02-20
+## [0.1.6] - 2026-02-20
 
 ### Added
 - Harness strategy selector with `tool_call` (default) and opt-in `codemode`.
@@ -29,7 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added explicit CodeMode guardrail policy documentation with blocked API classes and runtime limit defaults.
 - Codemode path remains opt-in; default harness behavior remains strict baseline `strategy=tool_call`.
 
-## [0.1.1] - 2026-02-15
+## [0.1.5] - 2026-02-15
 
 Initial public release of **RLM Code**.
 
@@ -55,4 +55,4 @@ Initial public release of **RLM Code**.
 - Unsafe local `exec` usage preserved only as an explicit, opt-in path for advanced development scenarios.
 
 [0.1.5]: https://github.com/SuperagenticAI/rlm-code/releases/tag/v0.1.5
-[0.1.2]: https://github.com/SuperagenticAI/rlm-code/releases/tag/v0.1.2
+[0.1.6]: https://github.com/SuperagenticAI/rlm-code/releases/tag/v0.1.6

@@ -6,7 +6,7 @@
 
 <p class="rlm-tagline">Research Playground & Evaluation OS for Recursive Language Model Agentic Systems</p>
 
-<span class="rlm-badge rlm-badge--purple">v0.1.2</span>
+<span class="rlm-badge rlm-badge--purple">v0.1.6</span>
 <span class="rlm-badge rlm-badge--green">Python 3.11+</span>
 <span class="rlm-badge rlm-badge--blue">Apache 2.0</span>
 

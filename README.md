@@ -25,7 +25,7 @@ RLM Code implements the [Recursive Language Models](https://arxiv.org/abs/2502.0
 
 RLM Code wraps this algorithm in an interactive terminal UI with built-in benchmarks, trajectory replay, and observability.
 
-## Release v0.1.2
+## Release v0.1.6
 
 This release adds the new CodeMode path as an opt-in harness strategy.
 
