@@ -151,6 +151,10 @@ def run_benchmark(
     self,
     *,
     preset: str = "dspy_quick",
+    mode: str = "native",
+    include_mcp: bool = False,
+    mcp_server: str | None = None,
+    harness_strategy: str = "tool_call",
     limit: int | None = None,
     environment: str | None = None,
     framework: str | None = None,
@@ -163,16 +167,42 @@ def run_benchmark(
 ) -> RLMBenchmarkResult:
 ```
 
-Iterates over all cases in the specified preset, running each through `run_task()` and collecting metrics. Results are persisted as JSON summaries in the benchmarks directory.
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `preset` | `str` | `"dspy_quick"` | Benchmark preset name |
+| `mode` | `str` | `"native"` | `native`, `harness`, or `direct-llm` |
+| `include_mcp` | `bool` | `False` | Enable MCP tools for harness mode |
+| `mcp_server` | `str \| None` | `None` | MCP server name filter |
+| `harness_strategy` | `str` | `"tool_call"` | Harness planner strategy (`tool_call` / `codemode`) |
+| `limit` | `int \| None` | `None` | Max cases from preset |
+| `environment` | `str \| None` | `None` | Override per-case environment (native mode) |
+| `framework` | `str \| None` | `None` | Framework adapter override (native mode) |
+| `max_steps` | `int \| None` | `None` | Override per-case max steps |
+| `exec_timeout` | `int \| None` | `None` | Override per-case timeout |
+| `branch_width` | `int` | `1` | Best-of-N planner branch width (native mode) |
+| `sub_model` | `str \| None` | `None` | Sub-model override |
+| `sub_provider` | `str \| None` | `None` | Sub-provider override |
+| `pack_paths` | `list[str \| Path] \| None` | `None` | External benchmark pack files |
+
+Iterates over all cases in the specified preset and runs each case using one of
+three benchmark modes:
+
+- `native`: full RLM runner (`run_task()` path)
+- `harness`: coding harness path (supports `harness_strategy`)
+- `direct-llm`: single prompt baseline
+
+Results are persisted as JSON summaries in the benchmarks directory.
 
 **Example:**
 
 ```python
 bench = runner.run_benchmark(
-    preset="dspy_quick",
-    limit=5,
-    environment="dspy",
-    max_steps=4,
+    preset="dynamic_web_filtering",
+    mode="harness",
+    include_mcp=True,
+    mcp_server="codemode",
+    harness_strategy="codemode",
+    limit=3,
 )
 print(f"Completed: {bench.completed_cases}/{bench.total_cases}")
 print(f"Avg Reward: {bench.avg_reward}")
@@ -292,12 +322,14 @@ class RLMBenchmarkResult:
     benchmark_id: str                  # Unique benchmark identifier
     summary_path: Path                 # Path to JSON summary file
     preset: str                        # Preset name used
+    mode: str                          # Benchmark mode (native/harness/direct-llm)
     started_at: str                    # ISO timestamp
     finished_at: str                   # ISO timestamp
     total_cases: int                   # Total benchmark cases
     completed_cases: int               # Cases that completed successfully
     avg_reward: float                  # Average reward across cases
     avg_steps: float                   # Average steps across cases
+    cancelled: bool                    # Whether execution was cancelled mid-run
     case_results: list[dict[str, Any]] # Per-case result dictionaries
 ```
 
@@ -308,6 +340,7 @@ Each entry in `case_results` contains:
 | `case_id` | `str` | Unique case identifier |
 | `description` | `str` | Human-readable case description |
 | `task` | `str` | Task text |
+| `mode` | `str` | Case execution mode (`native`, `harness`, `direct-llm`) |
 | `environment` | `str` | Environment used |
 | `run_id` | `str` | RLM run ID for this case |
 | `completed` | `bool` | Whether the case completed |
@@ -315,6 +348,18 @@ Each entry in `case_results` contains:
 | `total_reward` | `float` | Cumulative reward |
 | `usage` | `dict` | Token usage |
 | `final_response` | `str` | Final answer |
+
+Harness mode adds these fields:
+
+- `mcp_enabled`
+- `mcp_server`
+- `harness_strategy`
+- `harness_tool_calls`
+- `mcp_tool_calls`
+- `codemode_chain_calls`
+- `codemode_search_calls`
+- `codemode_discovery_calls`
+- `codemode_guardrail_blocked`
 
 ---
 

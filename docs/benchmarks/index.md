@@ -4,7 +4,7 @@ title: Benchmarks & Leaderboard
 
 # Benchmarks & Leaderboard
 
-RLM Code includes a complete benchmarking and evaluation framework designed for research reproducibility and systematic performance tracking. The system provides **10 preset benchmark suites** covering 33+ test cases, a **multi-metric leaderboard** for ranking and comparison, and **session replay** with full time-travel debugging.
+RLM Code includes a complete benchmarking and evaluation framework designed for research reproducibility and systematic performance tracking. The system provides **11 preset benchmark suites** covering 33+ test cases, a **multi-metric leaderboard** for ranking and comparison, and **session replay** with full time-travel debugging.
 
 ---
 
@@ -28,7 +28,7 @@ flowchart TD
 
 ### Preset Benchmarks
 
-10 built-in benchmark suites that cover the full spectrum of RLM capabilities:
+11 built-in benchmark suites that cover the full spectrum of RLM capabilities:
 
 | Category | Presets | Total Cases | Focus |
 |---|---|---|---|
@@ -36,7 +36,7 @@ flowchart TD
 | Generic | `generic_smoke` | 2 | Basic Python execution and error recovery |
 | Pure RLM | `pure_rlm_smoke`, `pure_rlm_context` | 7 | Paper-compliant mode, context-as-variable |
 | Advanced | `deep_recursion`, `paradigm_comparison` | 6 | Depth > 1 recursion, cross-paradigm comparison |
-| Paper-Compatible | `oolong_style`, `browsecomp_style`, `token_efficiency` | 10 | OOLONG, BrowseComp-Plus, token efficiency |
+| Paper-Compatible | `oolong_style`, `browsecomp_style`, `token_efficiency`, `dynamic_web_filtering` | 13 | OOLONG, BrowseComp-Plus, token efficiency, dynamic web filtering |
 
 See [Preset Benchmarks](presets.md) for full details on every suite and case.
 
@@ -129,6 +129,7 @@ See [Preset Benchmarks](presets.md) for all supported pack formats including Goo
 
 | Page | Description |
 |---|---|
-| [Preset Benchmarks](presets.md) | All 10 presets in detail, custom pack loading, YAML format |
+| [Preset Benchmarks](presets.md) | All 11 presets in detail, custom pack loading, YAML format |
 | [Leaderboard](leaderboard.md) | Ranking, filtering, statistics, trend analysis, export |
+| [CodeMode Evaluation & Promotion Gates](codemode-evaluation.md) | Side-by-side harness strategy methodology, telemetry, and release gates |
 | [Session Replay](session-replay.md) | Recording, replaying, time-travel debugging, session comparison |

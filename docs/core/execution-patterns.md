@@ -70,8 +70,18 @@ In this pattern, the model chooses tools (`read`, `grep`, `edit`, `bash`, MCP to
 ```bash
 /harness tools
 /harness doctor
-/harness run "fix failing tests and explain changes" steps=8 mcp=on
+/harness run "fix failing tests and explain changes" steps=8 mcp=on strategy=tool_call
+/harness run "plan and execute MCP tool chain" steps=8 mcp=on strategy=codemode mcp_server=codemode
 ```
+
+Harness now has two strategy variants:
+
+- `strategy=tool_call`: iterative planner loop (default).
+- `strategy=codemode`: single guarded JS/TS program executed via MCP `call_tool_chain`.
+
+For CodeMode lifecycle and safety constraints, see:
+[CodeMode Integration](../integrations/codemode.md) and
+[CodeMode Guardrails](../security/codemode-guardrails.md).
 
 If a connected model is in local/BYOK mode, TUI chat can auto-route coding prompts to harness.
 
@@ -99,6 +109,7 @@ Run the same benchmark suite with each mode:
 ```bash
 /rlm bench preset=paradigm_comparison mode=native
 /rlm bench preset=paradigm_comparison mode=harness
+/rlm bench preset=dynamic_web_filtering mode=harness strategy=codemode mcp=on mcp_server=codemode
 /rlm bench preset=paradigm_comparison mode=direct-llm
 ```
 

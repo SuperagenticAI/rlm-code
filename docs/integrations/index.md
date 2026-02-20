@@ -1,8 +1,9 @@
 # Integrations
 
 RLM Code is designed to integrate with the broader AI ecosystem through
-three integration surfaces: **LLM providers** for model connectivity,
-**MCP servers** for tool interoperability, and **framework adapters** for
+four integration surfaces: **LLM providers** for model connectivity,
+**MCP servers** for tool interoperability, **CodeMode strategy** for
+single-program MCP tool chaining, and **framework adapters** for
 plugging into third-party agent frameworks.
 
 ---
@@ -13,6 +14,7 @@ plugging into third-party agent frameworks.
 graph LR
     RLM[RLM Code] --> LLM[LLM Providers]
     RLM --> MCP[MCP Server/Client]
+    RLM --> CM[Harness CodeMode]
     RLM --> FW[Framework Adapters]
 
     LLM --> Local[Local Models]
@@ -21,6 +23,9 @@ graph LR
     MCP --> Claude[Claude Desktop]
     MCP --> VSCode[VS Code]
     MCP --> ExtMCP[External MCP Servers]
+
+    CM --> Search[search_tools]
+    CM --> Chain[call_tool_chain]
 
     FW --> PydAI[Pydantic AI]
     FW --> ADK[Google ADK]
@@ -75,6 +80,17 @@ The MCP Client Manager supports:
 - **Environment variable resolution** in configuration
 
 See [MCP Server](mcp.md) for the full MCP reference.
+
+---
+
+## CodeMode Strategy (Harness + MCP)
+
+CodeMode is an opt-in harness strategy (`strategy=codemode`) that discovers
+tool interfaces with `search_tools`, asks the model for one JS/TS program,
+validates guardrails, and executes through `call_tool_chain`.
+
+See [CodeMode Integration](codemode.md) for architecture, controls, and
+runtime behavior.
 
 ---
 
@@ -138,4 +154,5 @@ See [Framework Adapters](frameworks.md) for implementation details.
 
 - [LLM Providers](llm-providers.md) -- Full provider registry, model catalog, env vars
 - [MCP Server](mcp.md) -- Server tools, client manager, transport configuration
+- [CodeMode Integration](codemode.md) -- Harness strategy lifecycle, guardrails, runtime limits
 - [Framework Adapters](frameworks.md) -- Adapter protocol, Pydantic AI, Google ADK

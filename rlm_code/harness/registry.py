@@ -8,10 +8,11 @@ import re
 import shutil
 import subprocess
 from dataclasses import dataclass, field
+from html import unescape
 from pathlib import Path
 from threading import Thread
 from typing import Any, Callable
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 import requests
 
@@ -55,6 +56,9 @@ class HarnessToolRegistry:
         self._todo_items: list[str] = []
         self._plan_mode_active = False
         self._mcp_aliases: dict[str, str] = {}
+        self._websearch_uses = 0
+        self._mcp_allowed_tools: set[str] | None = None
+        self._mcp_allowed_servers: set[str] | None = None
 
         self._local_specs: dict[str, HarnessToolSpec] = {
             "read": HarnessToolSpec(
@@ -229,10 +233,33 @@ class HarnessToolRegistry:
             ),
             "websearch": HarnessToolSpec(
                 name="websearch",
-                description="Parity stub. Prefer MCP-provided websearch implementation.",
+                description=(
+                    "Search the web and return filtered results. "
+                    "Supports domain allow/block lists and keyword filtering."
+                ),
                 input_schema={
                     "type": "object",
-                    "properties": {"query": {"type": "string"}},
+                    "properties": {
+                        "query": {"type": "string"},
+                        "limit": {"type": "integer", "minimum": 1, "maximum": 10},
+                        "allowed_domains": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
+                        "blocked_domains": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
+                        "include_terms": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
+                        "exclude_terms": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
+                        "max_uses": {"type": "integer", "minimum": 1},
+                    },
                     "required": ["query"],
                     "additionalProperties": True,
                 },
@@ -274,17 +301,61 @@ class HarnessToolRegistry:
             "batch": self._tool_batch,
             "plan_enter": self._tool_plan_enter,
             "plan_exit": self._tool_plan_exit,
-            "websearch": self._tool_parity_mcp_required,
+            "websearch": self._tool_websearch,
             "codesearch": self._tool_parity_mcp_required,
             "lsp": self._tool_parity_mcp_required,
             "skill": self._tool_parity_mcp_required,
         }
+
+    def set_mcp_policy(
+        self,
+        *,
+        allowed_tools: set[str] | list[str] | tuple[str, ...] | None = None,
+        allowed_servers: set[str] | list[str] | tuple[str, ...] | None = None,
+    ) -> None:
+        """Set allowlist policy for MCP-backed tools."""
+        self._mcp_allowed_tools = _normalize_name_collection(allowed_tools)
+        self._mcp_allowed_servers = _normalize_name_collection(allowed_servers)
+
+    def clear_mcp_policy(self) -> None:
+        """Remove MCP allowlist restrictions."""
+        self._mcp_allowed_tools = None
+        self._mcp_allowed_servers = None
+
+    def _is_mcp_tool_allowed(self, full_name: str) -> tuple[bool, str | None]:
+        parts = str(full_name).split(":", 2)
+        if len(parts) != 3 or parts[0] != "mcp":
+            return (
+                False,
+                f"Invalid MCP tool name: {full_name}. Expected mcp:<server>:<tool> format.",
+            )
+        _, server_name, tool_name = parts
+        normalized_server = server_name.strip().lower()
+        normalized_tool = tool_name.strip().lower()
+
+        if self._mcp_allowed_servers is not None and normalized_server not in self._mcp_allowed_servers:
+            return (
+                False,
+                f"MCP tool '{full_name}' blocked by MCP policy (server '{server_name}' not allowed).",
+            )
+        if self._mcp_allowed_tools is not None and normalized_tool not in self._mcp_allowed_tools:
+            return (
+                False,
+                f"MCP tool '{full_name}' blocked by MCP policy (tool '{tool_name}' not allowed).",
+            )
+        return (True, None)
 
     def list_tools(self, *, include_mcp: bool = True) -> list[HarnessToolSpec]:
         specs_map: dict[str, HarnessToolSpec] = dict(self._local_specs)
         self._mcp_aliases = {}
         if include_mcp and self.mcp_manager is not None:
             mcp_specs = self._list_mcp_specs()
+            if self._mcp_allowed_tools is not None or self._mcp_allowed_servers is not None:
+                mcp_specs = [
+                    row
+                    for row in mcp_specs
+                    if self._is_mcp_tool_allowed(row.name)[0]
+                ]
             specs = list(specs_map.values())
             specs.extend(mcp_specs)
             alias_candidates: dict[str, list[HarnessToolSpec]] = {}
@@ -324,6 +395,9 @@ class HarnessToolRegistry:
             name = self._mcp_aliases[name]
 
         if name.startswith("mcp:"):
+            allowed, reason = self._is_mcp_tool_allowed(name)
+            if not allowed:
+                return HarnessToolResult(success=False, output=str(reason or "MCP tool blocked."))
             return self._execute_mcp_tool(name, payload)
 
         handler = self._local_handlers.get(name)
@@ -601,6 +675,140 @@ class HarnessToolRegistry:
         self._plan_mode_active = False
         return HarnessToolResult(success=True, output="Plan mode disabled.")
 
+    def _tool_websearch(self, args: dict[str, Any]) -> HarnessToolResult:
+        query = str(args.get("query", "") or "").strip()
+        if not query:
+            return HarnessToolResult(success=False, output="Missing search query.")
+
+        max_uses = max(1, int(args.get("max_uses", 6) or 6))
+        if self._websearch_uses >= max_uses:
+            return HarnessToolResult(
+                success=False,
+                output=f"websearch max_uses reached ({max_uses}).",
+                metadata={"max_uses": max_uses, "uses": self._websearch_uses},
+            )
+
+        limit = max(1, min(10, int(args.get("limit", 5) or 5)))
+        allowed_domains = _normalize_domains(args.get("allowed_domains"))
+        blocked_domains = _normalize_domains(args.get("blocked_domains"))
+        include_terms = _normalize_terms(args.get("include_terms"))
+        exclude_terms = _normalize_terms(args.get("exclude_terms"))
+
+        candidate_limit = min(40, max(limit * 4, 12))
+        try:
+            candidates = self._search_duckduckgo(query=query, limit=candidate_limit)
+        except Exception as exc:
+            return HarnessToolResult(success=False, output=f"websearch failed: {exc}")
+
+        filtered: list[dict[str, str]] = []
+        seen_urls: set[str] = set()
+        scanned = 0
+        for row in candidates:
+            scanned += 1
+            url = str(row.get("url", "")).strip()
+            if not url:
+                continue
+            domain = _extract_domain(url)
+            if not _domain_allowed(
+                domain=domain,
+                allowed_domains=allowed_domains,
+                blocked_domains=blocked_domains,
+            ):
+                continue
+
+            haystack = " ".join(
+                (
+                    str(row.get("title", "")).lower(),
+                    str(row.get("snippet", "")).lower(),
+                    url.lower(),
+                )
+            )
+            if include_terms and not all(term in haystack for term in include_terms):
+                continue
+            if exclude_terms and any(term in haystack for term in exclude_terms):
+                continue
+
+            if url in seen_urls:
+                continue
+            seen_urls.add(url)
+            filtered.append(
+                {
+                    "title": str(row.get("title", "")).strip(),
+                    "url": url,
+                    "domain": domain,
+                    "snippet": str(row.get("snippet", "")).strip(),
+                }
+            )
+            if len(filtered) >= limit:
+                break
+
+        self._websearch_uses += 1
+        payload = {
+            "query": query,
+            "count": len(filtered),
+            "scanned": scanned,
+            "results": filtered,
+            "filters": {
+                "allowed_domains": sorted(allowed_domains),
+                "blocked_domains": sorted(blocked_domains),
+                "include_terms": include_terms,
+                "exclude_terms": exclude_terms,
+                "limit": limit,
+                "max_uses": max_uses,
+            },
+            "usage": {
+                "websearch_uses": self._websearch_uses,
+                "websearch_uses_remaining": max(0, max_uses - self._websearch_uses),
+            },
+        }
+        return HarnessToolResult(
+            success=True,
+            output=json.dumps(payload, ensure_ascii=False),
+            metadata={
+                "query": query,
+                "count": len(filtered),
+                "scanned": scanned,
+                "uses": self._websearch_uses,
+            },
+        )
+
+    @staticmethod
+    def _search_duckduckgo(*, query: str, limit: int) -> list[dict[str, str]]:
+        response = requests.get(
+            "https://html.duckduckgo.com/html/",
+            params={"q": query},
+            timeout=15,
+            headers={"User-Agent": "rlm-code-harness/1.0"},
+        )
+        response.raise_for_status()
+        html = response.text
+
+        anchor_pattern = re.compile(
+            r'<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>(.*?)</a>',
+            re.IGNORECASE | re.DOTALL,
+        )
+        snippet_pattern = re.compile(
+            r'class="[^"]*result__snippet[^"]*"[^>]*>(.*?)</',
+            re.IGNORECASE | re.DOTALL,
+        )
+
+        rows: list[dict[str, str]] = []
+        for match in anchor_pattern.finditer(html):
+            raw_href = match.group(1)
+            title_html = match.group(2)
+            url = _decode_duckduckgo_href(raw_href)
+            if not url.startswith("http://") and not url.startswith("https://"):
+                continue
+
+            title = _strip_html(title_html)
+            tail = html[match.end() : min(len(html), match.end() + 1400)]
+            snippet_match = snippet_pattern.search(tail)
+            snippet = _strip_html(snippet_match.group(1)) if snippet_match else ""
+            rows.append({"title": title, "url": url, "snippet": snippet})
+            if len(rows) >= limit:
+                break
+        return rows
+
     def _tool_parity_mcp_required(self, args: dict[str, Any]) -> HarnessToolResult:
         _ = args
         return HarnessToolResult(
@@ -663,7 +871,16 @@ class HarnessToolRegistry:
             return HarnessToolResult(success=False, output=f"MCP call failed: {exc}")
 
         text_output = _extract_mcp_output(result)
-        return HarnessToolResult(success=True, output=self._truncate_text(text_output))
+        return HarnessToolResult(
+            success=True,
+            output=self._truncate_text(text_output),
+            metadata={
+                "source": "mcp",
+                "server": server_name,
+                "tool": tool_name,
+                "tool_full_name": full_name,
+            },
+        )
 
 
 def _extract_mcp_output(result: Any) -> str:
@@ -721,3 +938,86 @@ def _run_async(coro: Any) -> Any:
     if "error" in error:
         raise error["error"]
     return result.get("value")
+
+
+def _normalize_domains(raw: Any) -> set[str]:
+    if raw is None:
+        return set()
+    values: list[str] = []
+    if isinstance(raw, str):
+        values = [chunk for chunk in re.split(r"[,\s]+", raw) if chunk.strip()]
+    elif isinstance(raw, list):
+        values = [str(item) for item in raw if str(item).strip()]
+    domains: set[str] = set()
+    for value in values:
+        parsed = urlparse(str(value).strip())
+        candidate = parsed.netloc or parsed.path or str(value)
+        candidate = candidate.split("/")[0].strip().lower()
+        if candidate.startswith("www."):
+            candidate = candidate[4:]
+        if candidate:
+            domains.add(candidate)
+    return domains
+
+
+def _normalize_terms(raw: Any) -> list[str]:
+    if raw is None:
+        return []
+    if isinstance(raw, str):
+        parts = [chunk.strip().lower() for chunk in raw.split(",")]
+        return [part for part in parts if part]
+    if isinstance(raw, list):
+        terms = [str(item).strip().lower() for item in raw]
+        return [term for term in terms if term]
+    return []
+
+
+def _extract_domain(url: str) -> str:
+    parsed = urlparse(url)
+    domain = parsed.netloc.split(":")[0].strip().lower()
+    if domain.startswith("www."):
+        domain = domain[4:]
+    return domain
+
+
+def _domain_allowed(*, domain: str, allowed_domains: set[str], blocked_domains: set[str]) -> bool:
+    if not domain:
+        return False
+    if blocked_domains and any(domain == d or domain.endswith(f".{d}") for d in blocked_domains):
+        return False
+    if allowed_domains and not any(domain == d or domain.endswith(f".{d}") for d in allowed_domains):
+        return False
+    return True
+
+
+def _decode_duckduckgo_href(href: str) -> str:
+    raw = str(href or "").strip()
+    if not raw:
+        return ""
+    if raw.startswith("//"):
+        raw = "https:" + raw
+    parsed = urlparse(raw)
+    if "duckduckgo.com" not in parsed.netloc:
+        return raw
+    if parsed.path.startswith("/l/"):
+        query = parse_qs(parsed.query)
+        target = query.get("uddg", [None])[0] or query.get("rut", [None])[0]
+        if target:
+            return unquote(str(target))
+    return raw
+
+
+def _strip_html(value: str) -> str:
+    text = re.sub(r"<[^>]+>", "", str(value or ""))
+    text = unescape(text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def _normalize_name_collection(
+    raw: set[str] | list[str] | tuple[str, ...] | None,
+) -> set[str] | None:
+    if raw is None:
+        return None
+    values = {str(item).strip().lower() for item in raw if str(item).strip()}
+    return values or None

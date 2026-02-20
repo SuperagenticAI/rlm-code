@@ -24,17 +24,29 @@ class _FakeHarnessRunner:
         ]
     )
 
+    last_run_kwargs: dict = field(default_factory=dict)
+
     def list_tools(self, include_mcp: bool = True) -> list[dict]:
         _ = include_mcp
         return list(self.tools)
 
     def run(
-        self, task: str, max_steps: int, include_mcp: bool, tool_allowlist=None
+        self,
+        task: str,
+        max_steps: int,
+        include_mcp: bool,
+        tool_allowlist=None,
+        strategy: str = "tool_call",
+        mcp_server: str | None = None,
     ) -> HarnessRunResult:
-        _ = task
-        _ = max_steps
-        _ = include_mcp
-        _ = tool_allowlist
+        self.last_run_kwargs = {
+            "task": task,
+            "max_steps": max_steps,
+            "include_mcp": include_mcp,
+            "tool_allowlist": tool_allowlist,
+            "strategy": strategy,
+            "mcp_server": mcp_server,
+        }
         return HarnessRunResult(
             completed=True,
             final_response="done",
@@ -86,3 +98,27 @@ def test_harness_run_requires_model() -> None:
     handler = _build_handler()
     handler.llm_connector.current_model = None
     handler.cmd_harness(["run", "test"])
+
+
+def test_harness_run_passes_codemode_strategy_and_server() -> None:
+    handler = _build_handler()
+    handler.cmd_harness(
+        [
+            "run",
+            "build",
+            "workflow",
+            "strategy=codemode",
+            "mcp_server=codemode",
+            "mcp=on",
+        ]
+    )
+    assert handler.harness_runner.last_run_kwargs["strategy"] == "codemode"
+    assert handler.harness_runner.last_run_kwargs["mcp_server"] == "codemode"
+    assert handler.harness_runner.last_run_kwargs["include_mcp"] is True
+
+
+def test_harness_run_codemode_strategy_enables_mcp() -> None:
+    handler = _build_handler()
+    handler.cmd_harness(["run", "build", "workflow", "strategy=codemode", "mcp=off"])
+    assert handler.harness_runner.last_run_kwargs["strategy"] == "codemode"
+    assert handler.harness_runner.last_run_kwargs["include_mcp"] is True

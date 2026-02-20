@@ -158,6 +158,9 @@ class BenchmarkManagerMixin:
         *,
         preset: str = "dspy_quick",
         mode: str = "native",
+        include_mcp: bool = False,
+        mcp_server: str | None = None,
+        harness_strategy: str = "tool_call",
         limit: int | None = None,
         environment: str | None = None,
         framework: str | None = None,
@@ -170,6 +173,10 @@ class BenchmarkManagerMixin:
     ) -> RLMBenchmarkResult:
         """Execute a benchmark preset and persist aggregate summary."""
         resolved_mode = self._normalize_benchmark_mode(mode)
+        resolved_harness_strategy = self._normalize_harness_strategy(harness_strategy)
+        if resolved_mode == "harness" and resolved_harness_strategy == "codemode" and not include_mcp:
+            logger.warning("Harness codemode strategy requires MCP; enabling include_mcp.")
+            include_mcp = True
         benchmark_id = datetime.now(timezone.utc).strftime("bench_%Y%m%d_%H%M%S_%f")
         started_at = self._utc_now()
         started_monotonic = time.perf_counter()
@@ -210,6 +217,9 @@ class BenchmarkManagerMixin:
                     case_payload = self._run_benchmark_case_harness(
                         case=case,
                         chosen_steps=chosen_steps,
+                        include_mcp=bool(include_mcp),
+                        mcp_server=mcp_server,
+                        harness_strategy=resolved_harness_strategy,
                     )
                 else:
                     case_payload = self._run_benchmark_case_direct_llm(case=case)
@@ -221,28 +231,43 @@ class BenchmarkManagerMixin:
                 case_results.append(case_payload)
             except Exception as exc:
                 logger.exception("RLM benchmark case failed: %s", exc)
-                case_results.append(
-                    {
-                        "case_id": case.case_id,
-                        "description": case.description,
-                        "task": case.task,
-                        "mode": resolved_mode,
-                        "environment": chosen_env,
-                        "started_at": case_started,
-                        "finished_at": self._utc_now(),
-                        "run_id": None,
-                        "run_path": None,
-                        "completed": False,
-                        "steps": 0,
-                        "total_reward": -1.0,
-                        "duration_seconds": round(
-                            max(0.0, time.perf_counter() - case_started_monotonic),
-                            4,
-                        ),
-                        "final_response": "",
-                        "error": str(exc),
-                    }
-                )
+                failed_case = {
+                    "case_id": case.case_id,
+                    "description": case.description,
+                    "task": case.task,
+                    "mode": resolved_mode,
+                    "environment": chosen_env,
+                    "started_at": case_started,
+                    "finished_at": self._utc_now(),
+                    "run_id": None,
+                    "run_path": None,
+                    "completed": False,
+                    "steps": 0,
+                    "total_reward": -1.0,
+                    "duration_seconds": round(
+                        max(0.0, time.perf_counter() - case_started_monotonic),
+                        4,
+                    ),
+                    "final_response": "",
+                    "error": str(exc),
+                }
+                if resolved_mode == "harness":
+                    failed_case.update(
+                        {
+                            "mcp_enabled": bool(include_mcp),
+                            "mcp_server": str(mcp_server) if mcp_server else None,
+                            "harness_strategy": self._normalize_harness_strategy(
+                                resolved_harness_strategy
+                            ),
+                            "harness_tool_calls": 0,
+                            "mcp_tool_calls": 0,
+                            "codemode_chain_calls": 0,
+                            "codemode_search_calls": 0,
+                            "codemode_discovery_calls": 0,
+                            "codemode_guardrail_blocked": False,
+                        }
+                    )
+                case_results.append(failed_case)
             is_cancel_requested = getattr(self, "_is_cancel_requested", None)
             if callable(is_cancel_requested) and is_cancel_requested():
                 cancelled = True
@@ -264,6 +289,13 @@ class BenchmarkManagerMixin:
             "benchmark_id": benchmark_id,
             "preset": preset,
             "mode": resolved_mode,
+            "mcp_enabled": bool(include_mcp) if resolved_mode == "harness" else False,
+            "mcp_server": str(mcp_server) if (resolved_mode == "harness" and mcp_server) else None,
+            "harness_strategy": (
+                resolved_harness_strategy
+                if resolved_mode == "harness"
+                else None
+            ),
             "source": extra_sources.get(str(preset).strip().lower(), "builtin"),
             "description": extra_descriptions.get(str(preset).strip().lower(), ""),
             "pack_paths": [str(item) for item in (pack_paths or self._benchmark_pack_paths)],
@@ -892,11 +924,16 @@ class BenchmarkManagerMixin:
         *,
         case: RLMBenchmarkCase,
         chosen_steps: int,
+        include_mcp: bool,
+        mcp_server: str | None,
+        harness_strategy: str,
     ) -> dict[str, Any]:
         from ..harness import HarnessRunner
 
+        resolved_harness_strategy = self._normalize_harness_strategy(harness_strategy)
         runner = HarnessRunner(
             llm_connector=self.llm_connector,
+            mcp_manager=getattr(self, "mcp_manager", None),
             workdir=self.workdir,
         )
         usage_before = self._usage_snapshot()
@@ -904,13 +941,51 @@ class BenchmarkManagerMixin:
         result = runner.run(
             task=case.task,
             max_steps=max(1, chosen_steps),
-            include_mcp=False,
+            include_mcp=bool(include_mcp),
+            strategy=resolved_harness_strategy,
+            mcp_strict=True,
+            mcp_tool_allowlist=set(HarnessRunner.STRICT_MCP_TOOL_ALLOWLIST),
+            mcp_server=mcp_server,
         )
         usage_after = self._usage_snapshot()
         usage_delta = self._usage_delta(usage_before, usage_after)
         if usage_delta is None:
             usage_delta = result.usage_summary
         completed = bool(result.completed)
+        tool_steps = [step for step in result.steps if step.tool and step.tool_result is not None]
+        harness_tool_calls = len(tool_steps)
+        mcp_tool_calls = 0
+        codemode_chain_calls = 0
+        codemode_search_calls = 0
+        codemode_discovery_calls = 0
+        for step in tool_steps:
+            if step.tool_result is None:
+                continue
+            metadata = step.tool_result.metadata if isinstance(step.tool_result.metadata, dict) else {}
+            resolved_name = str(
+                metadata.get("tool_full_name")
+                or metadata.get("resolved_tool")
+                or step.tool
+                or ""
+            ).strip()
+            if resolved_name.startswith("mcp:"):
+                mcp_tool_calls += 1
+            if resolved_name.endswith(":call_tool_chain"):
+                codemode_chain_calls += 1
+            if resolved_name.endswith(":search_tools"):
+                codemode_search_calls += 1
+            if (
+                resolved_name.endswith(":search_tools")
+                or resolved_name.endswith(":list_tools")
+                or resolved_name.endswith(":tools_info")
+                or resolved_name.endswith(":get_required_keys_for_tool")
+            ):
+                codemode_discovery_calls += 1
+        codemode_guardrail_blocked = any(
+            str(step.action) == "codemode_plan"
+            and "guardrail" in str(step.reasoning or "").lower()
+            for step in result.steps
+        )
         return {
             "case_id": case.case_id,
             "description": case.description,
@@ -926,6 +1001,15 @@ class BenchmarkManagerMixin:
             "total_reward": 1.0 if completed else 0.0,
             "usage": dict(usage_delta or {}),
             "final_response": str(result.final_response or ""),
+            "mcp_enabled": bool(include_mcp),
+            "mcp_server": str(mcp_server) if mcp_server else None,
+            "harness_strategy": resolved_harness_strategy,
+            "harness_tool_calls": harness_tool_calls,
+            "mcp_tool_calls": mcp_tool_calls,
+            "codemode_chain_calls": codemode_chain_calls,
+            "codemode_search_calls": codemode_search_calls,
+            "codemode_discovery_calls": codemode_discovery_calls,
+            "codemode_guardrail_blocked": codemode_guardrail_blocked,
         }
 
     def _run_benchmark_case_direct_llm(
@@ -1001,6 +1085,13 @@ class BenchmarkManagerMixin:
             return None
         keys = {"total_calls", "prompt_tokens", "completion_tokens"}
         return {key: max(0, int(after.get(key, 0)) - int(before.get(key, 0))) for key in keys}
+
+    @staticmethod
+    def _normalize_harness_strategy(strategy: str | None) -> str:
+        value = str(strategy or "").strip().lower().replace("-", "_")
+        if value == "codemode":
+            return "codemode"
+        return "tool_call"
 
     @staticmethod
     def _summarize_distribution(values: list[float]) -> dict[str, float]:

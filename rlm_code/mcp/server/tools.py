@@ -217,6 +217,7 @@ class RLMTools:
                         "oolong_style",
                         "browsecomp_style",
                         "token_efficiency",
+                        "dynamic_web_filtering",
                         "paradigm_comparison",
                         "deep_recursion",
                     ],

@@ -4,7 +4,7 @@ title: Preset Benchmarks
 
 # Preset Benchmarks
 
-RLM Code ships with 10 preset benchmark suites containing 33+ test cases. These cover DSPy coding loops, generic execution, Pure RLM paper-compliant mode, deep recursion, paradigm comparison, and paper-compatible evaluation tasks.
+RLM Code ships with 11 preset benchmark suites containing 36+ test cases. These cover DSPy coding loops, generic execution, Pure RLM paper-compliant mode, deep recursion, paradigm comparison, and paper-compatible evaluation tasks.
 
 **Module**: `rlm_code.rlm.benchmarks`
 
@@ -38,7 +38,7 @@ class RLMBenchmarkCase:
 
 ---
 
-## All 10 Presets
+## All 11 Presets
 
 ### 1. `dspy_quick` -- Fast DSPy Smoke Test (3 cases)
 
@@ -202,6 +202,23 @@ rlm-code bench preset=browsecomp_style
 
 ```bash
 rlm-code bench preset=token_efficiency
+```
+
+---
+
+### 11. `dynamic_web_filtering` -- Dynamic Web Filtering (3 cases)
+
+Benchmarks designed for retrieval workflows where search results must be
+filtered by domain scope, keyword constraints, and search-budget discipline.
+
+| Case ID | Description | Max Steps | Timeout |
+|---|---|---|---|
+| `dynamic_filter_domain_scope` | Domain-scoped retrieval with strict source constraints | 6 | 90s |
+| `dynamic_filter_claim_verification` | Claim verification with include/exclude term filters | 7 | 120s |
+| `dynamic_filter_budgeted_search` | Budgeted search with early stopping | 6 | 90s |
+
+```bash
+rlm-code bench preset=dynamic_web_filtering
 ```
 
 ---

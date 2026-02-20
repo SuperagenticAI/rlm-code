@@ -99,7 +99,7 @@ Shell shortcuts:
 | Command | Description |
 |---|---|
 | `/rlm run <task> ...` | Run one RLM episode |
-| `/rlm bench ...` | Run benchmark preset/list/pack |
+| `/rlm bench ...` | Run benchmark preset/list/pack (`mode`, `strategy`, `mcp`, `mcp_server` supported) |
 | `/rlm bench compare ...` | Candidate vs baseline gate compare |
 | `/rlm bench validate ... [--json]` | CI-style gate output |
 | `/rlm bench report ...` | Export compare report (`markdown`/`csv`/`json`) |
@@ -122,7 +122,13 @@ Shell shortcuts:
 |---|---|
 | `/harness tools [mcp=on\|off]` | List harness tools (local + optional MCP) |
 | `/harness doctor` | Harness tool coverage report |
-| `/harness run <task> [steps=N] [mcp=on\|off] [tools=name[,name2]]` | Run tool-driven coding loop |
+| `/harness run <task> [steps=N] [mcp=on\|off] [mcp_server=name] [strategy=tool_call\|codemode] [tools=name[,name2]]` | Run tool-driven coding loop |
+
+Notes:
+
+- In strict MCP mode, harness only exposes a safe allowlist of MCP tools by default (`search_tools`, `list_tools`, `tools_info`, `get_required_keys_for_tool`, `call_tool_chain`).
+- `strategy=codemode` is opt-in and requires `mcp=on`; it generates one guarded code program and executes it via `call_tool_chain`.
+- For setup and release-safe operating guidance, see [CodeMode Quickstart](codemode-quickstart.md) and [CodeMode Integration](../integrations/codemode.md).
 
 ### Sandbox
 

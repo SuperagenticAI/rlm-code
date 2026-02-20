@@ -38,6 +38,7 @@ For detailed mode behavior and neutral tradeoff guidance, see [Execution Pattern
 | [🧭 Start Here (Simple)](start-here.md) | Plain-language onboarding: what this is, what to install, and safe first run |
 | [📦 Installation](installation.md) | System requirements, package installation, optional dependencies, and verification |
 | [⚡ Quick Start](quickstart.md) | Launch the TUI, connect a model, run your first benchmark, explore the Research tab |
+| [🧪 CodeMode Quickstart](codemode-quickstart.md) | MCP-backed harness `strategy=codemode` setup, first run, and benchmark loop |
 | [🧑‍🔬 Researcher Onboarding](researcher-onboarding.md) | Researcher-first workflows and complete command handbook |
 | [💻 CLI Reference](cli.md) | Complete reference for the entry point and all 50+ slash commands |
 | [⚙️ Configuration](configuration.md) | Full `rlm_config.yaml` schema, environment variables, and ConfigManager API |

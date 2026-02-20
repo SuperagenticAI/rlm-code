@@ -141,6 +141,7 @@ Available built-in presets:
 | `oolong_style` | 4 | OOLONG-style long context benchmarks |
 | `browsecomp_style` | 3 | BrowseComp-Plus style web reasoning benchmarks |
 | `token_efficiency` | 3 | Token efficiency comparison benchmarks |
+| `dynamic_web_filtering` | 3 | Dynamic web search filtering and source-control benchmarks |
 
 ### Run a Pure RLM Benchmark
 

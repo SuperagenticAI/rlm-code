@@ -6,6 +6,9 @@ RLM Code agents execute arbitrary code in pursuit of their tasks. While sandboxi
 
 This system answers a fundamental question: **should the agent be allowed to do this?**
 
+For harness CodeMode safety controls and release runbook, see
+[CodeMode Guardrails](codemode-guardrails.md).
+
 ---
 
 ## Why Safety Matters

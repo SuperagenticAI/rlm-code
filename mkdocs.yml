@@ -104,9 +104,16 @@ nav:
     - "\U0001F9ED Start Here": getting-started/start-here.md
     - "\U0001F4E6 Installation": getting-started/installation.md
     - "\u26A1 Quick Start": getting-started/quickstart.md
+    - "\U0001F9EA CodeMode Quickstart": getting-started/codemode-quickstart.md
     - "\U0001F9D1\U0001F52C Researcher Onboarding": getting-started/researcher-onboarding.md
     - "\U0001F4BB CLI Reference": getting-started/cli.md
     - "\u2699\uFE0F Configuration": getting-started/configuration.md
+  - "\U0001F9EA CodeMode":
+    - codemode/index.md
+    - "\u26A1 Quickstart": codemode/quickstart.md
+    - "\U0001F3D7\uFE0F Architecture": codemode/architecture.md
+    - "\U0001F6E1\uFE0F Guardrails": codemode/guardrails.md
+    - "\u2696\uFE0F Evaluation": codemode/evaluation.md
   - "\U0001F9E0 Core Engine":
     - core/index.md
     - "\U0001F504 RLM Runner": core/runner.md
@@ -128,6 +135,7 @@ nav:
     - "\U0001F512 HITL & Approval":
       - security/index.md
       - "\U0001F512 Approval Gates": security/approval-gates.md
+      - "\U0001F6E1\uFE0F CodeMode Guardrails": security/codemode-guardrails.md
       - "\u26A0\uFE0F Risk Assessment": security/risk-assessment.md
       - "\U0001F4DD Audit Logging": security/audit.md
   - "\U0001F5A5\uFE0F Terminal UI":
@@ -140,6 +148,7 @@ nav:
     - benchmarks/index.md
     - "\U0001F3C1 Presets": benchmarks/presets.md
     - "\U0001F3C6 Leaderboard": benchmarks/leaderboard.md
+    - "\u2696\uFE0F CodeMode Evaluation": benchmarks/codemode-evaluation.md
     - "\u23EA Session Replay": benchmarks/session-replay.md
   - "\U0001F50D Observability":
     - observability/index.md
@@ -160,6 +169,7 @@ nav:
       - integrations/index.md
       - "\U0001F916 LLM Providers": integrations/llm-providers.md
       - "\U0001F50C MCP Server": integrations/mcp.md
+      - "\U0001F9EA CodeMode Integration": integrations/codemode.md
       - "\U0001F9E9 Frameworks": integrations/frameworks.md
   - "\U0001F4D6 Reference":
     - reference/index.md

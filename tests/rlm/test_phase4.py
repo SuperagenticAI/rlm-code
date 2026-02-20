@@ -92,6 +92,7 @@ class TestMCPTools:
         assert "pure_rlm_smoke" in preset_param.enum
         assert "oolong_style" in preset_param.enum
         assert "token_efficiency" in preset_param.enum
+        assert "dynamic_web_filtering" in preset_param.enum
 
     def test_rlm_trajectory_tool(self):
         """Test rlm_trajectory tool definition."""

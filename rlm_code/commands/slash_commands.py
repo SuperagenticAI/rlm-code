@@ -112,6 +112,7 @@ class SlashCommandHandler:
         self.rlm_runner = RLMRunner(
             llm_connector=self.llm_connector,
             execution_engine=self.execution_engine,
+            mcp_manager=self.mcp_manager,
             reward_profile=reward_profile,
             benchmark_pack_paths=benchmark_pack_paths,
         )
@@ -1442,7 +1443,7 @@ class SlashCommandHandler:
         Usage:
             /harness tools [mcp=on|off]
             /harness doctor
-            /harness run <task> [steps=N] [mcp=on|off] [tools=name[,name2]]
+            /harness run <task> [steps=N] [mcp=on|off] [mcp_server=name] [strategy=tool_call|codemode] [tools=name[,name2]]
         """
         if not args or args[0].lower() in {"help", "--help"}:
             console.print()
@@ -1450,7 +1451,8 @@ class SlashCommandHandler:
             console.print("  [yellow]/harness tools [mcp=on|off][/yellow]")
             console.print("  [yellow]/harness doctor[/yellow]")
             console.print(
-                "  [yellow]/harness run <task> [steps=N] [mcp=on|off] [tools=name[,name2]][/yellow]"
+                "  [yellow]/harness run <task> [steps=N] [mcp=on|off] [mcp_server=name] "
+                "[strategy=tool_call|codemode] [tools=name[,name2]][/yellow]"
             )
             console.print()
             return
@@ -1555,6 +1557,8 @@ class SlashCommandHandler:
             include_mcp = True
             max_steps = 10
             allowlist: list[str] | None = None
+            strategy = "tool_call"
+            mcp_server: str | None = None
             task_tokens: list[str] = []
 
             for token in args[1:]:
@@ -1568,6 +1572,16 @@ class SlashCommandHandler:
                 elif lowered.startswith("mcp="):
                     value = token.split("=", 1)[1].strip().lower()
                     include_mcp = value not in {"off", "false", "0", "no"}
+                elif lowered.startswith("mcp_server="):
+                    mcp_server = token.split("=", 1)[1].strip() or None
+                elif lowered.startswith("strategy="):
+                    raw_strategy = token.split("=", 1)[1].strip().lower().replace("-", "_")
+                    if raw_strategy not in {"tool_call", "codemode"}:
+                        show_error_message(
+                            "Invalid strategy value. Use strategy=tool_call|codemode."
+                        )
+                        return
+                    strategy = raw_strategy
                 elif lowered.startswith("tools="):
                     raw = token.split("=", 1)[1].strip()
                     parsed = [part.strip() for part in raw.split(",") if part.strip()]
@@ -1578,15 +1592,27 @@ class SlashCommandHandler:
             task = " ".join(task_tokens).strip()
             if not task:
                 show_error_message(
-                    "Usage: /harness run <task> [steps=N] [mcp=on|off] [tools=name[,name2]]"
+                    "Usage: /harness run <task> [steps=N] [mcp=on|off] [mcp_server=name] "
+                    "[strategy=tool_call|codemode] [tools=name[,name2]]"
                 )
                 return
+            if strategy == "codemode" and not include_mcp:
+                show_warning_message("strategy=codemode requires mcp=on. Enabling MCP.")
+                include_mcp = True
+            if strategy == "codemode" and allowlist:
+                show_warning_message(
+                    "tools=... allowlist is ignored for strategy=codemode."
+                )
+                allowlist = None
 
             console.print()
             console.print("[bold cyan]🛠 Running Harness[/bold cyan]")
             console.print(f"  Task: [cyan]{task}[/cyan]")
             console.print(f"  Max steps: [cyan]{max_steps}[/cyan]")
             console.print(f"  MCP tools: [cyan]{'on' if include_mcp else 'off'}[/cyan]")
+            console.print(f"  Strategy: [cyan]{strategy}[/cyan]")
+            if mcp_server:
+                console.print(f"  MCP server: [cyan]{mcp_server}[/cyan]")
             if allowlist:
                 console.print(f"  Tool allowlist: [cyan]{', '.join(allowlist)}[/cyan]")
             console.print()
@@ -1596,6 +1622,8 @@ class SlashCommandHandler:
                 max_steps=max_steps,
                 include_mcp=include_mcp,
                 tool_allowlist=allowlist,
+                strategy=strategy,
+                mcp_server=mcp_server,
             )
 
             self.current_context["harness_last_response"] = result.final_response
@@ -1659,7 +1687,7 @@ class SlashCommandHandler:
 
         Usage:
             /rlm run <task> [steps=N] [timeout=N] [branch=N] [depth=N] [children=N] [parallel=N] [budget=N] [framework=<see /rlm frameworks>] [env=generic|dspy|pure_rlm] [sub=provider/model]
-            /rlm bench [list|preset=name] [mode=native|harness|direct-llm] [pack=path[,path2]] [limit=N] [steps=N] [timeout=N] [branch=N] [framework=<see /rlm frameworks>] [env=generic|dspy|pure_rlm] [sub=provider/model]
+            /rlm bench [list|preset=name] [mode=native|harness|direct-llm] [strategy=tool_call|codemode] [mcp=on|off] [mcp_server=name] [pack=path[,path2]] [limit=N] [steps=N] [timeout=N] [branch=N] [framework=<see /rlm frameworks>] [env=generic|dspy|pure_rlm] [sub=provider/model]
             /rlm bench compare [candidate=<id|path|latest>] [baseline=<id|path|previous>] [min_reward_delta=N] [min_completion_delta=N] [max_steps_increase=N]
             /rlm bench validate [candidate=<id|path|latest>] [baseline=<id|path|previous>] [min_reward_delta=N] [min_completion_delta=N] [max_steps_increase=N] [--json]
             /rlm bench report [candidate=<id|path|latest>] [baseline=<id|path|previous>] [format=markdown|csv|json] [output=path]
@@ -1687,6 +1715,7 @@ class SlashCommandHandler:
             )
             console.print(
                 "  [yellow]/rlm bench [list|preset=name] [mode=native|harness|direct-llm] "
+                "[strategy=tool_call|codemode] [mcp=on|off] [mcp_server=name] "
                 "[pack=path[,path2]] [limit=N] [steps=N] "
                 f"[timeout=N] [branch=N] [framework={framework_opts}] [env=generic|dspy|pure_rlm] [sub=provider/model][/yellow]"
             )
@@ -2521,6 +2550,9 @@ class SlashCommandHandler:
             environment: str | None = None
             sub_model: str | None = None
             sub_provider: str | None = None
+            include_mcp = False
+            mcp_server: str | None = None
+            harness_strategy = "tool_call"
 
             for token in args[1:]:
                 lowered = token.lower()
@@ -2537,6 +2569,19 @@ class SlashCommandHandler:
                         )
                         return
                     mode = resolved_mode
+                elif lowered.startswith("mcp="):
+                    value = token.split("=", 1)[1].strip().lower()
+                    include_mcp = value not in {"off", "false", "0", "no"}
+                elif lowered.startswith("strategy="):
+                    strategy_token = token.split("=", 1)[1].strip().lower().replace("-", "_")
+                    if strategy_token not in {"tool_call", "codemode"}:
+                        show_error_message(
+                            "Invalid strategy value. Use strategy=tool_call|codemode."
+                        )
+                        return
+                    harness_strategy = strategy_token
+                elif lowered.startswith("mcp_server="):
+                    mcp_server = token.split("=", 1)[1].strip() or None
                 elif lowered.startswith("pack="):
                     raw_paths = token.split("=", 1)[1].strip()
                     if not raw_paths:
@@ -2593,14 +2638,40 @@ class SlashCommandHandler:
                 else:
                     show_error_message(
                         "Usage: /rlm bench [list|preset=name] [mode=native|harness|direct-llm] "
+                        "[strategy=tool_call|codemode] [mcp=on|off] [mcp_server=name] "
                         "[pack=path[,path2]] [limit=N] "
-                        f"[steps=N] [timeout=N] [branch=N] [framework={framework_opts}] [env=generic|dspy|pure_rlm] [sub=provider/model]\n"
+                        f"[steps=N] [timeout=N] [branch=N] [framework={framework_opts}] "
+                        "[env=generic|dspy|pure_rlm] [sub=provider/model]\n"
                         "       /rlm bench compare [candidate=<id|path|latest>] [baseline=<id|path|previous>] ...\n"
                         "       /rlm bench validate [candidate=<id|path|latest>] [baseline=<id|path|previous>] ...\n"
                         "       /rlm bench report [candidate=<id|path|latest>] [baseline=<id|path|previous>] "
                         "[format=markdown|csv|json] [output=path]"
                     )
                     return
+
+            if mode == "harness" and harness_strategy == "codemode" and not include_mcp:
+                show_warning_message("strategy=codemode requires mcp=on. Enabling MCP.")
+                include_mcp = True
+
+            if mode != "harness" and include_mcp:
+                show_warning_message("mcp=on is only used for mode=harness. Ignoring MCP settings.")
+                include_mcp = False
+                mcp_server = None
+            elif mode != "harness" and mcp_server:
+                show_warning_message(
+                    "mcp_server is only used for mode=harness with mcp=on. Ignoring."
+                )
+                mcp_server = None
+            elif mode == "harness" and mcp_server and not include_mcp:
+                show_warning_message(
+                    "mcp_server provided but mcp=off. MCP server filter will be ignored."
+                )
+                mcp_server = None
+            if mode != "harness" and harness_strategy != "tool_call":
+                show_warning_message(
+                    "strategy is only used for mode=harness. Resetting to tool_call."
+                )
+                harness_strategy = "tool_call"
 
             if list_only:
                 try:
@@ -2681,6 +2752,11 @@ class SlashCommandHandler:
             if timeout is not None:
                 console.print(f"  Override timeout: [cyan]{timeout}s[/cyan]")
             console.print(f"  Branch width: [cyan]{branch_width}[/cyan]")
+            if mode == "harness":
+                console.print(f"  Harness strategy: [cyan]{harness_strategy}[/cyan]")
+                console.print(f"  Harness MCP: [cyan]{'on' if include_mcp else 'off'}[/cyan]")
+                if include_mcp and mcp_server:
+                    console.print(f"  Harness MCP server: [cyan]{mcp_server}[/cyan]")
             if pack_paths_override:
                 console.print(f"  Benchmark packs: [cyan]{', '.join(pack_paths_override)}[/cyan]")
             if environment:
@@ -2704,6 +2780,9 @@ class SlashCommandHandler:
                     branch_width=branch_width,
                     sub_model=sub_model,
                     sub_provider=sub_provider,
+                    include_mcp=include_mcp,
+                    mcp_server=mcp_server,
+                    harness_strategy=harness_strategy,
                     pack_paths=pack_paths_override,
                 )
             except ValueError as exc:
@@ -4413,7 +4492,7 @@ class SlashCommandHandler:
 
 [bold magenta]RLM Workflows:[/bold magenta]
   [yellow]/rlm run[/yellow] <task> [steps=N] [timeout=N] [branch=N] [depth=N] [children=N] [parallel=N] [budget=N] [framework=native|dspy-rlm|adk-rlm|pydantic-ai|google-adk|deepagents] [env=generic|dspy|pure_rlm] [sub=provider/model] - Run an RLM coding episode
-  [yellow]/rlm bench[/yellow] [list|preset=name] [mode=native|harness|direct-llm] [pack=path[,path2]] [limit=N] [steps=N] [timeout=N] [branch=N] [framework=native|dspy-rlm|adk-rlm|pydantic-ai|google-adk|deepagents] [env=generic|dspy|pure_rlm] [sub=provider/model] - Run benchmark preset
+  [yellow]/rlm bench[/yellow] [list|preset=name] [mode=native|harness|direct-llm] [strategy=tool_call|codemode] [mcp=on|off] [mcp_server=name] [pack=path[,path2]] [limit=N] [steps=N] [timeout=N] [branch=N] [framework=native|dspy-rlm|adk-rlm|pydantic-ai|google-adk|deepagents] [env=generic|dspy|pure_rlm] [sub=provider/model] - Run benchmark preset
   [yellow]/rlm bench compare[/yellow] [candidate=<id|path|latest>] [baseline=<id|path|previous>] [min_reward_delta=N] [min_completion_delta=N] [max_steps_increase=N] - Gate regressions
   [yellow]/rlm bench validate[/yellow] [candidate=<id|path|latest>] [baseline=<id|path|previous>] [min_reward_delta=N] [min_completion_delta=N] [max_steps_increase=N] [--json] - CI-style gate output
   [yellow]/rlm bench report[/yellow] [candidate=<id|path|latest>] [baseline=<id|path|previous>] [format=markdown|csv|json] [output=path] - Export compare report
@@ -4431,7 +4510,7 @@ class SlashCommandHandler:
   [yellow]/rlm observability[/yellow]                   - Show local/MLflow observability sink status
   [yellow]/harness tools[/yellow] [mcp=on|off]         - List coding harness tools (local + MCP)
   [yellow]/harness doctor[/yellow]                     - Show harness tool coverage report
-  [yellow]/harness run[/yellow] <task> [steps=N] [mcp=on|off] [tools=name[,name2]] - Run tool-using coding harness
+  [yellow]/harness run[/yellow] <task> [steps=N] [mcp=on|off] [mcp_server=name] [strategy=tool_call|codemode] [tools=name[,name2]] - Run tool-using coding harness
 
 [bold magenta]Optimization (GEPA):[/bold magenta]
   [yellow]/optimize-start[/yellow] [budget]           - Start GEPA optimization workflow

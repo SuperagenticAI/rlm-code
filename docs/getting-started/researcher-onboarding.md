@@ -5,6 +5,7 @@ It complements:
 
 - [Quick Start](quickstart.md) for first run
 - [CLI Reference](cli.md) for deeper option details
+- [CodeMode Quickstart](codemode-quickstart.md) for MCP-backed codemode setup
 - [Execution Patterns](../core/execution-patterns.md) for concept-level mode selection
 
 ---
@@ -61,6 +62,7 @@ rlm-code
 /rlm bench preset=paradigm_comparison mode=native
 /rlm bench preset=paradigm_comparison mode=harness
 /rlm bench preset=paradigm_comparison mode=direct-llm
+/rlm bench preset=dynamic_web_filtering mode=harness strategy=codemode mcp=on mcp_server=codemode
 ```
 
 ### Loop E: ACP + Harness
@@ -68,7 +70,7 @@ rlm-code
 ```bash
 /connect acp
 /harness tools mcp=on
-/harness run "implement task and add tests" steps=8 mcp=on
+/harness run "implement task and add tests" steps=8 mcp=on strategy=codemode mcp_server=codemode
 ```
 
 Note: ACP keeps chat auto-routing to harness disabled by default; use `/harness run` explicitly.
@@ -136,7 +138,7 @@ This is the complete slash-command surface currently registered in `rlm_code/com
 | Command | Purpose |
 |---|---|
 | `/rlm run <task> ...` | Run an RLM episode |
-| `/rlm bench [list\|preset=name] ...` | Run/list benchmark presets |
+| `/rlm bench [list\|preset=name] [mode=...] [strategy=tool_call\|codemode] [mcp=on\|off] [mcp_server=name] ...` | Run/list benchmark presets |
 | `/rlm bench compare ...` | Compare candidate vs baseline |
 | `/rlm bench validate ... [--json]` | CI-style pass/fail gate |
 | `/rlm bench report ...` | Export compare report |
@@ -172,7 +174,7 @@ This is the complete slash-command surface currently registered in `rlm_code/com
 |---|---|
 | `/harness tools [mcp=on\|off]` | List harness tools |
 | `/harness doctor` | Coverage parity check |
-| `/harness run <task> [steps=N] [mcp=on\|off] [tools=name[,name2]]` | Tool-driven coding loop |
+| `/harness run <task> [steps=N] [mcp=on\|off] [mcp_server=name] [strategy=tool_call\|codemode] [tools=name[,name2]]` | Tool-driven coding loop |
 
 ### MCP
 

@@ -6,7 +6,7 @@
 
 <p class="rlm-tagline">Research Playground & Evaluation OS for Recursive Language Model Agentic Systems</p>
 
-<span class="rlm-badge rlm-badge--purple">v0.1.5</span>
+<span class="rlm-badge rlm-badge--purple">v0.1.2</span>
 <span class="rlm-badge rlm-badge--green">Python 3.11+</span>
 <span class="rlm-badge rlm-badge--blue">Apache 2.0</span>
 
@@ -46,6 +46,13 @@ Run **Pure RLM** (paper-compliant with context-as-variable), **CodeAct** (contex
 
 <div class="rlm-feature-card" markdown>
 
+### 🧪 Harness CodeMode
+Opt into `strategy=codemode` for MCP tool discovery, guarded single-program generation, and chain execution via `call_tool_chain`.
+
+</div>
+
+<div class="rlm-feature-card" markdown>
+
 ### 🔬 Built-in Research Tab
 A dedicated Research tab inside the TUI with **Dashboard**, **Trajectory**, **Benchmarks**, **Replay**, and **Live Events** sub-tabs for real-time experiment tracking.
 
@@ -54,7 +61,7 @@ A dedicated Research tab inside the TUI with **Dashboard**, **Trajectory**, **Be
 <div class="rlm-feature-card" markdown>
 
 ### 🏆 Benchmarks & Leaderboard
-**10 preset benchmarks** with 33+ test cases, a multi-metric leaderboard, and side-by-side paradigm comparison.
+**11 preset benchmarks** with 33+ test cases, a multi-metric leaderboard, and side-by-side paradigm comparison.
 
 </div>
 
@@ -180,7 +187,7 @@ graph TB
     SAND --> DOCKER["Docker"]
     SAND --> CLOUD["Modal · E2B · Daytona"]
 
-    CMD --> BENCH["🏆 Benchmarks (10 presets)"]
+    CMD --> BENCH["🏆 Benchmarks (11 presets)"]
     CMD --> LB["📊 Leaderboard"]
     CMD --> SR["⏪ Session Replay"]
 ```
@@ -197,7 +204,7 @@ graph TB
 | 🎯 Policy Lab (16 policies) | `rlm_code.rlm.policies` |
 | 🔒 HITL Approval Gates | `rlm_code.rlm.approval` |
 | 📊 Observability (7 sinks) | `rlm_code.rlm.observability` |
-| 🏆 Benchmarks (10 presets) | `rlm_code.rlm.benchmarks` |
+| 🏆 Benchmarks (11 presets) | `rlm_code.rlm.benchmarks` |
 | 📊 Leaderboard | `rlm_code.rlm.leaderboard` |
 | ⏪ Session Replay | `rlm_code.rlm.session_replay` |
 | 🔁 Paradigm Comparison | `rlm_code.rlm.comparison` |
@@ -243,6 +250,7 @@ The **Research tab** has 5 internal sub-tabs for organizing experiment data:
 | Section | What You'll Find |
 |---------|-----------------|
 | [🚀 Getting Started](getting-started/index.md) | Installation, quick start, CLI reference, configuration |
+| [🧪 CodeMode](codemode/index.md) | CodeMode overview, quickstart, architecture, guardrails, and evaluation |
 | [🧠 Core Engine](core/index.md) | RLM Runner, environments, events, termination, trajectory |
 | [🎯 Policies & Safety](policies/index.md) | Reward, action, compaction, termination policies + HITL gates |
 | [🖥️ Terminal UI](tui/index.md) | Tab reference, Research tab, widgets, theme system |

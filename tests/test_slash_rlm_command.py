@@ -242,6 +242,9 @@ class _FakeRunner:
         *,
         preset: str = "dspy_quick",
         mode: str = "native",
+        include_mcp: bool = False,
+        mcp_server: str | None = None,
+        harness_strategy: str = "tool_call",
         limit: int | None = None,
         environment: str | None = None,
         framework: str | None = None,
@@ -255,6 +258,9 @@ class _FakeRunner:
         self.last_benchmark_kwargs = {
             "preset": preset,
             "mode": mode,
+            "include_mcp": include_mcp,
+            "mcp_server": mcp_server,
+            "harness_strategy": harness_strategy,
             "limit": limit,
             "environment": environment,
             "framework": framework,
@@ -671,6 +677,62 @@ def test_rlm_bench_passes_mode_option():
     handler.cmd_rlm(["bench", "preset=dspy_quick", "mode=harness"])
     assert handler.rlm_runner.last_benchmark_kwargs["mode"] == "harness"
     assert handler.current_context["rlm_last_benchmark_mode"] == "harness"
+
+
+def test_rlm_bench_passes_harness_strategy_option():
+    handler = _build_handler()
+    handler.cmd_rlm(
+        [
+            "bench",
+            "preset=dspy_quick",
+            "mode=harness",
+            "strategy=codemode",
+            "mcp=on",
+            "mcp_server=codemode",
+        ]
+    )
+    assert handler.rlm_runner.last_benchmark_kwargs["mode"] == "harness"
+    assert handler.rlm_runner.last_benchmark_kwargs["harness_strategy"] == "codemode"
+    assert handler.rlm_runner.last_benchmark_kwargs["include_mcp"] is True
+
+
+def test_rlm_bench_codemode_strategy_enables_mcp():
+    handler = _build_handler()
+    handler.cmd_rlm(["bench", "preset=dspy_quick", "mode=harness", "strategy=codemode"])
+    assert handler.rlm_runner.last_benchmark_kwargs["mode"] == "harness"
+    assert handler.rlm_runner.last_benchmark_kwargs["harness_strategy"] == "codemode"
+    assert handler.rlm_runner.last_benchmark_kwargs["include_mcp"] is True
+
+
+def test_rlm_bench_passes_harness_mcp_options():
+    handler = _build_handler()
+    handler.cmd_rlm(
+        [
+            "bench",
+            "preset=dspy_quick",
+            "mode=harness",
+            "mcp=on",
+            "mcp_server=codemode",
+        ]
+    )
+    assert handler.rlm_runner.last_benchmark_kwargs["mode"] == "harness"
+    assert handler.rlm_runner.last_benchmark_kwargs["include_mcp"] is True
+    assert handler.rlm_runner.last_benchmark_kwargs["mcp_server"] == "codemode"
+
+
+def test_rlm_bench_ignores_mcp_for_non_harness_mode():
+    handler = _build_handler()
+    handler.cmd_rlm(["bench", "preset=dspy_quick", "mode=native", "mcp=on", "mcp_server=codemode"])
+    assert handler.rlm_runner.last_benchmark_kwargs["mode"] == "native"
+    assert handler.rlm_runner.last_benchmark_kwargs["include_mcp"] is False
+    assert handler.rlm_runner.last_benchmark_kwargs["mcp_server"] is None
+
+
+def test_rlm_bench_ignores_strategy_for_non_harness_mode():
+    handler = _build_handler()
+    handler.cmd_rlm(["bench", "preset=dspy_quick", "mode=native", "strategy=codemode"])
+    assert handler.rlm_runner.last_benchmark_kwargs["mode"] == "native"
+    assert handler.rlm_runner.last_benchmark_kwargs["harness_strategy"] == "tool_call"
 
 
 def test_rlm_bench_pack_paths_are_forwarded():

@@ -187,6 +187,7 @@ class RLMRunner(BenchmarkManagerMixin, ChatSessionMixin, DelegationMixin, Action
         execution_engine: Any,
         run_dir: Path | None = None,
         workdir: Path | None = None,
+        mcp_manager: Any | None = None,
         observability: RLMObservability | None = None,
         event_bus: RLMEventBus | None = None,
         reward_profile: RLMRewardProfile | dict[str, Any] | None = None,
@@ -196,6 +197,7 @@ class RLMRunner(BenchmarkManagerMixin, ChatSessionMixin, DelegationMixin, Action
         self.llm_connector = llm_connector
         self.execution_engine = execution_engine
         self.workdir = (workdir or Path.cwd()).resolve()
+        self.mcp_manager = mcp_manager
         self.event_bus = event_bus or RLMEventBus()
         self.context_store = LazyFileContext(workdir=self.workdir)
         self._max_parallelism = max(1, int(max_parallelism))

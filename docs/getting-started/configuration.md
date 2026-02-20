@@ -176,6 +176,35 @@ Without the ack token, exec backend is rejected.
 
 ---
 
+## Harness CodeMode Controls
+
+CodeMode strategy does not currently add `rlm_config.yaml` keys. Controls are set
+via slash command arguments and programmatic API defaults.
+
+### Slash command controls
+
+| Surface | Control | Values |
+|---|---|---|
+| `/harness run` | `strategy` | `tool_call` (default) or `codemode` |
+| `/harness run` | `mcp` | `on` / `off` (`codemode` requires `on`) |
+| `/harness run` | `mcp_server` | MCP server name filter |
+| `/rlm bench mode=harness` | `strategy` | `tool_call` (default) or `codemode` |
+| `/rlm bench mode=harness` | `mcp` / `mcp_server` | same semantics as harness run |
+
+### Programmatic controls (`HarnessRunner.run`)
+
+| Parameter | Default |
+|---|---|
+| `codemode_timeout_ms` | `30000` |
+| `codemode_max_output_chars` | `200000` |
+| `codemode_max_code_chars` | `12000` |
+| `codemode_max_tool_calls` | `30` |
+
+See [CodeMode Integration](../integrations/codemode.md) for runtime behavior and
+[CodeMode Guardrails](../security/codemode-guardrails.md) for policy details.
+
+---
+
 ## Environment Variables
 
 ### Model auth

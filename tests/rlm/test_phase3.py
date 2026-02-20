@@ -357,6 +357,17 @@ class TestPaperCompatibleBenchmarks:
         assert "efficiency_incremental_context" in case_ids
         assert "efficiency_recursive_delegation" in case_ids
 
+    def test_dynamic_web_filtering_benchmarks(self):
+        """Test dynamic web filtering benchmark preset exists."""
+        cases = get_benchmark_cases("dynamic_web_filtering")
+
+        assert len(cases) == 3
+
+        case_ids = [c.case_id for c in cases]
+        assert "dynamic_filter_domain_scope" in case_ids
+        assert "dynamic_filter_claim_verification" in case_ids
+        assert "dynamic_filter_budgeted_search" in case_ids
+
     def test_all_new_presets_in_list(self):
         """Test that all new presets appear in the preset list."""
         presets = list_benchmark_presets()
@@ -365,10 +376,16 @@ class TestPaperCompatibleBenchmarks:
         assert "oolong_style" in preset_names
         assert "browsecomp_style" in preset_names
         assert "token_efficiency" in preset_names
+        assert "dynamic_web_filtering" in preset_names
 
     def test_benchmark_cases_have_pure_rlm_env(self):
         """Test that paper benchmarks use pure_rlm environment."""
-        for preset in ["oolong_style", "browsecomp_style", "token_efficiency"]:
+        for preset in [
+            "oolong_style",
+            "browsecomp_style",
+            "token_efficiency",
+            "dynamic_web_filtering",
+        ]:
             cases = get_benchmark_cases(preset)
             for case in cases:
                 assert case.environment == "pure_rlm", (
@@ -377,7 +394,12 @@ class TestPaperCompatibleBenchmarks:
 
     def test_benchmark_cases_have_reasonable_timeouts(self):
         """Test that paper benchmarks have appropriate timeouts."""
-        for preset in ["oolong_style", "browsecomp_style", "token_efficiency"]:
+        for preset in [
+            "oolong_style",
+            "browsecomp_style",
+            "token_efficiency",
+            "dynamic_web_filtering",
+        ]:
             cases = get_benchmark_cases(preset)
             for case in cases:
                 # Paper benchmarks should have longer timeouts for complex tasks

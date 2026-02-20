@@ -35,6 +35,7 @@ _PRESET_DESCRIPTIONS: dict[str, str] = {
     "oolong_style": "OOLONG-style long context benchmarks (paper-compatible) (4 cases).",
     "browsecomp_style": "BrowseComp-Plus style web reasoning benchmarks (3 cases).",
     "token_efficiency": "Token efficiency comparison benchmarks (3 cases).",
+    "dynamic_web_filtering": "Dynamic web filtering and citation discipline benchmarks (3 cases).",
 }
 
 
@@ -434,6 +435,45 @@ _PRESETS: dict[str, list[RLMBenchmarkCase]] = {
             environment="pure_rlm",
             max_steps=8,
             exec_timeout=150,
+        ),
+    ],
+    # Dynamic web filtering benchmarks (search + selective evidence extraction)
+    "dynamic_web_filtering": [
+        RLMBenchmarkCase(
+            case_id="dynamic_filter_domain_scope",
+            description="Domain-scoped retrieval with strict source constraints",
+            task=(
+                "Answer the question using web evidence from allowed domains only. "
+                "First define allowed_domains and blocked_domains filters, retrieve candidates, "
+                "discard out-of-scope results, and cite only surviving URLs in FINAL()."
+            ),
+            environment="pure_rlm",
+            max_steps=6,
+            exec_timeout=90,
+        ),
+        RLMBenchmarkCase(
+            case_id="dynamic_filter_claim_verification",
+            description="Claim verification with include/exclude term filters",
+            task=(
+                "Verify a factual claim using web retrieval with dynamic keyword filtering. "
+                "Use include_terms to focus on exact claim entities and exclude_terms to reject "
+                "off-topic pages. Return verdict + short evidence table with URLs."
+            ),
+            environment="pure_rlm",
+            max_steps=7,
+            exec_timeout=120,
+        ),
+        RLMBenchmarkCase(
+            case_id="dynamic_filter_budgeted_search",
+            description="Budgeted search with early stopping and quality thresholding",
+            task=(
+                "Solve the question with a strict retrieval budget. "
+                "Track search iterations, stop once confidence is high, and avoid redundant fetches. "
+                "Return final answer plus why additional search was unnecessary."
+            ),
+            environment="pure_rlm",
+            max_steps=6,
+            exec_timeout=90,
         ),
     ],
 }

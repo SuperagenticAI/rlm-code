@@ -191,6 +191,54 @@ class _UsageConnector:
         return dict(self._snapshot)
 
 
+class _HarnessCodeModeMCPManager:
+    async def list_servers(self):
+        return [{"name": "codemode", "connected": True}]
+
+    async def list_tools(self, server_name: str):
+        assert server_name == "codemode"
+
+        class _Tool:
+            def __init__(self, name: str, description: str):
+                self.name = name
+                self.description = description
+                self.inputSchema = {"type": "object", "additionalProperties": True}
+
+        return {
+            "codemode": [
+                _Tool("search_tools", "Search tools"),
+                _Tool("list_tools", "List tools"),
+                _Tool("tools_info", "Tool interfaces"),
+                _Tool("get_required_keys_for_tool", "Required variables"),
+                _Tool("call_tool_chain", "Execute tool chain"),
+            ]
+        }
+
+    async def call_tool(self, server_name: str, tool_name: str, arguments: dict):
+        assert server_name == "codemode"
+        if tool_name == "search_tools":
+            _ = arguments
+            return {
+                "tools": [
+                    {
+                        "name": "weather.get_current",
+                        "description": "Get current weather by city",
+                        "typescript_interface": (
+                            "namespace weather { interface get_currentInput { city: string } }"
+                        ),
+                    }
+                ]
+            }
+        if tool_name == "call_tool_chain":
+            _ = arguments
+            return {
+                "success": True,
+                "nonMcpContentResults": {"city": "San Francisco", "status": "sunny"},
+                "logs": [],
+            }
+        return {"success": True}
+
+
 class _JudgeConnector:
     def __init__(self, responses: list[str]):
         self._responses = list(responses)
@@ -1142,13 +1190,62 @@ def test_rlm_run_benchmark_supports_harness_mode(tmp_path):
     benchmark = runner.run_benchmark(
         preset="generic_smoke",
         mode="harness",
+        include_mcp=True,
+        mcp_server="codemode",
         limit=1,
     )
     assert benchmark.mode == "harness"
     assert benchmark.total_cases == 1
     assert benchmark.case_results[0]["mode"] == "harness"
+    assert benchmark.case_results[0]["mcp_enabled"] is True
+    assert benchmark.case_results[0]["mcp_server"] == "codemode"
+    assert benchmark.case_results[0]["harness_strategy"] == "tool_call"
+    assert benchmark.case_results[0]["harness_tool_calls"] >= 0
+    assert benchmark.case_results[0]["mcp_tool_calls"] >= 0
+    assert benchmark.case_results[0]["codemode_chain_calls"] >= 0
+    assert benchmark.case_results[0]["codemode_search_calls"] >= 0
+    assert benchmark.case_results[0]["codemode_discovery_calls"] >= 0
     payload = json.loads(benchmark.summary_path.read_text(encoding="utf-8"))
     assert payload["mode"] == "harness"
+    assert payload["harness_strategy"] == "tool_call"
+
+
+def test_rlm_run_benchmark_supports_harness_codemode_strategy(tmp_path):
+    connector = _FakeConnector(
+        [
+            json.dumps(
+                {
+                    "code": (
+                        "const report = weather.get_current({ city: 'San Francisco' });\n"
+                        "return report;"
+                    )
+                }
+            )
+        ]
+    )
+    engine = _FakeExecutionEngine()
+    runner = RLMRunner(
+        llm_connector=connector,
+        execution_engine=engine,
+        run_dir=tmp_path / "runs",
+        workdir=tmp_path,
+        mcp_manager=_HarnessCodeModeMCPManager(),
+    )
+
+    benchmark = runner.run_benchmark(
+        preset="generic_smoke",
+        mode="harness",
+        include_mcp=True,
+        mcp_server="codemode",
+        harness_strategy="codemode",
+        limit=1,
+    )
+    assert benchmark.mode == "harness"
+    assert benchmark.total_cases == 1
+    assert benchmark.case_results[0]["harness_strategy"] == "codemode"
+    assert benchmark.case_results[0]["codemode_chain_calls"] >= 1
+    payload = json.loads(benchmark.summary_path.read_text(encoding="utf-8"))
+    assert payload["harness_strategy"] == "codemode"
 
 
 def test_rlm_export_benchmark_report_writes_markdown(tmp_path):

@@ -25,6 +25,22 @@ RLM Code implements the [Recursive Language Models](https://arxiv.org/abs/2502.0
 
 RLM Code wraps this algorithm in an interactive terminal UI with built-in benchmarks, trajectory replay, and observability.
 
+## Release v0.1.2
+
+This release adds the new CodeMode path as an opt-in harness strategy.
+
+- New harness strategy: `strategy=codemode` (default remains `strategy=tool_call`)
+- MCP bridge flow for CodeMode: `search_tools` -> typed tool surface -> `call_tool_chain`
+- Guardrails before execution: blocked API classes plus timeout/size/tool-call caps
+- Benchmark telemetry for side-by-side comparison: `tool_call` vs `codemode`
+- Dedicated docs section for CodeMode: quickstart, architecture, guardrails, evaluation
+
+Example:
+
+```text
+/harness run "implement feature and add tests" steps=8 mcp=on strategy=codemode mcp_server=codemode
+```
+
 ## Documentation
 
 <p align="center">

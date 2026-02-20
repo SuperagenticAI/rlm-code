@@ -104,6 +104,66 @@ Add to your Claude Desktop `claude_desktop_config.json`:
 
 ---
 
+## Using Code-Mode MCP with RLM Harness
+
+You can connect an external Code-Mode MCP bridge and use it from harness runs
+without changing RLM's Python runtime.
+
+### Separation Model
+
+| Topic | What it means in this repo |
+|---|---|
+| RLM CodeMode | Harness strategy (`strategy=codemode`) in Python runner |
+| MCP bridge | Server exposing `search_tools` + `call_tool_chain` |
+| Provider implementation | UTCP, Cloudflare-based, or custom implementation behind that MCP server |
+
+RLM is provider-agnostic at this layer. It targets MCP bridge capabilities, not a specific vendor package.
+
+### Example MCP Server Config
+
+```yaml
+mcp_servers:
+  codemode:
+    name: codemode
+    description: "UTCP Code-Mode bridge"
+    enabled: true
+    auto_connect: false
+    transport:
+      type: stdio
+      command: npx
+      args:
+        - "@utcp/code-mode-mcp"
+      env:
+        UTCP_CONFIG_FILE: "${UTCP_CONFIG_FILE}"
+```
+
+### Harness + Benchmark Usage
+
+```bash
+/mcp-connect codemode
+/harness tools mcp=on
+/harness run "plan and execute a tool chain" steps=8 mcp=on strategy=codemode mcp_server=codemode
+/rlm bench preset=dynamic_web_filtering mode=harness strategy=codemode mcp=on mcp_server=codemode
+```
+
+When MCP is enabled, harness applies a strict default allowlist for MCP tools:
+`search_tools`, `list_tools`, `tools_info`, `get_required_keys_for_tool`, and
+`call_tool_chain`.
+
+`strategy=codemode` is opt-in; harness generates a single guarded code program
+and executes it through `call_tool_chain`.
+
+If you use Cloudflare components, keep the same rule: expose an MCP bridge that
+matches the required tool contract and point `mcp_server` to it.
+
+For full lifecycle and safety details, see:
+
+- [CodeMode Integration](codemode.md)
+- [CodeMode Guardrails](../security/codemode-guardrails.md)
+- [CodeMode Evaluation & Promotion Gates](../benchmarks/codemode-evaluation.md)
+
+---
+
 ## Tools
 
 The server exposes five tools via the `RLMTools` class. Each tool is defined as
@@ -178,6 +238,7 @@ Run benchmark presets to evaluate paradigm performance.
 | `oolong_style`        | OOLONG benchmark-compatible tests               |
 | `browsecomp_style`    | BrowseComp benchmark-compatible tests           |
 | `token_efficiency`    | Token usage comparison across paradigms         |
+| `dynamic_web_filtering` | Web retrieval with dynamic filtering controls |
 | `paradigm_comparison` | Head-to-head paradigm comparison                |
 | `deep_recursion`      | Multi-level recursive agent tests               |
 

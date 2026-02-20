@@ -58,7 +58,7 @@ RLM Code is organized into the following top-level packages. Each module is docu
 
 | Module | Description | Docs |
 |---|---|---|
-| `rlm_code.rlm.benchmarks` | 10 preset benchmark suites with 33+ test cases, custom pack loading | [Benchmarks](../benchmarks/index.md) |
+| `rlm_code.rlm.benchmarks` | 11 preset benchmark suites with 33+ test cases, custom pack loading | [Benchmarks](../benchmarks/index.md) |
 | `rlm_code.rlm.leaderboard` | Multi-metric leaderboard with ranking, filtering, trending, and export | [Leaderboard](../benchmarks/leaderboard.md) |
 | `rlm_code.rlm.session_replay` | Session recording, replay, checkpointing, and comparison | [Session Replay](../benchmarks/session-replay.md) |
 
