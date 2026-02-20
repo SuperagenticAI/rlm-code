@@ -34,11 +34,12 @@ This release adds the new CodeMode path as an opt-in harness strategy.
 - Guardrails before execution: blocked API classes plus timeout/size/tool-call caps
 - Benchmark telemetry for side-by-side comparison: `tool_call` vs `codemode`
 - Dedicated docs section for CodeMode: quickstart, architecture, guardrails, evaluation
+- Multi-backend setup docs for UTCP (local) and Cloudflare (remote MCP)
 
 Example:
 
 ```text
-/harness run "implement feature and add tests" steps=8 mcp=on strategy=codemode mcp_server=codemode
+/harness run "implement feature and add tests" steps=3 mcp=on strategy=codemode mcp_server=utcp-codemode
 ```
 
 ## Documentation
@@ -193,6 +194,62 @@ Notes:
 
 - In Local/BYOK connection modes, likely coding prompts in chat can auto-route to harness.
 - In ACP mode, auto-routing is intentionally off; use `/harness run ...` explicitly.
+
+### 8. CodeMode with UTCP and Cloudflare MCP
+
+Use these server entries in your project `rlm_config.yaml`:
+
+```yaml
+mcp_servers:
+  utcp-codemode:
+    name: utcp-codemode
+    description: "Local CodeMode MCP bridge"
+    enabled: true
+    auto_connect: false
+    timeout_seconds: 30
+    retry_attempts: 3
+    transport:
+      type: stdio
+      command: npx
+      args:
+        - "@utcp/code-mode-mcp"
+
+  cloudflare-codemode:
+    name: cloudflare-codemode
+    description: "Cloudflare MCP via remote bridge"
+    enabled: true
+    auto_connect: false
+    timeout_seconds: 30
+    retry_attempts: 3
+    transport:
+      type: stdio
+      command: npx
+      args:
+        - "mcp-remote"
+        - "https://mcp.cloudflare.com/mcp"
+```
+
+UTCP path (native CodeMode in current release):
+
+```text
+/mcp-connect utcp-codemode
+/mcp-tools utcp-codemode
+/harness run "analyze this repo, find TODO/FIXME, and create report.json" steps=3 mcp=on strategy=codemode mcp_server=utcp-codemode
+```
+
+Cloudflare path (recommended strategy today):
+
+```text
+/mcp-connect cloudflare-codemode
+/mcp-tools cloudflare-codemode
+/harness run "list available tools and run one safe read-only action, then summarize in 3 bullets" steps=3 mcp=on strategy=tool_call mcp_server=cloudflare-codemode
+```
+
+Notes:
+
+- On first Cloudflare connect, `mcp-remote` may ask for interactive authentication.
+- In this release, `strategy=codemode` expects the `search_tools` + `call_tool_chain` bridge contract.
+- If a remote MCP server exposes a different tool contract, use `strategy=tool_call`.
 
 ## How the RLM Loop Works
 
