@@ -1,10 +1,11 @@
 # CodeMode Quickstart
 
-Use this guide to run the new harness `strategy=codemode` path end-to-end.
+Use this page to pick the right implementation path fast.
+For full details, use the dedicated CodeMode pages for UTCP and Cloudflare.
 
 ---
 
-## What CodeMode Is
+## What CodeMode is
 
 CodeMode is an opt-in harness strategy that:
 
@@ -17,19 +18,28 @@ Default harness behavior is still `strategy=tool_call`.
 
 ---
 
-## Prerequisites
+## Choose your path
 
-- Connected model (`/connect ...`).
-- MCP server connected and exposing both `search_tools` and `call_tool_chain`.
-- Harness MCP enabled (`mcp=on`).
+| Path | When to use | Strategy |
+|---|---|---|
+| UTCP (local bridge) | You want native CodeMode flow in this release | `codemode` |
+| Cloudflare (remote MCP) | You want Cloudflare backend now | `tool_call` |
 
-Example MCP config snippet:
+---
+
+## UTCP setup
+
+Use this config snippet:
 
 ```yaml
 mcp_servers:
-  codemode:
-    name: codemode
+  utcp-codemode:
+    name: utcp-codemode
+    description: "Local CodeMode MCP bridge"
     enabled: true
+    auto_connect: false
+    timeout_seconds: 30
+    retry_attempts: 3
     transport:
       type: stdio
       command: npx
@@ -39,35 +49,73 @@ mcp_servers:
 
 ---
 
-## First Run
+## UTCP first run (steps=3)
 
 ```bash
-/mcp-connect codemode
+/mcp-connect utcp-codemode
 /harness tools mcp=on
-/harness run "implement feature and add tests" steps=8 mcp=on strategy=codemode mcp_server=codemode
+/harness run "inspect this repo and create report.json with TODO/FIXME counts and top 5 improvements" steps=3 mcp=on strategy=codemode mcp_server=utcp-codemode
 ```
 
-Expected behavior:
-
-- Step 1: harness calls `mcp:<server>:search_tools`.
-- Step 2: model returns a single code program.
-- Step 3: harness calls `mcp:<server>:call_tool_chain` with guarded code.
-
-If successful, harness returns the final chain output as the final response.
+Expected sequence:
+- `search_tools`
+- one generated JS/TS code program
+- `call_tool_chain`
 
 ---
 
-## Benchmark It Against Baseline
+## Cloudflare setup
 
-Run the same preset in both harness strategies:
+Use this config snippet:
+
+```yaml
+mcp_servers:
+  cloudflare-codemode:
+    name: cloudflare-codemode
+    description: "Cloudflare MCP via remote bridge"
+    enabled: true
+    auto_connect: false
+    timeout_seconds: 30
+    retry_attempts: 3
+    transport:
+      type: stdio
+      command: npx
+      args:
+        - "mcp-remote"
+        - "https://mcp.cloudflare.com/mcp"
+```
+
+---
+
+## Cloudflare first run (steps=3)
 
 ```bash
-/rlm bench preset=dynamic_web_filtering mode=harness strategy=tool_call mcp=on mcp_server=codemode
-/rlm bench preset=dynamic_web_filtering mode=harness strategy=codemode mcp=on mcp_server=codemode
+/mcp-connect cloudflare-codemode
+/mcp-tools cloudflare-codemode
+/harness run "list available tools and run one safe read-only action, then summarize in 3 bullets" steps=3 mcp=on strategy=tool_call mcp_server=cloudflare-codemode
+```
+
+Authentication note:
+- On first use, Cloudflare remote MCP may require interactive auth.
+- If you are not logged in, `mcp-remote` can prompt for login/authorization.
+- Finish auth, then run `/mcp-connect cloudflare-codemode` again.
+
+Use `strategy=tool_call` for Cloudflare in this release.
+If you use `strategy=codemode` and see:
+`could not resolve an MCP server exposing call_tool_chain/search_tools`
+the server is exposing a different tool contract.
+
+---
+
+## Benchmark compare example (steps=3)
+
+```bash
+/rlm bench preset=generic_smoke mode=harness strategy=codemode mcp=on mcp_server=utcp-codemode limit=1 steps=3
+/rlm bench preset=generic_smoke mode=harness strategy=tool_call mcp=on mcp_server=cloudflare-codemode limit=1 steps=3
 /rlm bench compare candidate=latest baseline=previous
 ```
 
-For CI-style output:
+For CI gate output:
 
 ```bash
 /rlm bench validate candidate=latest baseline=previous --json
@@ -75,29 +123,10 @@ For CI-style output:
 
 ---
 
-## Operator Notes
-
-- `strategy=codemode` auto-enables MCP if omitted.
-- `tools=...` allowlist is ignored in CodeMode strategy.
-- If more than one MCP server exposes `call_tool_chain`, pass `mcp_server=<name>`.
-- Cloudflare CodeMode and other CodeMode stacks are supported through the same MCP bridge contract.
-  RLM only requires bridge tools (`search_tools`, `call_tool_chain`), not a specific provider runtime.
-
----
-
-## Troubleshooting
-
-| Symptom | Cause | Fix |
-|---|---|---|
-| `Code-mode strategy requires mcp=on.` | MCP disabled | Add `mcp=on` |
-| `could not resolve an MCP server exposing call_tool_chain/search_tools` | No matching server or ambiguous server set | Connect correct server and pass `mcp_server=...` |
-| `missing required tools: search_tools and call_tool_chain` | Server lacks required API | Use compatible CodeMode MCP bridge |
-| `Code-mode guardrail blocked execution: ...` | Generated program violated policy | Tighten prompt/task scope and retry |
-
----
-
 ## Next Docs
 
+- [CodeMode UTCP Guide](../codemode/utcp.md)
+- [CodeMode Cloudflare Guide](../codemode/cloudflare.md)
 - [CodeMode Integration](../integrations/codemode.md)
 - [CodeMode Guardrails](../security/codemode-guardrails.md)
 - [CodeMode Evaluation & Promotion Gates](../benchmarks/codemode-evaluation.md)

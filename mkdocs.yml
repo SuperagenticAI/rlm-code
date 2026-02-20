@@ -111,6 +111,8 @@ nav:
   - "\U0001F9EA CodeMode":
     - codemode/index.md
     - "\u26A1 Quickstart": codemode/quickstart.md
+    - "\U0001F527 UTCP (Local)": codemode/utcp.md
+    - "\u2601\uFE0F Cloudflare (Remote)": codemode/cloudflare.md
     - "\U0001F3D7\uFE0F Architecture": codemode/architecture.md
     - "\U0001F6E1\uFE0F Guardrails": codemode/guardrails.md
     - "\u2696\uFE0F Evaluation": codemode/evaluation.md
