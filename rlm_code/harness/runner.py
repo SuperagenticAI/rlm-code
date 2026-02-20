@@ -250,7 +250,9 @@ class HarnessRunner:
             mcp_tool_allowlist=mcp_tool_allowlist,
             mcp_server=mcp_server,
         )
-        server_name = self._resolve_codemode_server(tool_rows=tool_rows, requested_server=mcp_server)
+        server_name = self._resolve_codemode_server(
+            tool_rows=tool_rows, requested_server=mcp_server
+        )
         if not server_name:
             return HarnessRunResult(
                 completed=False,

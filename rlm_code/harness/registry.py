@@ -333,7 +333,10 @@ class HarnessToolRegistry:
         normalized_server = server_name.strip().lower()
         normalized_tool = tool_name.strip().lower()
 
-        if self._mcp_allowed_servers is not None and normalized_server not in self._mcp_allowed_servers:
+        if (
+            self._mcp_allowed_servers is not None
+            and normalized_server not in self._mcp_allowed_servers
+        ):
             return (
                 False,
                 f"MCP tool '{full_name}' blocked by MCP policy (server '{server_name}' not allowed).",
@@ -351,11 +354,7 @@ class HarnessToolRegistry:
         if include_mcp and self.mcp_manager is not None:
             mcp_specs = self._list_mcp_specs()
             if self._mcp_allowed_tools is not None or self._mcp_allowed_servers is not None:
-                mcp_specs = [
-                    row
-                    for row in mcp_specs
-                    if self._is_mcp_tool_allowed(row.name)[0]
-                ]
+                mcp_specs = [row for row in mcp_specs if self._is_mcp_tool_allowed(row.name)[0]]
             specs = list(specs_map.values())
             specs.extend(mcp_specs)
             alias_candidates: dict[str, list[HarnessToolSpec]] = {}
@@ -985,7 +984,9 @@ def _domain_allowed(*, domain: str, allowed_domains: set[str], blocked_domains: 
         return False
     if blocked_domains and any(domain == d or domain.endswith(f".{d}") for d in blocked_domains):
         return False
-    if allowed_domains and not any(domain == d or domain.endswith(f".{d}") for d in allowed_domains):
+    if allowed_domains and not any(
+        domain == d or domain.endswith(f".{d}") for d in allowed_domains
+    ):
         return False
     return True
 

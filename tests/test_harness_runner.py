@@ -156,7 +156,9 @@ def test_harness_run_supports_codemode_strategy(tmp_path: Path) -> None:
     manager = _CodeModeMCPManager()
     runner = HarnessRunner(llm_connector=connector, mcp_manager=manager, workdir=tmp_path)
 
-    result = runner.run(task="Get weather in SF", strategy="codemode", include_mcp=True, max_steps=4)
+    result = runner.run(
+        task="Get weather in SF", strategy="codemode", include_mcp=True, max_steps=4
+    )
 
     assert result.completed is True
     assert "San Francisco" in result.final_response

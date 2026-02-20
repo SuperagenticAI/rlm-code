@@ -174,7 +174,11 @@ class BenchmarkManagerMixin:
         """Execute a benchmark preset and persist aggregate summary."""
         resolved_mode = self._normalize_benchmark_mode(mode)
         resolved_harness_strategy = self._normalize_harness_strategy(harness_strategy)
-        if resolved_mode == "harness" and resolved_harness_strategy == "codemode" and not include_mcp:
+        if (
+            resolved_mode == "harness"
+            and resolved_harness_strategy == "codemode"
+            and not include_mcp
+        ):
             logger.warning("Harness codemode strategy requires MCP; enabling include_mcp.")
             include_mcp = True
         benchmark_id = datetime.now(timezone.utc).strftime("bench_%Y%m%d_%H%M%S_%f")
@@ -291,11 +295,7 @@ class BenchmarkManagerMixin:
             "mode": resolved_mode,
             "mcp_enabled": bool(include_mcp) if resolved_mode == "harness" else False,
             "mcp_server": str(mcp_server) if (resolved_mode == "harness" and mcp_server) else None,
-            "harness_strategy": (
-                resolved_harness_strategy
-                if resolved_mode == "harness"
-                else None
-            ),
+            "harness_strategy": (resolved_harness_strategy if resolved_mode == "harness" else None),
             "source": extra_sources.get(str(preset).strip().lower(), "builtin"),
             "description": extra_descriptions.get(str(preset).strip().lower(), ""),
             "pack_paths": [str(item) for item in (pack_paths or self._benchmark_pack_paths)],
@@ -961,12 +961,11 @@ class BenchmarkManagerMixin:
         for step in tool_steps:
             if step.tool_result is None:
                 continue
-            metadata = step.tool_result.metadata if isinstance(step.tool_result.metadata, dict) else {}
+            metadata = (
+                step.tool_result.metadata if isinstance(step.tool_result.metadata, dict) else {}
+            )
             resolved_name = str(
-                metadata.get("tool_full_name")
-                or metadata.get("resolved_tool")
-                or step.tool
-                or ""
+                metadata.get("tool_full_name") or metadata.get("resolved_tool") or step.tool or ""
             ).strip()
             if resolved_name.startswith("mcp:"):
                 mcp_tool_calls += 1
@@ -982,8 +981,7 @@ class BenchmarkManagerMixin:
             ):
                 codemode_discovery_calls += 1
         codemode_guardrail_blocked = any(
-            str(step.action) == "codemode_plan"
-            and "guardrail" in str(step.reasoning or "").lower()
+            str(step.action) == "codemode_plan" and "guardrail" in str(step.reasoning or "").lower()
             for step in result.steps
         )
         return {

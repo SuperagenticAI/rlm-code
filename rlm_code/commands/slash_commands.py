@@ -1600,9 +1600,7 @@ class SlashCommandHandler:
                 show_warning_message("strategy=codemode requires mcp=on. Enabling MCP.")
                 include_mcp = True
             if strategy == "codemode" and allowlist:
-                show_warning_message(
-                    "tools=... allowlist is ignored for strategy=codemode."
-                )
+                show_warning_message("tools=... allowlist is ignored for strategy=codemode.")
                 allowlist = None
 
             console.print()

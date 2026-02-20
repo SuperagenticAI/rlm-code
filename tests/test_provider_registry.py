@@ -186,9 +186,14 @@ def test_connector_supported_provider_metadata_includes_connection_type(tmp_path
     assert isinstance(openai["example_models"], list)
 
 
-def test_connector_uses_superqode_model_catalog(tmp_path: Path):
+def test_connector_uses_superqode_model_catalog(tmp_path: Path, monkeypatch):
     """Provider model list should align with SuperQode catalog where available."""
     connector = make_connector(tmp_path)
+    monkeypatch.setattr(
+        connector,
+        "_list_opencode_models_cached",
+        lambda timeout=0.6: [],
+    )
 
     openai_models = connector.list_provider_example_models("openai", limit=3)
     gemini_models = connector.list_provider_example_models("gemini", limit=2)

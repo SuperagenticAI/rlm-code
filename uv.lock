@@ -4661,7 +4661,7 @@ wheels = [
 
 [[package]]
 name = "rlm-code"
-version = "0.1.2"
+version = "0.1.6"
 source = { editable = "." }
 dependencies = [
     { name = "anyio" },

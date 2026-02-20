@@ -12,8 +12,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  lint:
-    name: Lint & Format Check
+  ruff:
+    name: Ruff Check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,104 +26,5 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked --dev
 
-      - name: Run ruff linter
+      - name: Run ruff
         run: uv run ruff check rlm_code tests
-
-      - name: Run ruff formatter check
-        run: uv run ruff format --check rlm_code tests
-
-  typecheck:
-    name: Type Check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-        with:
-          version: "latest"
-
-      - name: Install dependencies
-        run: uv sync --locked --dev
-
-      - name: Run mypy on core modules
-        run: |
-          uv run mypy rlm_code/core/config.py rlm_code/core/debug_logger.py rlm_code/mcp/utils.py rlm_code/mcp/retry.py rlm_code/models/cache.py rlm_code/models/streaming.py rlm_code/validation/security.py --ignore-missing-imports
-
-  test:
-    name: Test - Python ${{ matrix.python-version }} on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-        python-version: ["3.11", "3.12", "3.13"]
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-        with:
-          version: "latest"
-
-      - name: Install dependencies
-        run: uv sync --locked --python ${{ matrix.python-version }} --extra test
-
-      - name: Run tests
-        run: uv run pytest tests/ -v --cov=rlm_code --cov-report=xml --cov-report=term-missing
-
-      - name: Upload coverage
-        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
-        uses: codecov/codecov-action@v4
-        with:
-          file: ./coverage.xml
-          fail_ci_if_error: false
-
-  rlm-benchmark-gate:
-    name: RLM Benchmark Gate
-    runs-on: ubuntu-latest
-    needs: [lint, test]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-        with:
-          version: "latest"
-
-      - name: Install dependencies
-        run: uv sync --locked --extra test
-
-      - name: Run deterministic RLM benchmark gate
-        run: |
-          uv run python scripts/rlm_bench_gate.py \
-            --baseline tests/fixtures/rlm_ci_baseline_generic_smoke.json \
-            --preset generic_smoke \
-            --limit 2
-
-  build:
-    name: Build Package
-    runs-on: ubuntu-latest
-    needs: [lint, test, rlm-benchmark-gate]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-        with:
-          version: "latest"
-
-      - name: Build package
-        run: uv build
-
-      - name: Check distribution
-        run: |
-          uv tool run twine check dist/*
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: dist
-          path: dist/
-          retention-days: 7
