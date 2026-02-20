@@ -2,218 +2,254 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://superagenticai.github.io/rlm-code/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/benchmarks/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
+    </url>
+    <url>
+         <loc>https://superagenticai.github.io/rlm-code/benchmarks/codemode-evaluation/</loc>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/benchmarks/leaderboard/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/benchmarks/presets/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/benchmarks/session-replay/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
+    </url>
+    <url>
+         <loc>https://superagenticai.github.io/rlm-code/codemode/</loc>
+         <lastmod>2026-02-20</lastmod>
+    </url>
+    <url>
+         <loc>https://superagenticai.github.io/rlm-code/codemode/architecture/</loc>
+         <lastmod>2026-02-20</lastmod>
+    </url>
+    <url>
+         <loc>https://superagenticai.github.io/rlm-code/codemode/evaluation/</loc>
+         <lastmod>2026-02-20</lastmod>
+    </url>
+    <url>
+         <loc>https://superagenticai.github.io/rlm-code/codemode/guardrails/</loc>
+         <lastmod>2026-02-20</lastmod>
+    </url>
+    <url>
+         <loc>https://superagenticai.github.io/rlm-code/codemode/quickstart/</loc>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/core/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/core/comparison/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/core/environments/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/core/events/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/core/execution-patterns/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/core/memory-compaction/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/core/repl-types/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/core/runner/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/core/termination/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/core/trajectory/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/getting-started/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/getting-started/cli/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
+    </url>
+    <url>
+         <loc>https://superagenticai.github.io/rlm-code/getting-started/codemode-quickstart/</loc>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/getting-started/configuration/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/getting-started/installation/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/getting-started/quickstart/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/getting-started/researcher-onboarding/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/getting-started/start-here/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/integrations/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
+    </url>
+    <url>
+         <loc>https://superagenticai.github.io/rlm-code/integrations/codemode/</loc>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/integrations/frameworks/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/integrations/llm-providers/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/integrations/mcp/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/observability/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/observability/langfuse/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/observability/langsmith/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/observability/logfire/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/observability/mlflow/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/observability/otel/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/observability/sinks/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/policies/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/policies/action-selection/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/policies/compaction/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/policies/registry/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/policies/reward/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/policies/termination/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/reference/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/sandbox/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/sandbox/cloud/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/sandbox/docker/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/sandbox/local/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/sandbox/monty/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/security/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/security/approval-gates/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/security/audit/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
+    </url>
+    <url>
+         <loc>https://superagenticai.github.io/rlm-code/security/codemode-guardrails/</loc>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/security/risk-assessment/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/tui/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/tui/research/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/tui/tabs/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/tui/theme/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
     <url>
          <loc>https://superagenticai.github.io/rlm-code/tui/widgets/</loc>
-         <lastmod>2026-02-16</lastmod>
+         <lastmod>2026-02-20</lastmod>
     </url>
 </urlset>
