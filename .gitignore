@@ -197,3 +197,4 @@ $RECYCLE.BIN/
 
 # Linux
 .directory
+.env
