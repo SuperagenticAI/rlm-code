@@ -25,21 +25,20 @@ RLM Code implements the [Recursive Language Models](https://arxiv.org/abs/2502.0
 
 RLM Code wraps this algorithm in an interactive terminal UI with built-in benchmarks, trajectory replay, and observability.
 
-## Release v0.1.6
+## Release v0.1.7
 
-This release adds the new CodeMode path as an opt-in harness strategy.
+This release adds HALO-style trace analysis as a new RLM environment.
 
-- New harness strategy: `strategy=codemode` (default remains `strategy=tool_call`)
-- MCP bridge flow for CodeMode: `search_tools` -> typed tool surface -> `call_tool_chain`
-- Guardrails before execution: blocked API classes plus timeout/size/tool-call caps
-- Benchmark telemetry for side-by-side comparison: `tool_call` vs `codemode`
-- Dedicated docs section for CodeMode: quickstart, architecture, guardrails, evaluation
-- Multi-backend setup docs for UTCP (local) and Cloudflare (remote MCP)
+- New `trace_analysis` environment for diagnosing agent harness failures from OTel-shaped JSONL traces
+- Sidecar trace indexing with dataset overview, query, count, search, full-trace view, and selected-span view actions
+- Bounded payload handling for large traces, including oversized summaries and higher-cap surgical span reads
+- `/rlm` help/docs updated for `env=trace_analysis`
+- Dedicated trace analysis docs under the Core Engine section
 
 Example:
 
 ```text
-/harness run "implement feature and add tests" steps=3 mcp=on strategy=codemode mcp_server=utcp-codemode
+/rlm run "Find systemic harness failures trace=./traces.jsonl" env=trace_analysis steps=6
 ```
 
 ## Documentation

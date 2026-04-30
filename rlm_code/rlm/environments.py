@@ -286,6 +286,251 @@ class GenericRLMEnvironment:
         return "Execution failed without stderr."
 
 
+class TraceAnalysisEnvironment(GenericRLMEnvironment):
+    """HALO-style trace analysis environment over one-span-per-line JSONL traces."""
+
+    name = "trace_analysis"
+
+    def __init__(
+        self,
+        workdir: Path | None = None,
+        reward_profile: RLMRewardProfile | dict[str, Any] | None = None,
+    ):
+        super().__init__(workdir=workdir, reward_profile=reward_profile)
+        self._trace_path: Path | None = None
+        self._store: Any | None = None
+
+    def system_prompt(self) -> str:
+        return (
+            "You are an RLM planner specialized for analyzing agent execution traces.\n"
+            "Return ONLY valid JSON object with keys:\n"
+            "{"
+            '"action": "set_trace_path" | "get_dataset_overview" | "query_traces" | '
+            '"count_traces" | "view_trace" | "search_trace" | "view_spans" | "final", '
+            '"trace_path": "<path to JSONL traces>", '
+            '"filters": {"has_errors": true, "model_names": ["..."], "service_names": ["..."], '
+            '"agent_names": ["..."], "project_id": "..."}, '
+            '"trace_id": "<trace id>", '
+            '"span_ids": ["<span id>"], '
+            '"pattern": "<literal substring>", '
+            '"limit": <integer>, '
+            '"offset": <integer>, '
+            '"rationale": "<brief reason>", '
+            '"done": true|false, '
+            '"final_response": "<required when action=final>"'
+            "}\n"
+            "Rules:\n"
+            "- Load a trace file first if one is not already active.\n"
+            "- Always begin analysis with get_dataset_overview.\n"
+            "- Use query_traces to choose real trace ids; never invent trace ids.\n"
+            "- For large traces, prefer search_trace followed by view_spans.\n"
+            "- Identify systemic harness failures, not one-off anomalies.\n"
+            "- Output JSON only."
+        )
+
+    def planner_prompt(
+        self, task: str, memory: list[str], trajectory: list[dict[str, Any]], step_index: int
+    ) -> str:
+        inferred = self._extract_trace_path(task)
+        if inferred is not None and inferred != self._trace_path:
+            try:
+                self._load_store(inferred)
+            except Exception:
+                # Surface the failure through the prompt; execute_action will return
+                # the structured error if the planner attempts to use the path.
+                self._trace_path = inferred
+                self._store = None
+
+        base = super().planner_prompt(task, memory, trajectory, step_index)
+        active = str(self._trace_path) if self._trace_path is not None else "(none)"
+        overview = ""
+        if self._store is not None:
+            try:
+                data = self._store.get_overview({})
+                overview = (
+                    f"\nActive trace overview: traces={data['total_traces']} "
+                    f"spans={data['total_spans']} errors={data['error_trace_count']} "
+                    f"sample_trace_ids={data['sample_trace_ids'][:5]}"
+                )
+            except Exception:
+                overview = ""
+        return (
+            f"{base}\n\n"
+            f"Trace analysis environment.\n"
+            f"Active trace path: {active}\n"
+            "If the task includes trace=<path> or trace_path=<path>, use that file.\n"
+            "Goal: produce a concise evidence report of repeated harness failure modes "
+            "with concrete trace ids/spans and suggested harness changes."
+            f"{overview}"
+        )
+
+    def execute_action(
+        self,
+        action: dict[str, Any],
+        execution_engine: Any,
+        exec_timeout: int,
+        llm_connector: Any | None = None,
+    ) -> EnvironmentActionResult:
+        action_name = str(action.get("action", "")).strip().lower()
+        if action_name == "final":
+            return super().execute_action(
+                action,
+                execution_engine,
+                exec_timeout,
+                llm_connector=llm_connector,
+            )
+
+        try:
+            if action_name == "set_trace_path":
+                store = self._store_from_action(action, required_path=True)
+                return EnvironmentActionResult(
+                    observation={
+                        "success": True,
+                        "trace_path": str(store.trace_path),
+                        "index_path": str(store.index_path),
+                        "overview": store.get_overview({}),
+                    },
+                    reward=0.55,
+                    memory_note=f"Loaded trace dataset: {store.trace_path}",
+                )
+
+            store = self._store_from_action(action, required_path=False)
+            filters = action.get("filters") if isinstance(action.get("filters"), dict) else {}
+
+            if action_name == "get_dataset_overview":
+                return self._ok(
+                    observation=store.get_overview(filters),
+                    reward=0.45,
+                    memory_note="Loaded trace dataset overview.",
+                )
+            if action_name == "query_traces":
+                return self._ok(
+                    observation=store.query_traces(
+                        filters,
+                        limit=self._int_arg(action, "limit", 50, minimum=1, maximum=200),
+                        offset=self._int_arg(action, "offset", 0, minimum=0, maximum=1_000_000),
+                    ),
+                    reward=0.5,
+                    memory_note="Queried trace summaries.",
+                )
+            if action_name == "count_traces":
+                return self._ok(
+                    observation=store.count_traces(filters),
+                    reward=0.35,
+                    memory_note="Counted traces matching filters.",
+                )
+            if action_name == "view_trace":
+                trace_id = self._required_str(action, "trace_id")
+                return self._ok(
+                    observation=store.view_trace(trace_id),
+                    reward=0.65,
+                    memory_note=f"Viewed trace {trace_id}.",
+                )
+            if action_name == "search_trace":
+                trace_id = self._required_str(action, "trace_id")
+                pattern = self._required_str(action, "pattern")
+                return self._ok(
+                    observation=store.search_trace(
+                        trace_id,
+                        pattern,
+                        limit=self._int_arg(action, "limit", 100, minimum=1, maximum=500),
+                    ),
+                    reward=0.65,
+                    memory_note=f"Searched trace {trace_id} for {pattern!r}.",
+                )
+            if action_name == "view_spans":
+                trace_id = self._required_str(action, "trace_id")
+                span_ids = action.get("span_ids")
+                if not isinstance(span_ids, list) or not span_ids:
+                    raise ValueError("view_spans requires non-empty span_ids list")
+                return self._ok(
+                    observation=store.view_spans(trace_id, [str(item) for item in span_ids]),
+                    reward=0.7,
+                    memory_note=f"Viewed selected spans for trace {trace_id}.",
+                )
+        except Exception as exc:
+            return EnvironmentActionResult(
+                observation={"success": False, "error": f"{type(exc).__name__}: {exc}"},
+                reward=-0.25,
+                memory_note=f"Trace analysis action failed: {type(exc).__name__}.",
+            )
+
+        return EnvironmentActionResult(
+            observation={"success": False, "error": f"Unsupported action '{action_name}'."},
+            reward=-0.2,
+            memory_note="Planner produced unsupported trace action.",
+        )
+
+    def doctor_checks(self) -> list[EnvironmentDoctorCheck]:
+        checks = super().doctor_checks()
+        checks.append(
+            EnvironmentDoctorCheck(
+                name="trace_analysis",
+                status="pass",
+                detail="Trace analysis environment is available.",
+            )
+        )
+        return checks
+
+    def _ok(self, *, observation: dict[str, Any], reward: float, memory_note: str) -> EnvironmentActionResult:
+        payload = {"success": True, **observation}
+        return EnvironmentActionResult(
+            observation=payload,
+            reward=reward,
+            memory_note=memory_note,
+        )
+
+    def _store_from_action(self, action: dict[str, Any], *, required_path: bool):
+        raw = action.get("trace_path") or action.get("path")
+        if isinstance(raw, str) and raw.strip():
+            return self._load_store(Path(raw.strip()).expanduser())
+        if self._store is not None:
+            return self._store
+        if required_path:
+            raise ValueError("trace_path is required")
+        raise ValueError("no trace dataset loaded; pass trace_path or use set_trace_path first")
+
+    def _load_store(self, trace_path: Path):
+        from ..traces import TraceStore
+
+        resolved = trace_path if trace_path.is_absolute() else (self.workdir / trace_path)
+        store = TraceStore.load(resolved)
+        self._trace_path = resolved.resolve()
+        self._store = store
+        return store
+
+    @staticmethod
+    def _extract_trace_path(task: str) -> Path | None:
+        match = re.search(r"(?:^|\s)(?:trace|trace_path)=([^\s]+)", task)
+        if not match:
+            return None
+        raw = match.group(1).strip().strip("\"'")
+        return Path(raw).expanduser() if raw else None
+
+    @staticmethod
+    def _required_str(action: dict[str, Any], key: str) -> str:
+        value = action.get(key)
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"{key} is required")
+        return value.strip()
+
+    @staticmethod
+    def _int_arg(
+        action: dict[str, Any],
+        key: str,
+        default: int,
+        *,
+        minimum: int,
+        maximum: int,
+    ) -> int:
+        value = action.get(key, default)
+        try:
+            parsed = int(value)
+        except Exception:
+            parsed = default
+        return max(minimum, min(maximum, parsed))
+
+
 class DSPyCodingRLMEnvironment(GenericRLMEnvironment):
     """DSPy-focused environment with file edit + tests + DSPy-aware scoring."""
 

@@ -6,7 +6,7 @@
 
 <p class="rlm-tagline">Research Playground & Evaluation OS for Recursive Language Model Agentic Systems</p>
 
-<span class="rlm-badge rlm-badge--purple">v0.1.6</span>
+<span class="rlm-badge rlm-badge--purple">v0.1.7</span>
 <span class="rlm-badge rlm-badge--green">Python 3.11+</span>
 <span class="rlm-badge rlm-badge--blue">Apache 2.0</span>
 
@@ -41,6 +41,13 @@ In short, RLM Code is a research tooling layer for building and evaluating RLM-s
 
 ### 🧠 Multi-Paradigm Engine
 Run **Pure RLM** (paper-compliant with context-as-variable), **CodeAct** (context-in-tokens), or **Traditional** agent orchestration, all from one TUI.
+
+</div>
+
+<div class="rlm-feature-card" markdown>
+
+### 🔎 Trace Analysis
+Run HALO-style trace diagnosis with `env=trace_analysis` over OTel-shaped JSONL traces to find repeated harness failure modes.
 
 </div>
 

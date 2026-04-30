@@ -15,6 +15,7 @@ RLM Code is organized into the following top-level packages. Each module is docu
 | `rlm_code.rlm.events` | Event bus with 27+ event types, collector, and subscriber system | [Event System](../core/events.md) |
 | `rlm_code.rlm.termination` | FINAL/FINAL_VAR detection, code block extraction, answer formatting | [Termination Patterns](../core/termination.md) |
 | `rlm_code.rlm.memory_compaction` | LLM and deterministic memory compaction strategies | [Memory Compaction](../core/memory-compaction.md) |
+| `rlm_code.traces` | HALO-style trace indexing and bounded trace query helpers | [Trace Analysis](../core/trace-analysis.md) |
 | `rlm_code.rlm.repl_types` | REPLVariable, REPLEntry, REPLHistory, REPLResult data types | [REPL Types](../core/repl-types.md) |
 | `rlm_code.rlm.trajectory` | Trajectory event logging, viewing, and comparison | [Trajectory Logging](../core/trajectory.md) |
 | `rlm_code.rlm.comparison` | Paradigm comparison engine (Pure RLM vs CodeAct vs Traditional) | [Paradigm Comparison](../core/comparison.md) |

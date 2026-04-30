@@ -38,6 +38,7 @@ from .environments import (
     GenericRLMEnvironment,
     RLMEnvironment,
     RLMRewardProfile,
+    TraceAnalysisEnvironment,
 )
 from .events import RLMEventBus
 from .frameworks import FrameworkAdapterRegistry, FrameworkEpisodeResult
@@ -276,6 +277,18 @@ class RLMRunner(BenchmarkManagerMixin, ChatSessionMixin, DelegationMixin, Action
                 reward_profile=self.reward_profile,
             ),
             "dspy-coding": DSPyCodingRLMEnvironment(
+                workdir=self.workdir,
+                reward_profile=self.reward_profile,
+            ),
+            "trace_analysis": TraceAnalysisEnvironment(
+                workdir=self.workdir,
+                reward_profile=self.reward_profile,
+            ),
+            "trace-analysis": TraceAnalysisEnvironment(
+                workdir=self.workdir,
+                reward_profile=self.reward_profile,
+            ),
+            "traces": TraceAnalysisEnvironment(
                 workdir=self.workdir,
                 reward_profile=self.reward_profile,
             ),

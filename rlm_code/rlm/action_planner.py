@@ -15,6 +15,7 @@ from .environments import (
     DSPyCodingRLMEnvironment,
     GenericRLMEnvironment,
     RLMEnvironment,
+    TraceAnalysisEnvironment,
 )
 from .pure_rlm_environment import PureRLMConfig, PureRLMEnvironment
 
@@ -276,6 +277,8 @@ class ActionPlannerMixin:
             )
         if isinstance(env, DSPyCodingRLMEnvironment):
             return DSPyCodingRLMEnvironment(workdir=workdir, reward_profile=self.reward_profile)
+        if isinstance(env, TraceAnalysisEnvironment):
+            return TraceAnalysisEnvironment(workdir=workdir, reward_profile=self.reward_profile)
         if isinstance(env, GenericRLMEnvironment):
             return GenericRLMEnvironment(workdir=workdir, reward_profile=self.reward_profile)
         # Fallback to generic environment in preview if an unknown env type appears.

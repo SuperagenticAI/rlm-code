@@ -1684,7 +1684,7 @@ class SlashCommandHandler:
         Manage RLM runs.
 
         Usage:
-            /rlm run <task> [steps=N] [timeout=N] [branch=N] [depth=N] [children=N] [parallel=N] [budget=N] [framework=<see /rlm frameworks>] [env=generic|dspy|pure_rlm] [sub=provider/model]
+            /rlm run <task> [steps=N] [timeout=N] [branch=N] [depth=N] [children=N] [parallel=N] [budget=N] [framework=<see /rlm frameworks>] [env=generic|dspy|pure_rlm|trace_analysis] [sub=provider/model]
             /rlm bench [list|preset=name] [mode=native|harness|direct-llm] [strategy=tool_call|codemode] [mcp=on|off] [mcp_server=name] [pack=path[,path2]] [limit=N] [steps=N] [timeout=N] [branch=N] [framework=<see /rlm frameworks>] [env=generic|dspy|pure_rlm] [sub=provider/model]
             /rlm bench compare [candidate=<id|path|latest>] [baseline=<id|path|previous>] [min_reward_delta=N] [min_completion_delta=N] [max_steps_increase=N]
             /rlm bench validate [candidate=<id|path|latest>] [baseline=<id|path|previous>] [min_reward_delta=N] [min_completion_delta=N] [max_steps_increase=N] [--json]
@@ -1696,8 +1696,8 @@ class SlashCommandHandler:
             /rlm status [run_id]
             /rlm abort [run_id|all]
             /rlm replay [run_id|latest]
-            /rlm doctor [env=generic|dspy|pure_rlm] [--json]
-            /rlm chat <message> [session=name] [env=generic|dspy|pure_rlm] [branch=N] [depth=N] [children=N] [parallel=N] [budget=N] [framework=<see /rlm frameworks>] [sub=provider/model]
+            /rlm doctor [env=generic|dspy|pure_rlm|trace_analysis] [--json]
+            /rlm chat <message> [session=name] [env=generic|dspy|pure_rlm|trace_analysis] [branch=N] [depth=N] [children=N] [parallel=N] [budget=N] [framework=<see /rlm frameworks>] [sub=provider/model]
             /rlm chat status [session=name]
             /rlm chat reset [session=name]
             /rlm observability
@@ -1708,14 +1708,14 @@ class SlashCommandHandler:
             console.print("[bold cyan]🧠 RLM Commands[/bold cyan]")
             console.print(
                 "  [yellow]/rlm run <task> [steps=N] [timeout=N] [branch=N] [depth=N] [children=N] "
-                f"[parallel=N] [budget=N] [framework={framework_opts}] [env=generic|dspy|pure_rlm] "
+                f"[parallel=N] [budget=N] [framework={framework_opts}] [env=generic|dspy|pure_rlm|trace_analysis] "
                 "[sub=provider/model][/yellow]"
             )
             console.print(
                 "  [yellow]/rlm bench [list|preset=name] [mode=native|harness|direct-llm] "
                 "[strategy=tool_call|codemode] [mcp=on|off] [mcp_server=name] "
                 "[pack=path[,path2]] [limit=N] [steps=N] "
-                f"[timeout=N] [branch=N] [framework={framework_opts}] [env=generic|dspy|pure_rlm] [sub=provider/model][/yellow]"
+                f"[timeout=N] [branch=N] [framework={framework_opts}] [env=generic|dspy|pure_rlm|trace_analysis] [sub=provider/model][/yellow]"
             )
             console.print(
                 "  [yellow]/rlm bench compare [candidate=<id|path|latest>] [baseline=<id|path|previous>] "
@@ -1741,9 +1741,9 @@ class SlashCommandHandler:
             console.print("  [yellow]/rlm status [run_id][/yellow]")
             console.print("  [yellow]/rlm abort [run_id|all][/yellow]")
             console.print("  [yellow]/rlm replay [run_id|latest][/yellow]")
-            console.print("  [yellow]/rlm doctor [env=generic|dspy|pure_rlm] [--json][/yellow]")
+            console.print("  [yellow]/rlm doctor [env=generic|dspy|pure_rlm|trace_analysis] [--json][/yellow]")
             console.print(
-                "  [yellow]/rlm chat <message> [session=name] [env=generic|dspy|pure_rlm] [branch=N] [depth=N] "
+                "  [yellow]/rlm chat <message> [session=name] [env=generic|dspy|pure_rlm|trace_analysis] [branch=N] [depth=N] "
                 f"[children=N] [parallel=N] [budget=N] [framework={framework_opts}] "
                 "[sub=provider/model][/yellow]"
             )
@@ -2135,7 +2135,7 @@ class SlashCommandHandler:
             task = " ".join(task_tokens).strip()
             if not task:
                 show_error_message(
-                    "Usage: /rlm run <task> [steps=N] [timeout=N] [env=generic|dspy|pure_rlm] "
+                    "Usage: /rlm run <task> [steps=N] [timeout=N] [env=generic|dspy|pure_rlm|trace_analysis] "
                     "[depth=N] [children=N] [parallel=N] [budget=N] "
                     f"[framework={framework_opts}] "
                     "[branch=N] [sub=provider/model]"

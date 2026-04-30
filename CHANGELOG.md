@@ -5,6 +5,19 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.7] - 2026-04-30
+
+### Added
+- HALO-style `trace_analysis` RLM environment for diagnosing agent harness failures from one-span-per-line JSONL traces.
+- Trace sidecar indexing with dataset rollups for trace counts, span counts, error traces, services, models, agents, token totals, and sample trace ids.
+- Bounded trace inspection actions: `get_dataset_overview`, `query_traces`, `count_traces`, `view_trace`, `search_trace`, and `view_spans`.
+- Large-trace safeguards: per-attribute truncation, oversized trace summaries, and higher-cap selected-span reads.
+- Tests for trace indexing, querying, searching, selected-span viewing, and trace environment actions.
+- Trace analysis documentation under the Core Engine docs.
+
+### Changed
+- `/rlm` command help now advertises `env=trace_analysis` for run, chat, and doctor workflows.
+
 ## [0.1.6] - 2026-02-20
 
 ### Added
@@ -56,3 +69,4 @@ Initial public release of **RLM Code**.
 
 [0.1.5]: https://github.com/SuperagenticAI/rlm-code/releases/tag/v0.1.5
 [0.1.6]: https://github.com/SuperagenticAI/rlm-code/releases/tag/v0.1.6
+[0.1.7]: https://github.com/SuperagenticAI/rlm-code/releases/tag/v0.1.7
