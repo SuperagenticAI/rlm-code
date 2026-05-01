@@ -23,6 +23,7 @@ def _write_trace_fixture(path: Path) -> None:
                 "inference.llm.model_name": "gpt-test",
                 "inference.llm.input_tokens": 10,
                 "inference.llm.output_tokens": 5,
+                "inference.task_id": "task-ok",
             },
         },
         {
@@ -39,6 +40,7 @@ def _write_trace_fixture(path: Path) -> None:
                 "inference.project_id": "demo",
                 "inference.agent_name": "Root",
                 "inference.llm.model_name": "gpt-test",
+                "inference.task_id": "task-error",
                 "error.message": "hallucinated tool call spotify__login",
             },
         },
@@ -53,6 +55,7 @@ def _write_trace_fixture(path: Path) -> None:
             "status": {"code": "STATUS_CODE_ERROR"},
             "resource": {"attributes": {"service.name": "demo-agent"}},
             "attributes": {
+                "inference.task_id": "task-error",
                 "tool.name": "spotify__login",
                 "input.value": "{\"extra_argument\": true}",
                 "output.value": "Unknown tool argument: extra_argument",
@@ -84,6 +87,19 @@ def test_trace_store_indexes_and_queries_jsonl(tmp_path: Path) -> None:
     selected = store.view_spans("trace-error", ["span-tool-error"])
     assert selected["spans"][0]["name"] == "function.spotify__login"
 
+    exported = store.export_evidence_corpus(tmp_path / "evidence", {"has_errors": True})
+    assert exported["trace_count"] == 1
+    overview_text = (tmp_path / "evidence" / "overview.md").read_text(encoding="utf-8")
+    assert "Trace Evidence Overview" in overview_text
+    assert "`trace-error`" in overview_text
+    detail_text = (tmp_path / "evidence" / "detail" / "trace-error.md").read_text(encoding="utf-8")
+    assert "task-error" in detail_text
+    assert "spotify__login" in detail_text
+    assert (tmp_path / "evidence" / "raw" / "trace-error.jsonl").exists()
+    index_data = json.loads((tmp_path / "evidence" / "index.json").read_text(encoding="utf-8"))
+    assert index_data["schema_version"] == "rlm-code.trace_evidence_corpus.v1"
+    assert index_data["traces"][0]["task_ids"] == ["task-error"]
+
 
 def test_trace_analysis_environment_actions(tmp_path: Path) -> None:
     trace_path = tmp_path / "traces.jsonl"
@@ -113,3 +129,16 @@ def test_trace_analysis_environment_actions(tmp_path: Path) -> None:
     )
     assert searched.observation["success"] is True
     assert searched.observation["match_count"] == 1
+
+    exported = env.execute_action(
+        {
+            "action": "export_evidence_corpus",
+            "output_dir": "trace-evidence",
+            "filters": {"has_errors": True},
+        },
+        execution_engine=None,
+        exec_timeout=1,
+    )
+    assert exported.observation["success"] is True
+    assert exported.observation["trace_count"] == 1
+    assert (tmp_path / "trace-evidence" / "overview.md").exists()

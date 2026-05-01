@@ -17,7 +17,7 @@ from .exceptions import (
 )
 from .session_wrapper import MCPSessionWrapper
 
-__version__ = "0.1.7"
+__version__ = "0.1.8"
 
 __all__ = [
     "MCPClientManager",

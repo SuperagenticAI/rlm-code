@@ -25,12 +25,13 @@ RLM Code implements the [Recursive Language Models](https://arxiv.org/abs/2502.0
 
 RLM Code wraps this algorithm in an interactive terminal UI with built-in benchmarks, trajectory replay, and observability.
 
-## Release v0.1.7
+## Release v0.1.8
 
-This release adds HALO-style trace analysis as a new RLM environment.
+This release extends HALO/AHE-style trace analysis with layered evidence export.
 
 - New `trace_analysis` environment for diagnosing agent harness failures from OTel-shaped JSONL traces
 - Sidecar trace indexing with dataset overview, query, count, search, full-trace view, and selected-span view actions
+- AHE-style evidence corpus export with `overview.md`, per-trace detail reports, `index.json`, and optional processed raw JSONL spans
 - Bounded payload handling for large traces, including oversized summaries and higher-cap surgical span reads
 - `/rlm` help/docs updated for `env=trace_analysis`
 - Dedicated trace analysis docs under the Core Engine section

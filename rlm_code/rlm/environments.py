@@ -306,8 +306,10 @@ class TraceAnalysisEnvironment(GenericRLMEnvironment):
             "Return ONLY valid JSON object with keys:\n"
             "{"
             '"action": "set_trace_path" | "get_dataset_overview" | "query_traces" | '
-            '"count_traces" | "view_trace" | "search_trace" | "view_spans" | "final", '
+            '"count_traces" | "view_trace" | "search_trace" | "view_spans" | '
+            '"export_evidence_corpus" | "final", '
             '"trace_path": "<path to JSONL traces>", '
+            '"output_dir": "<directory for exported evidence corpus>", '
             '"filters": {"has_errors": true, "model_names": ["..."], "service_names": ["..."], '
             '"agent_names": ["..."], "project_id": "..."}, '
             '"trace_id": "<trace id>", '
@@ -324,6 +326,7 @@ class TraceAnalysisEnvironment(GenericRLMEnvironment):
             "- Always begin analysis with get_dataset_overview.\n"
             "- Use query_traces to choose real trace ids; never invent trace ids.\n"
             "- For large traces, prefer search_trace followed by view_spans.\n"
+            "- Use export_evidence_corpus when the caller needs files for MetaHarness or another coding agent.\n"
             "- Identify systemic harness failures, not one-off anomalies.\n"
             "- Output JSON only."
         )
@@ -448,6 +451,21 @@ class TraceAnalysisEnvironment(GenericRLMEnvironment):
                     reward=0.7,
                     memory_note=f"Viewed selected spans for trace {trace_id}.",
                 )
+            if action_name == "export_evidence_corpus":
+                output_dir = self._required_str(action, "output_dir")
+                resolved_output = Path(output_dir).expanduser()
+                if not resolved_output.is_absolute():
+                    resolved_output = self.workdir / resolved_output
+                return self._ok(
+                    observation=store.export_evidence_corpus(
+                        resolved_output,
+                        filters,
+                        limit=self._int_arg(action, "limit", 100, minimum=1, maximum=1000),
+                        include_raw=self._bool_arg(action, "include_raw", True),
+                    ),
+                    reward=0.75,
+                    memory_note="Exported layered trace evidence corpus.",
+                )
         except Exception as exc:
             return EnvironmentActionResult(
                 observation={"success": False, "error": f"{type(exc).__name__}: {exc}"},
@@ -529,6 +547,19 @@ class TraceAnalysisEnvironment(GenericRLMEnvironment):
         except Exception:
             parsed = default
         return max(minimum, min(maximum, parsed))
+
+    @staticmethod
+    def _bool_arg(action: dict[str, Any], key: str, default: bool) -> bool:
+        value = action.get(key, default)
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"1", "true", "yes", "on"}:
+                return True
+            if normalized in {"0", "false", "no", "off"}:
+                return False
+        return default
 
 
 class DSPyCodingRLMEnvironment(GenericRLMEnvironment):

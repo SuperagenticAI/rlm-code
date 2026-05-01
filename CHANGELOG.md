@@ -5,6 +5,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.8] - 2026-05-01
+
+### Added
+- AHE-style layered trace evidence corpus export from `TraceStore`.
+- New `trace_analysis` action `export_evidence_corpus` for writing `overview.md`, per-trace detail reports, `index.json`, and optional processed raw JSONL spans.
+- Evidence corpus tests covering direct store export and environment action export.
+
 ## [0.1.7] - 2026-04-30
 
 ### Added
@@ -69,4 +76,5 @@ Initial public release of **RLM Code**.
 
 [0.1.5]: https://github.com/SuperagenticAI/rlm-code/releases/tag/v0.1.5
 [0.1.6]: https://github.com/SuperagenticAI/rlm-code/releases/tag/v0.1.6
+[0.1.8]: https://github.com/SuperagenticAI/rlm-code/releases/tag/v0.1.8
 [0.1.7]: https://github.com/SuperagenticAI/rlm-code/releases/tag/v0.1.7

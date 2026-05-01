@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 from collections import Counter
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +17,22 @@ SURGICAL_ATTR_CAP = 16384
 VIEW_TRACE_CHAR_BUDGET = 150_000
 OVERVIEW_SAMPLE_TRACE_IDS = 20
 NOISY_FLAT_PROJECTION_RE = re.compile(r"^(?:llm\.(?:input|output)_messages|mcp\.tools)\.\d+\.")
+EVIDENCE_ATTR_CAP = 2048
+TASK_ID_ATTRS = (
+    "inference.task_id",
+    "task_id",
+    "task.id",
+    "benchmark.task_id",
+    "appworld.task_id",
+)
+ISSUE_ATTRS = (
+    "error.message",
+    "exception.message",
+    "exception.type",
+    "tool.name",
+    "input.value",
+    "output.value",
+)
 
 
 def _truncate_value(value: Any, cap: int) -> Any:
@@ -168,6 +185,87 @@ class TraceStore:
             "truncated": len(matches) >= limit,
         }
 
+    def export_evidence_corpus(
+        self,
+        output_dir: str | Path,
+        filters: dict[str, Any] | None = None,
+        *,
+        limit: int = 100,
+        include_raw: bool = True,
+    ) -> dict[str, Any]:
+        """Export a layered evidence corpus for harness-optimization agents.
+
+        The corpus mirrors the AHE progressive-disclosure pattern:
+        a compact overview, one detail file per selected trace, an index, and
+        optional lightly processed raw JSONL spans for drill-down.
+        """
+        out = Path(output_dir).resolve()
+        detail_dir = out / "detail"
+        raw_dir = out / "raw"
+        detail_dir.mkdir(parents=True, exist_ok=True)
+        if include_raw:
+            raw_dir.mkdir(parents=True, exist_ok=True)
+
+        rows = self._filtered_rows(filters)[: max(0, limit)]
+        overview = self.get_overview(filters)
+        detail_entries: list[dict[str, Any]] = []
+        detail_lines = self._render_overview_markdown(overview, rows, include_raw=include_raw)
+
+        for row in rows:
+            spans = self._read_spans(row.trace_id)
+            safe_id = self._safe_filename(row.trace_id)
+            detail_path = detail_dir / f"{safe_id}.md"
+            raw_path = raw_dir / f"{safe_id}.jsonl" if include_raw else None
+            detail_path.write_text(
+                self._render_detail_markdown(row, spans, raw_path=raw_path),
+                encoding="utf-8",
+            )
+            if raw_path is not None:
+                self._write_raw_trace(raw_path, spans)
+            detail_entries.append(
+                {
+                    "trace_id": row.trace_id,
+                    "detail_path": str(detail_path),
+                    "raw_path": str(raw_path) if raw_path is not None else None,
+                    "has_errors": row.has_errors,
+                    "span_count": row.span_count,
+                    "task_ids": self._task_ids(spans),
+                    "error_span_count": sum(1 for span in spans if span.status_code == "STATUS_CODE_ERROR"),
+                }
+            )
+            detail_lines.append(
+                f"- `{row.trace_id}`: {row.span_count} spans, "
+                f"errors={'yes' if row.has_errors else 'no'}, detail=`detail/{safe_id}.md`"
+            )
+
+        overview_path = out / "overview.md"
+        index_path = out / "index.json"
+        overview_path.write_text("\n".join(detail_lines) + "\n", encoding="utf-8")
+        index_payload = {
+            "schema_version": "rlm-code.trace_evidence_corpus.v1",
+            "created_at": datetime.now(UTC).isoformat(),
+            "source_trace_path": str(self.trace_path),
+            "source_index_path": str(self.index_path),
+            "filters": filters or {},
+            "limit": limit,
+            "include_raw": include_raw,
+            "overview_path": str(overview_path),
+            "detail_dir": str(detail_dir),
+            "raw_dir": str(raw_dir) if include_raw else None,
+            "overview": overview,
+            "traces": detail_entries,
+        }
+        index_path.write_text(json.dumps(index_payload, indent=2, sort_keys=True), encoding="utf-8")
+        return {
+            "output_dir": str(out),
+            "overview_path": str(overview_path),
+            "index_path": str(index_path),
+            "detail_dir": str(detail_dir),
+            "raw_dir": str(raw_dir) if include_raw else None,
+            "trace_count": len(detail_entries),
+            "detail_paths": [entry["detail_path"] for entry in detail_entries],
+        }
+
     def _read_spans(self, trace_id: str) -> list[SpanRecord]:
         if trace_id not in self.rows_by_id:
             raise KeyError(trace_id)
@@ -219,3 +317,131 @@ class TraceStore:
             "total_output_tokens": row.total_output_tokens,
             "project_id": row.project_id,
         }
+
+    @staticmethod
+    def _render_overview_markdown(
+        overview: dict[str, Any],
+        rows: list[TraceIndexRow],
+        *,
+        include_raw: bool,
+    ) -> list[str]:
+        lines = [
+            "# Trace Evidence Overview",
+            "",
+            "Generated by `rlm-code` trace analysis.",
+            "",
+            "## Dataset",
+            "",
+            f"- Traces selected: {len(rows)}",
+            f"- Total matching traces: {overview['total_traces']}",
+            f"- Total matching spans: {overview['total_spans']}",
+            f"- Error traces: {overview['error_trace_count']}",
+            f"- Services: {', '.join(overview['service_names']) or '-'}",
+            f"- Models: {', '.join(overview['model_names']) or '-'}",
+            f"- Agents: {', '.join(overview['agent_names']) or '-'}",
+            f"- Input tokens: {overview['total_input_tokens']}",
+            f"- Output tokens: {overview['total_output_tokens']}",
+            f"- Raw span files included: {'yes' if include_raw else 'no'}",
+            "",
+            "## Trace Details",
+            "",
+        ]
+        return lines
+
+    def _render_detail_markdown(
+        self,
+        row: TraceIndexRow,
+        spans: list[SpanRecord],
+        *,
+        raw_path: Path | None,
+    ) -> str:
+        task_ids = self._task_ids(spans)
+        error_spans = [span for span in spans if span.status_code == "STATUS_CODE_ERROR"]
+        tool_spans = [span for span in spans if self._looks_like_tool_span(span)]
+        top_names = Counter(span.name for span in spans).most_common(10)
+        lines = [
+            f"# Trace Detail: {row.trace_id}",
+            "",
+            "## Summary",
+            "",
+            f"- Trace id: `{row.trace_id}`",
+            f"- Spans: {row.span_count}",
+            f"- Has errors: {'yes' if row.has_errors else 'no'}",
+            f"- Error spans: {len(error_spans)}",
+            f"- Task ids: {', '.join(task_ids) or '-'}",
+            f"- Services: {', '.join(row.service_names) or '-'}",
+            f"- Models: {', '.join(row.model_names) or '-'}",
+            f"- Agents: {', '.join(row.agent_names) or '-'}",
+            f"- Start: {row.start_time or '-'}",
+            f"- End: {row.end_time or '-'}",
+        ]
+        if raw_path is not None:
+            lines.append(f"- Raw spans: `{raw_path.name}`")
+        lines.extend(["", "## Span Name Counts", ""])
+        lines.extend(f"- `{name}`: {count}" for name, count in top_names)
+        lines.extend(["", "## Error Spans", ""])
+        if error_spans:
+            for span in error_spans:
+                lines.extend(self._render_span_evidence(span))
+        else:
+            lines.append("- None")
+        lines.extend(["", "## Tool-Like Spans", ""])
+        if tool_spans:
+            for span in tool_spans[:20]:
+                lines.extend(self._render_span_evidence(span))
+        else:
+            lines.append("- None")
+        return "\n".join(lines) + "\n"
+
+    @staticmethod
+    def _render_span_evidence(span: SpanRecord) -> list[str]:
+        lines = [
+            f"### `{span.name or span.span_id}`",
+            "",
+            f"- Span id: `{span.span_id}`",
+            f"- Parent span id: `{span.parent_span_id or '-'}`",
+            f"- Status: {span.status_code}",
+        ]
+        attrs = {
+            key: _truncate_value(span.attributes[key], EVIDENCE_ATTR_CAP)
+            for key in ISSUE_ATTRS
+            if key in span.attributes
+        }
+        if attrs:
+            lines.append("- Evidence attributes:")
+            for key, value in attrs.items():
+                lines.append(f"  - `{key}`: `{value}`")
+        return lines + [""]
+
+    @staticmethod
+    def _write_raw_trace(path: Path, spans: list[SpanRecord]) -> None:
+        with path.open("w", encoding="utf-8") as handle:
+            for span in spans:
+                handle.write(json.dumps(_render_span(span, SURGICAL_ATTR_CAP), sort_keys=True))
+                handle.write("\n")
+
+    @staticmethod
+    def _task_ids(spans: list[SpanRecord]) -> list[str]:
+        task_ids: set[str] = set()
+        for span in spans:
+            for key in TASK_ID_ATTRS:
+                value = span.attributes.get(key)
+                if isinstance(value, str) and value.strip():
+                    task_ids.add(value.strip())
+        return sorted(task_ids)
+
+    @staticmethod
+    def _looks_like_tool_span(span: SpanRecord) -> bool:
+        name = span.name.lower()
+        return (
+            "tool" in name
+            or "function" in name
+            or "tool.name" in span.attributes
+            or "input.value" in span.attributes
+            or "output.value" in span.attributes
+        )
+
+    @staticmethod
+    def _safe_filename(value: str) -> str:
+        safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", value).strip("._")
+        return safe or "trace"
