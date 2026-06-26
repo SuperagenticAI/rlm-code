@@ -25,21 +25,20 @@ RLM Code implements the [Recursive Language Models](https://arxiv.org/abs/2502.0
 
 RLM Code wraps this algorithm in an interactive terminal UI with built-in benchmarks, trajectory replay, and observability.
 
-## Release v0.1.8
+## Release v0.1.9
 
-This release extends HALO/AHE-style trace analysis with layered evidence export.
+This release improves Pure RLM repository runs and makes completed trajectories more inspectable from the TUI and replay views.
 
-- New `trace_analysis` environment for diagnosing agent harness failures from OTel-shaped JSONL traces
-- Sidecar trace indexing with dataset overview, query, count, search, full-trace view, and selected-span view actions
-- AHE-style evidence corpus export with `overview.md`, per-trace detail reports, `index.json`, and optional processed raw JSONL spans
-- Bounded payload handling for large traces, including oversized summaries and higher-cap surgical span reads
-- `/rlm` help/docs updated for `env=trace_analysis`
-- Dedicated trace analysis docs under the Core Engine section
+- Pure RLM runs now initialize `context` from explicit workspace files mentioned in the task, with a compact repository snapshot fallback
+- Runner events now record context-load metadata for Pure RLM runs
+- Legacy runner JSONL step events replay with action code, observations, success, token counts, and cumulative reward
+- Run visualization now includes REPL code previews, stdout/stderr previews, `llm_query` counts, executed code blocks, finalization status, and REPL variables
+- TUI trajectory and replay views now surface Pure RLM signals directly for completed runs
 
 Example:
 
 ```text
-/rlm run "Find systemic harness failures trace=./traces.jsonl" env=trace_analysis steps=6
+/rlm run "Validate pure_rlm_environment.py and cite context, REPL, llm_query, and FINAL evidence" env=pure_rlm steps=6
 ```
 
 ## Documentation

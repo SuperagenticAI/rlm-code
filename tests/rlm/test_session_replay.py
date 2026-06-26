@@ -761,6 +761,62 @@ class TestLoadSession:
             replayer = load_session(jsonl_path)
             assert replayer.total_steps >= 1
 
+    def test_load_runner_jsonl_step_events(self):
+        """Runner JSONL step/final events should replay with useful state."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            jsonl_path = Path(tmpdir) / "runner.jsonl"
+            events = [
+                {
+                    "type": "step",
+                    "run_id": "run_demo",
+                    "environment": "pure_rlm",
+                    "task": "Validate pure RLM",
+                    "timestamp": "2026-06-25T10:00:01+00:00",
+                    "step": 1,
+                    "action": {
+                        "action": "run_repl",
+                        "code": "print(context.keys())",
+                        "reasoning": "Inspect context",
+                    },
+                    "observation": {
+                        "success": True,
+                        "stdout": "dict_keys(['a.py'])",
+                        "llm_calls_made": 1,
+                        "code_blocks_executed": 1,
+                        "repl_variables": ["context", "answer"],
+                    },
+                    "reward": 0.4,
+                    "usage": {"prompt_tokens": 10, "completion_tokens": 5},
+                },
+                {
+                    "type": "final",
+                    "run_id": "run_demo",
+                    "environment": "pure_rlm",
+                    "task": "Validate pure RLM",
+                    "timestamp": "2026-06-25T10:00:02+00:00",
+                    "completed": True,
+                    "steps": 1,
+                    "total_reward": 0.4,
+                    "final_response": "Yes",
+                    "usage": {"prompt_tokens": 10, "completion_tokens": 5},
+                },
+            ]
+            with jsonl_path.open("w") as f:
+                for event in events:
+                    f.write(json.dumps(event) + "\n")
+
+            replayer = load_session(jsonl_path)
+
+            assert replayer.total_steps == 1
+            assert replayer.snapshot.completed is True
+            assert replayer.snapshot.final_answer == "Yes"
+            step = replayer.step_forward()
+            assert step is not None
+            assert step.action_type == "run_repl"
+            assert step.action_code == "print(context.keys())"
+            assert step.output == "dict_keys(['a.py'])"
+            assert step.raw_observation["llm_calls_made"] == 1
+
 
 class TestCreateRecorder:
     """Tests for create_recorder convenience function."""

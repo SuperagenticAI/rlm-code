@@ -1414,6 +1414,39 @@ def test_rlm_pure_strict_blocks_delegate_actions(tmp_path):
     assert "delegate action is disabled" in str(observation)
 
 
+def test_rlm_pure_run_initializes_context_from_task_files(tmp_path):
+    source = tmp_path / "demo_module.py"
+    source.write_text("VALUE = 42\n", encoding="utf-8")
+    connector = _FakeConnector(
+        responses=[
+            '```repl\nfinal_answer = list(context.keys())\nFINAL_VAR("final_answer")\n```',
+        ]
+    )
+    runner = RLMRunner(
+        llm_connector=connector,
+        execution_engine=_ConfigurableExecutionEngine(pure_rlm_backend="exec"),
+        run_dir=tmp_path / "runs",
+        workdir=tmp_path,
+    )
+
+    result = runner.run_task(
+        "Inspect demo_module.py",
+        max_steps=1,
+        exec_timeout=5,
+        environment="pure_rlm",
+    )
+
+    assert result.completed is True
+    assert "demo_module.py" in result.final_response
+    events = runner.load_run_events(result.run_id)
+    context_event = next(event for event in events if event.get("type") == "context")
+    assert context_event["context_files"] == ["demo_module.py"]
+    step_event = next(event for event in events if event.get("type") == "step")
+    observation = step_event.get("observation", {})
+    assert observation.get("final_detected") is True
+    assert "context" in observation.get("repl_variables", [])
+
+
 def test_rlm_runner_blocks_exec_without_unsafe_opt_in(tmp_path):
     engine = _ConfigurableExecutionEngine(
         pure_rlm_backend="exec",

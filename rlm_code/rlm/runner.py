@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import threading
 import time
 from dataclasses import asdict, dataclass, is_dataclass
@@ -29,7 +30,7 @@ from .benchmark_manager import (
 )
 from .benchmarks import RLMBenchmarkCase, load_benchmark_packs
 from .chat_session import ChatSessionMixin
-from .context_store import LazyFileContext
+from .context_store import ContextRef, LazyFileContext
 from .delegation import DelegationMixin
 from .environments import (
     DSPyCodingRLMEnvironment,
@@ -467,6 +468,93 @@ class RLMRunner(BenchmarkManagerMixin, ChatSessionMixin, DelegationMixin, Action
             allow_unsafe_exec=(selected_backend == "exec" and self._pure_rlm_allow_unsafe_exec),
         )
 
+    def _extract_task_file_refs(self, task: str, limit: int = 12) -> list[ContextRef]:
+        """Find explicit workspace file references mentioned in a task string."""
+        candidates = re.findall(
+            r"(?<![\w.-])(?:[\w.-]+/)*[\w.-]+\.(?:py|md|toml|yaml|yml|json|txt|js|jsx|ts|tsx)",
+            task,
+        )
+        seen: set[str] = set()
+        refs: list[ContextRef] = []
+        for candidate in candidates:
+            normalized = candidate.strip().strip("`'\".,:;)")
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            refs.append(ContextRef(path=normalized))
+            if len(refs) >= limit:
+                break
+        return refs
+
+    def _build_pure_rlm_initial_context(self, task: str) -> dict[str, str]:
+        """
+        Build a small real-code context for Pure RLM runs.
+
+        The direct PureRLMEnvironment API expects context to be initialized
+        explicitly.  Runner/TUI users expect `/rlm run ... env=pure_rlm` to
+        start with useful workspace data, so we seed `context` with explicit
+        files named in the task, falling back to a compact repository snapshot.
+        """
+        refs = self._extract_task_file_refs(task)
+        if not refs:
+            refs = self.context_store.discover(limit=12)
+
+        context: dict[str, str] = {}
+        for ref in refs:
+            snippet = self.context_store.read(ref, max_chars=12000)
+            if snippet:
+                context[ref.path] = snippet
+
+        if context:
+            return context
+
+        discovered = self.context_store.discover(limit=80)
+        tree = "\n".join(ref.path for ref in discovered)
+        return {
+            "_workspace": (
+                f"Workspace: {self.workdir}\n"
+                "No explicit file snippets were loaded. Available files:\n"
+                f"{tree}"
+            ).strip()
+        }
+
+    def _initialize_pure_rlm_run_context(
+        self,
+        env: RLMEnvironment,
+        task: str,
+        *,
+        run_id: str,
+        run_path: Path,
+    ) -> int:
+        """Initialize `context` for Pure RLM runs and persist a context event."""
+        if env.name != "pure_rlm" or not hasattr(env, "initialize_context"):
+            return 0
+
+        context = self._build_pure_rlm_initial_context(task)
+        env.initialize_context(
+            context,
+            description="Workspace files selected for this Pure RLM run",
+            additional_vars={"query": task},
+        )
+        context_event = {
+            "type": "context",
+            "run_id": run_id,
+            "environment": env.name,
+            "timestamp": self._utc_now(),
+            "context_files": list(context.keys()),
+            "context_chars": sum(len(value) for value in context.values()),
+        }
+        self._append_event(run_path, context_event)
+        self._emit_runtime_event(
+            "context_load",
+            {
+                "run_id": run_id,
+                "files": len(context),
+                "chars": context_event["context_chars"],
+            },
+        )
+        return len(context)
+
     def run_task(
         self,
         task: str,
@@ -596,6 +684,12 @@ class RLMRunner(BenchmarkManagerMixin, ChatSessionMixin, DelegationMixin, Action
         final_response = ""
         cancelled = False
         trajectory: list[dict[str, Any]] = []
+        context_files = self._initialize_pure_rlm_run_context(
+            env,
+            cleaned_task,
+            run_id=run_id,
+            run_path=run_path,
+        )
         usage_start = self._usage_snapshot()
         self.observability.on_run_start(
             run_id,
@@ -616,6 +710,7 @@ class RLMRunner(BenchmarkManagerMixin, ChatSessionMixin, DelegationMixin, Action
                 "parent_run_id": _parent_run_id,
                 "pure_rlm_backend": self._pure_rlm_backend if env.name == "pure_rlm" else None,
                 "pure_rlm_strict": strict_pure_mode if env.name == "pure_rlm" else None,
+                "context_files": context_files if env.name == "pure_rlm" else None,
             },
         )
         self._emit_runtime_event(
@@ -627,6 +722,7 @@ class RLMRunner(BenchmarkManagerMixin, ChatSessionMixin, DelegationMixin, Action
                 "framework": native_framework,
                 "depth": _depth,
                 "parent_run_id": _parent_run_id,
+                "context_files": context_files if env.name == "pure_rlm" else None,
             },
         )
 

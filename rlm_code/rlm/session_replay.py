@@ -1035,14 +1035,30 @@ def _convert_legacy_step(data: dict[str, Any]) -> SessionEvent:
     step_type = data.get("type", "")
 
     if step_type == "step":
+        observation = data.get("observation", {})
+        observation_dict = observation if isinstance(observation, dict) else {}
+        action = data.get("action", {})
+        action_dict = action if isinstance(action, dict) else {}
+        success = observation_dict.get("success")
+        if success is None:
+            success = not bool(observation_dict.get("error") or observation_dict.get("stderr"))
+        usage = data.get("usage", {})
+        usage_dict = usage if isinstance(usage, dict) else {}
         return SessionEvent(
             event_type=SessionEventType.STEP_END,
             timestamp=data.get("timestamp", _utc_now()),
-            step=data.get("step", 0),
+            step=int(data.get("step", 0) or 0),
             data={
-                "action": data.get("action", {}),
-                "observation": data.get("observation", {}),
+                "step": int(data.get("step", 0) or 0),
+                "timestamp": data.get("timestamp", _utc_now()),
+                "action": action_dict,
+                "observation": observation_dict,
                 "reward": data.get("reward", 0.0),
+                "success": bool(success),
+                "tokens_used": int(
+                    usage_dict.get("prompt_tokens", 0) or 0
+                )
+                + int(usage_dict.get("completion_tokens", 0) or 0),
             },
             run_id=data.get("run_id", ""),
             depth=data.get("depth", 0),
@@ -1125,12 +1141,18 @@ def _build_snapshot_from_events(
 
         elif event.event_type == SessionEventType.STEP_END:
             # Build StepState from accumulated data
+            if "step" not in current_step_data:
+                current_step_data = {
+                    "step": int(event.data.get("step", event.step) or 0),
+                    "timestamp": str(event.data.get("timestamp", event.timestamp) or ""),
+                }
             if "step" in current_step_data:
                 # Merge any additional data from STEP_END event
                 if "action" in event.data:
                     action = event.data["action"]
                     current_step_data.setdefault("action_type", action.get("action", ""))
                     current_step_data.setdefault("action_code", action.get("code", ""))
+                    current_step_data.setdefault("action_rationale", action.get("reasoning", ""))
                     current_step_data.setdefault("raw_action", action)
                 if "observation" in event.data:
                     obs = event.data["observation"]
@@ -1138,12 +1160,16 @@ def _build_snapshot_from_events(
                     current_step_data.setdefault("error", obs.get("error", obs.get("stderr", "")))
                     current_step_data.setdefault("raw_observation", obs)
                 if "reward" in event.data:
+                    reward = float(event.data.get("reward", 0.0) or 0.0)
+                    cumulative = event.data.get("cumulative_reward")
+                    if cumulative is None:
+                        cumulative = total_reward + reward
                     current_step_data.setdefault("reward", event.data["reward"])
-                    current_step_data.setdefault(
-                        "cumulative_reward", event.data.get("cumulative_reward", 0.0)
-                    )
+                    current_step_data.setdefault("cumulative_reward", cumulative)
                 if "success" in event.data:
                     current_step_data.setdefault("success", event.data["success"])
+                if "tokens_used" in event.data:
+                    current_step_data.setdefault("tokens_used", event.data["tokens_used"])
 
                 step_state = StepState(
                     step=current_step_data.get("step", 0),
@@ -1163,6 +1189,8 @@ def _build_snapshot_from_events(
                     raw_observation=current_step_data.get("raw_observation", {}),
                 )
                 steps.append(step_state)
+                total_reward = float(step_state.cumulative_reward)
+                total_tokens += int(step_state.tokens_used or 0)
                 current_step_data = {}
 
         elif event.event_type == SessionEventType.MEMORY_UPDATE:

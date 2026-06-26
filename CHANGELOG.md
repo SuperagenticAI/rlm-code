@@ -5,6 +5,17 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.9] - 2026-06-26
+
+### Added
+- Pure RLM runner context initialization from explicit workspace file references in the task, with compact repository snapshot fallback.
+- Context-load events for Pure RLM runs, including loaded file names and total context characters.
+- Runner JSONL replay coverage for action code, observations, success state, token counts, and cumulative reward.
+
+### Changed
+- TUI trajectory and replay views now show Pure RLM signals including REPL code, stdout/stderr previews, `llm_query` counts, executed code blocks, finalization status, and REPL variables.
+- Run visualization now includes richer Pure RLM previews for completed runs.
+
 ## [0.1.8] - 2026-05-01
 
 ### Added
@@ -76,5 +87,6 @@ Initial public release of **RLM Code**.
 
 [0.1.5]: https://github.com/SuperagenticAI/rlm-code/releases/tag/v0.1.5
 [0.1.6]: https://github.com/SuperagenticAI/rlm-code/releases/tag/v0.1.6
+[0.1.9]: https://github.com/SuperagenticAI/rlm-code/releases/tag/v0.1.9
 [0.1.8]: https://github.com/SuperagenticAI/rlm-code/releases/tag/v0.1.8
 [0.1.7]: https://github.com/SuperagenticAI/rlm-code/releases/tag/v0.1.7

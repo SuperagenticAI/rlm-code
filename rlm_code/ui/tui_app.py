@@ -2403,14 +2403,40 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             if not timeline:
                 target.update("[dim]No steps recorded in this run.[/dim]")
                 return
-            lines = ["[bold cyan]Step  Action          Reward   Success[/bold cyan]"]
+            lines = [
+                f"[bold cyan]Trajectory[/bold cyan] [dim]{viz.get('run_id', '')}[/dim]",
+                "[bold cyan]Step  Action          Reward   Success  RLM signals[/bold cyan]",
+            ]
             for entry in timeline:
                 step = entry.get("step", "?")
                 action = str(entry.get("action", "?"))[:14].ljust(14)
                 reward = entry.get("reward", 0.0)
                 cum = entry.get("cumulative_reward", 0.0)
-                ok = "[green]Y[/green]" if entry.get("success") else "[red]N[/red]"
-                lines.append(f"  {step:<4} {action}  {reward:+.3f} ({cum:.3f})  {ok}")
+                success = entry.get("success")
+                if success is None:
+                    ok = "[dim]-[/dim]"
+                else:
+                    ok = "[green]Y[/green]" if success else "[red]N[/red]"
+                signals: list[str] = []
+                if entry.get("code_blocks_executed"):
+                    signals.append(f"code={entry.get('code_blocks_executed')}")
+                if entry.get("llm_calls_made"):
+                    signals.append(f"llm={entry.get('llm_calls_made')}")
+                if entry.get("final_detected"):
+                    signals.append("[green]FINAL[/green]")
+                variables = entry.get("repl_variables") or []
+                if variables:
+                    preview_vars = ", ".join(str(item) for item in variables[:5])
+                    signals.append(f"vars={preview_vars}")
+                signal_text = "  ".join(signals) if signals else "[dim]-[/dim]"
+                lines.append(f"  {step:<4} {action}  {reward:+.3f} ({cum:.3f})  {ok}       {signal_text}")
+
+                code_preview = str(entry.get("code_preview") or "").strip()
+                stdout_preview = str(entry.get("stdout_preview") or "").strip()
+                if code_preview:
+                    lines.append(f"       [magenta]code[/magenta] {code_preview}")
+                if stdout_preview:
+                    lines.append(f"       [blue]out [/blue] {stdout_preview}")
             target.update("\n".join(lines))
 
         def _apply_view_mode(self) -> None:
@@ -2842,20 +2868,75 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
             if self._session_replayer is None:
                 return
             try:
+                state = None
                 if button_id == "replay_start_btn":
                     self._session_replayer.goto_start()
                 elif button_id == "replay_back_btn":
-                    self._session_replayer.step_backward()
+                    state = self._session_replayer.step_backward()
                 elif button_id == "replay_fwd_btn":
-                    self._session_replayer.step_forward()
+                    state = self._session_replayer.step_forward()
                 elif button_id == "replay_end_btn":
                     self._session_replayer.goto_end()
+                    state = self._session_replayer.get_current_state()
                 # Update position display
                 cur = self._session_replayer.current_step
                 total = self._session_replayer.total_steps
                 self.query_one("#replay_position", Static).update(f"Step {cur}/{total}")
+                if state is None:
+                    state = self._session_replayer.get_current_state()
+                self._render_replay_step_detail(state)
             except Exception:
                 pass
+
+        def _render_replay_step_detail(self, state: Any | None) -> None:
+            """Render the current replay step with pure-RLM-specific details."""
+            try:
+                target = self.query_one("#replay_step_detail", Static)
+            except Exception:
+                return
+            if state is None:
+                target.update("[dim]Replay is at the start or end of the run.[/dim]")
+                return
+
+            raw_observation = getattr(state, "raw_observation", {}) or {}
+            raw_action = getattr(state, "raw_action", {}) or {}
+            lines = [
+                f"[bold cyan]Step {getattr(state, 'step', '?')}[/bold cyan] "
+                f"action=[bold]{getattr(state, 'action_type', '') or raw_action.get('action', '')}[/bold] "
+                f"reward={float(getattr(state, 'reward', 0.0) or 0.0):+.3f}",
+            ]
+            code = str(getattr(state, "action_code", "") or raw_action.get("code", "") or "").strip()
+            if code:
+                lines.append("")
+                lines.append("[magenta]REPL code[/magenta]")
+                lines.append(code[:1800])
+
+            stdout = str(getattr(state, "output", "") or raw_observation.get("stdout", "") or "").strip()
+            stderr = str(getattr(state, "error", "") or raw_observation.get("stderr", "") or "").strip()
+            if stdout:
+                lines.append("")
+                lines.append("[blue]Observation stdout[/blue]")
+                lines.append(stdout[:1800])
+            if stderr:
+                lines.append("")
+                lines.append("[red]Observation stderr[/red]")
+                lines.append(stderr[:1000])
+
+            signals: list[str] = []
+            if raw_observation.get("code_blocks_executed"):
+                signals.append(f"code_blocks={raw_observation.get('code_blocks_executed')}")
+            if raw_observation.get("llm_calls_made"):
+                signals.append(f"llm_calls={raw_observation.get('llm_calls_made')}")
+            if raw_observation.get("final_detected"):
+                signals.append("FINAL detected")
+            variables = raw_observation.get("repl_variables")
+            if isinstance(variables, list) and variables:
+                signals.append("vars=" + ", ".join(str(item) for item in variables[:12]))
+            if signals:
+                lines.append("")
+                lines.append("[green]RLM signals[/green] " + "  ".join(signals))
+
+            target.update("\n".join(lines))
 
         def _refresh_research_dashboard(self, run_path: Path) -> None:
             """Populate the Research dashboard from a completed run trace."""
@@ -2904,7 +2985,7 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                     chart.values = [pt.get("cumulative_reward", 0.0) for pt in reward_curve]
 
                 self.query_one("#replay_step_detail", Static).update(
-                    "[dim]Use < > buttons to step through the run.[/dim]"
+                    "[dim]Use < > buttons to step through the run. Each step will show REPL code, observations, and pure-RLM signals.[/dim]"
                 )
                 self._set_research_sub_view("replay")
             except Exception as exc:

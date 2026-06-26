@@ -62,6 +62,16 @@ def build_run_visualization(
             "success": observation_dict.get("success") if "success" in observation_dict else None,
             "path": str(observation_dict.get("path") or ""),
             "children_executed": int(observation_dict.get("children_executed") or 0),
+            "planner_preview": _clip_text(str(step.get("planner_raw") or ""), limit=260),
+            "code_preview": _clip_text(_action_code(step), limit=260),
+            "stdout_preview": _clip_text(str(observation_dict.get("stdout") or ""), limit=260),
+            "stderr_preview": _clip_text(str(observation_dict.get("stderr") or ""), limit=180),
+            "llm_calls_made": int(observation_dict.get("llm_calls_made") or 0),
+            "code_blocks_executed": int(observation_dict.get("code_blocks_executed") or 0),
+            "final_detected": bool(observation_dict.get("final_detected", False)),
+            "repl_variables": list(observation_dict.get("repl_variables") or [])[:20]
+            if isinstance(observation_dict.get("repl_variables"), list)
+            else [],
         }
         error = _extract_error(step)
         if error:
@@ -188,6 +198,19 @@ def _action_name(step: dict[str, Any]) -> str:
         if value:
             return str(value)
     return "unknown"
+
+
+def _action_code(step: dict[str, Any]) -> str:
+    action = step.get("action")
+    if not isinstance(action, dict):
+        return ""
+    code = action.get("code")
+    if isinstance(code, str) and code.strip():
+        return code
+    blocks = action.get("_code_blocks")
+    if isinstance(blocks, list):
+        return "\n\n".join(str(block) for block in blocks if str(block).strip())
+    return ""
 
 
 def _extract_error(step: dict[str, Any]) -> str:

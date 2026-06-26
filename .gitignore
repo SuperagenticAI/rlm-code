@@ -153,6 +153,7 @@ cython_debug/
 
 # Project specific
 dspy_config.yaml
+rlm_config.yaml
 *.log
 
 # Internal workspace data directories (all data in CWD)
