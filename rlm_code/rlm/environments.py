@@ -490,7 +490,9 @@ class TraceAnalysisEnvironment(GenericRLMEnvironment):
         )
         return checks
 
-    def _ok(self, *, observation: dict[str, Any], reward: float, memory_note: str) -> EnvironmentActionResult:
+    def _ok(
+        self, *, observation: dict[str, Any], reward: float, memory_note: str
+    ) -> EnvironmentActionResult:
         payload = {"success": True, **observation}
         return EnvironmentActionResult(
             observation=payload,

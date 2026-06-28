@@ -1055,9 +1055,7 @@ def _convert_legacy_step(data: dict[str, Any]) -> SessionEvent:
                 "observation": observation_dict,
                 "reward": data.get("reward", 0.0),
                 "success": bool(success),
-                "tokens_used": int(
-                    usage_dict.get("prompt_tokens", 0) or 0
-                )
+                "tokens_used": int(usage_dict.get("prompt_tokens", 0) or 0)
                 + int(usage_dict.get("completion_tokens", 0) or 0),
             },
             run_id=data.get("run_id", ""),

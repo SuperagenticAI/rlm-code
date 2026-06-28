@@ -443,9 +443,10 @@ class LLMConnector:
         if not api_key:
             raise ModelError("Gemini API key required. Set GEMINI_API_KEY or provide --api-key")
 
-        # Validate API key format
-        if not api_key.startswith("AIza"):
-            raise ModelError("Invalid Gemini API key format. Should start with 'AIza'")
+        # Validate API key format. Google issues legacy "AIza" keys and
+        # new-format "AQ." keys; both are valid on the Gemini endpoint.
+        if not (api_key.startswith("AIza") or api_key.startswith("AQ.")):
+            raise ModelError("Invalid Gemini API key format. Should start with 'AIza' or 'AQ.'")
 
         self._set_active_connection(provider, model_name, api_key=api_key)
 

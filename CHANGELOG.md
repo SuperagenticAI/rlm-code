@@ -5,6 +5,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.10] - 2026-06-28
+
+### Fixed
+- Accept new-format Google Gemini API keys (prefix `AQ.`) in addition to legacy `AIza` keys. Both the connector key validation (`models/llm_connector.py`) and the config key-format pattern (`validation/config_validator.py`) now recognize `AQ.` keys, so `/connect gemini ...` and CLI connections work with keys issued in Google's current format.
+
 ## [0.1.9] - 2026-06-26
 
 ### Added

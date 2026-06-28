@@ -230,7 +230,9 @@ class TraceStore:
                     "has_errors": row.has_errors,
                     "span_count": row.span_count,
                     "task_ids": self._task_ids(spans),
-                    "error_span_count": sum(1 for span in spans if span.status_code == "STATUS_CODE_ERROR"),
+                    "error_span_count": sum(
+                        1 for span in spans if span.status_code == "STATUS_CODE_ERROR"
+                    ),
                 }
             )
             detail_lines.append(

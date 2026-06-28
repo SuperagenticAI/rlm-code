@@ -20,7 +20,7 @@ class ConfigValidator:
     API_KEY_PATTERNS = {
         "openai": re.compile(r"^sk-[a-zA-Z0-9]{48}$"),
         "anthropic": re.compile(r"^sk-ant-[a-zA-Z0-9\-_]{95,}$"),
-        "gemini": re.compile(r"^AIza[a-zA-Z0-9\-_]{35}$"),
+        "gemini": re.compile(r"^(AIza[a-zA-Z0-9\-_]{35}|AQ\.[a-zA-Z0-9\-_.]{10,})$"),
     }
 
     # Valid model names for each provider

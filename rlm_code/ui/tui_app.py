@@ -2429,7 +2429,9 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                     preview_vars = ", ".join(str(item) for item in variables[:5])
                     signals.append(f"vars={preview_vars}")
                 signal_text = "  ".join(signals) if signals else "[dim]-[/dim]"
-                lines.append(f"  {step:<4} {action}  {reward:+.3f} ({cum:.3f})  {ok}       {signal_text}")
+                lines.append(
+                    f"  {step:<4} {action}  {reward:+.3f} ({cum:.3f})  {ok}       {signal_text}"
+                )
 
                 code_preview = str(entry.get("code_preview") or "").strip()
                 stdout_preview = str(entry.get("stdout_preview") or "").strip()
@@ -2905,14 +2907,20 @@ def run_textual_tui(config_manager: ConfigManager) -> None:
                 f"action=[bold]{getattr(state, 'action_type', '') or raw_action.get('action', '')}[/bold] "
                 f"reward={float(getattr(state, 'reward', 0.0) or 0.0):+.3f}",
             ]
-            code = str(getattr(state, "action_code", "") or raw_action.get("code", "") or "").strip()
+            code = str(
+                getattr(state, "action_code", "") or raw_action.get("code", "") or ""
+            ).strip()
             if code:
                 lines.append("")
                 lines.append("[magenta]REPL code[/magenta]")
                 lines.append(code[:1800])
 
-            stdout = str(getattr(state, "output", "") or raw_observation.get("stdout", "") or "").strip()
-            stderr = str(getattr(state, "error", "") or raw_observation.get("stderr", "") or "").strip()
+            stdout = str(
+                getattr(state, "output", "") or raw_observation.get("stdout", "") or ""
+            ).strip()
+            stderr = str(
+                getattr(state, "error", "") or raw_observation.get("stderr", "") or ""
+            ).strip()
             if stdout:
                 lines.append("")
                 lines.append("[blue]Observation stdout[/blue]")

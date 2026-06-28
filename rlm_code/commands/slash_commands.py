@@ -1741,7 +1741,9 @@ class SlashCommandHandler:
             console.print("  [yellow]/rlm status [run_id][/yellow]")
             console.print("  [yellow]/rlm abort [run_id|all][/yellow]")
             console.print("  [yellow]/rlm replay [run_id|latest][/yellow]")
-            console.print("  [yellow]/rlm doctor [env=generic|dspy|pure_rlm|trace_analysis] [--json][/yellow]")
+            console.print(
+                "  [yellow]/rlm doctor [env=generic|dspy|pure_rlm|trace_analysis] [--json][/yellow]"
+            )
             console.print(
                 "  [yellow]/rlm chat <message> [session=name] [env=generic|dspy|pure_rlm|trace_analysis] [branch=N] [depth=N] "
                 f"[children=N] [parallel=N] [budget=N] [framework={framework_opts}] "

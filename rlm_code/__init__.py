@@ -5,5 +5,5 @@ This package provides tools for creating, managing, and optimizing DSPy componen
 through natural language interactions.
 """
 
-__version__ = "0.1.9"
+__version__ = "0.1.10"
 __author__ = "Super Agentic AI"

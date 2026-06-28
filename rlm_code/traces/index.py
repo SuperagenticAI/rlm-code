@@ -103,9 +103,13 @@ class TraceIndexBuilder:
     SCHEMA_VERSION = 1
 
     @classmethod
-    def ensure_index_exists(cls, trace_path: str | Path, index_path: str | Path | None = None) -> Path:
+    def ensure_index_exists(
+        cls, trace_path: str | Path, index_path: str | Path | None = None
+    ) -> Path:
         trace = Path(trace_path).resolve()
-        index = Path(index_path).resolve() if index_path is not None else cls.default_index_path(trace)
+        index = (
+            Path(index_path).resolve() if index_path is not None else cls.default_index_path(trace)
+        )
         meta = cls.meta_path_for(index)
         size, mtime_ns = cls._fingerprint(trace)
         if index.exists() and meta.exists():
@@ -122,7 +126,9 @@ class TraceIndexBuilder:
     @classmethod
     def build_index(cls, trace_path: str | Path, index_path: str | Path | None = None) -> Path:
         trace = Path(trace_path).resolve()
-        index = Path(index_path).resolve() if index_path is not None else cls.default_index_path(trace)
+        index = (
+            Path(index_path).resolve() if index_path is not None else cls.default_index_path(trace)
+        )
         accumulators: dict[str, _Accumulator] = {}
 
         with trace.open("rb") as handle:

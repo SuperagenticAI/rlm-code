@@ -57,7 +57,7 @@ def _write_trace_fixture(path: Path) -> None:
             "attributes": {
                 "inference.task_id": "task-error",
                 "tool.name": "spotify__login",
-                "input.value": "{\"extra_argument\": true}",
+                "input.value": '{"extra_argument": true}',
                 "output.value": "Unknown tool argument: extra_argument",
             },
         },
