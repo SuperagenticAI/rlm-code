@@ -128,6 +128,12 @@ class SandboxConfig:
     pure_rlm_strict: bool = False
     pure_rlm_output_mode: str = "summarize"  # truncate | summarize | metadata
     pure_rlm_max_iteration_output_chars: int = 12000
+    pure_rlm_profile: str = "reference"  # reference | repo_evidence | lid
+    pure_rlm_root_observation_mode: str = "configured"
+    pure_rlm_history_policy: str = "profile"  # profile | full | structural | offload
+    pure_rlm_max_root_history_chars: int = 40000
+    pure_rlm_history_preserve_last: int = 2
+    pure_rlm_decomposition_hint: bool = False
     monty_type_check: bool = False
     monty_max_allocations: int | None = None
     monty_max_memory: int | None = None
@@ -492,6 +498,12 @@ sandbox:
   pure_rlm_strict: {str(self.sandbox.pure_rlm_strict).lower()}
   pure_rlm_output_mode: {self.sandbox.pure_rlm_output_mode}
   pure_rlm_max_iteration_output_chars: {self.sandbox.pure_rlm_max_iteration_output_chars}
+  pure_rlm_profile: {self.sandbox.pure_rlm_profile}
+  pure_rlm_root_observation_mode: {self.sandbox.pure_rlm_root_observation_mode}
+  pure_rlm_history_policy: {self.sandbox.pure_rlm_history_policy}
+  pure_rlm_max_root_history_chars: {self.sandbox.pure_rlm_max_root_history_chars}
+  pure_rlm_history_preserve_last: {self.sandbox.pure_rlm_history_preserve_last}
+  pure_rlm_decomposition_hint: {str(self.sandbox.pure_rlm_decomposition_hint).lower()}
   monty_type_check: {str(self.sandbox.monty_type_check).lower()}
   monty_max_allocations: {self.sandbox.monty_max_allocations}
   monty_max_memory: {self.sandbox.monty_max_memory}

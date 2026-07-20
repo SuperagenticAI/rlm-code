@@ -21,25 +21,60 @@
 
 **Run LLM-powered agents in a REPL loop, benchmark them, and compare results.**
 
-RLM Code implements the [Recursive Language Models](https://arxiv.org/abs/2502.07503) (RLM) approach from the 2025 paper release. Instead of stuffing your entire document into the LLM's context window, RLM stores it as a Python variable and lets the LLM write code to analyze it, chunk by chunk, iteration by iteration. This is dramatically more token-efficient for large inputs.
+RLM Code implements the [Recursive Language Models](https://arxiv.org/abs/2512.24601) (RLM) approach from the 2025 paper release. Instead of stuffing your entire document into the LLM's context window, RLM stores it as a Python variable and lets the LLM write code to analyze it, chunk by chunk, iteration by iteration. This is dramatically more token-efficient for large inputs.
 
 RLM Code wraps this algorithm in an interactive terminal UI with built-in benchmarks, trajectory replay, and observability.
 
-## Release v0.1.9
+## Release v0.1.11
 
-This release improves Pure RLM repository runs and makes completed trajectories more inspectable from the TUI and replay views.
+This release adds a locally in-distribution harness profile based on the RLM
+authors' July 2026 generalization work and brings the AI Engineer World's Fair
+2026 live probe into the main repository.
 
-- Pure RLM runs now initialize `context` from explicit workspace files mentioned in the task, with a compact repository snapshot fallback
-- Runner events now record context-load metadata for Pure RLM runs
-- Legacy runner JSONL step events replay with action code, observations, success, token counts, and cumulative reward
-- Run visualization now includes REPL code previews, stdout/stderr previews, `llm_query` counts, executed code blocks, finalization status, and REPL variables
-- TUI trajectory and replay views now surface Pure RLM signals directly for completed runs
+- New `reference`, `repo_evidence`, and `lid` Pure RLM profiles
+- Repository context selection through `mini`, `evidence`, `full`, and explicit caller contexts
+- Opaque root observations, structural-history offloading, decomposition guidance, and sanitized fallback synthesis
+- Root/submodel usage attribution and trajectory generalization metrics
+- Family/domain/split/length metadata for benchmark cases
+- Maintained conference live probe plus an API-key-free 8× length-generalization proof
 
 Example:
 
 ```text
 /rlm run "Validate pure_rlm_environment.py and cite context, REPL, llm_query, and FINAL evidence" env=pure_rlm steps=6
 ```
+
+## July 2026 locally in-distribution harness
+
+The opt-in `lid` Pure RLM profile implements the harness pattern from the RLM
+authors' [July 2026 generalization post](https://alexzhang13.github.io/blog/2026/harness/):
+
+- repository context profiles (`mini`, `evidence`, `full`, or explicit caller context);
+- semantic subcall outputs retained in REPL variables instead of root history;
+- opaque, constant-shape REPL observations for the root model;
+- structural history with automatic offloading to `history_N` variables;
+- a decomposition hint that discourages a single monolithic subcall;
+- root/submodel usage attribution; and
+- trajectory similarity metrics for cross-family and length-extrapolation evaluation.
+
+Run the offline, API-key-free proof (including a cross-domain 8× length test):
+
+```bash
+uv run python examples/july_harness_generalization/demo.py
+```
+
+Use the same profile with a connected model:
+
+```text
+/rlm run env=pure_rlm profile=lid context_profile=evidence steps=12 <your task>
+```
+
+See the [demo guide](examples/july_harness_generalization/README.md) for its
+claims, checks, and limitations.
+
+The maintained [AI Engineer World's Fair 2026 talk probe](examples/aie_world_fair_2026/README.md)
+reproduces the live one-root/one-subcall demonstration against the current
+checkout.
 
 ## Documentation
 

@@ -437,16 +437,15 @@ class ParadigmComparator:
             else:
                 env = PureRLMEnvironment(workdir=self.runner.workdir, allow_unsafe_exec=True)
 
-        # Initialize context as variable
-        if hasattr(env, "initialize_context"):
-            env.initialize_context(context, description="Context to analyze")
-
         # Run task
         run_result = self.runner.run_task(
             task=task,
             environment="pure_rlm",
             max_steps=max_steps,
             exec_timeout=exec_timeout,
+            context=context,
+            context_description="Context to analyze",
+            context_profile="explicit",
         )
 
         # Context tokens = metadata only (very small)
@@ -460,7 +459,11 @@ class ParadigmComparator:
             "total_tokens": (run_result.usage_summary or {}).get("total_tokens", 0),
             "iterations": run_result.steps,
             "root_llm_calls": run_result.steps,
-            "sub_llm_calls": 0,  # Would need to track from env
+            "sub_llm_calls": int(
+                ((run_result.usage_summary or {}).get("roles") or {})
+                .get("sub", {})
+                .get("total_calls", 0)
+            ),
             "estimated_cost": self._estimate_cost(
                 (run_result.usage_summary or {}).get("total_tokens", 0)
             ),

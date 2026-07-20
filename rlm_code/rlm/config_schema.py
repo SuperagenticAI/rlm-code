@@ -54,6 +54,12 @@ class PureRLMConfig:
     safe_builtins_only: bool = True
     show_vars_enabled: bool = True
     max_output_length: int = 10000
+    profile: str = "reference"
+    root_observation_mode: str = "configured"
+    history_policy: str = "profile"
+    max_root_history_chars: int = 40000
+    history_preserve_last: int = 2
+    decomposition_hint: bool = False
 
 
 @dataclass
@@ -162,6 +168,12 @@ class RLMConfig:
                 safe_builtins_only=pr.get("safe_builtins_only", True),
                 show_vars_enabled=pr.get("show_vars_enabled", True),
                 max_output_length=pr.get("max_output_length", 10000),
+                profile=pr.get("profile", "reference"),
+                root_observation_mode=pr.get("root_observation_mode", "configured"),
+                history_policy=pr.get("history_policy", "profile"),
+                max_root_history_chars=pr.get("max_root_history_chars", 40000),
+                history_preserve_last=pr.get("history_preserve_last", 2),
+                decomposition_hint=pr.get("decomposition_hint", False),
             )
 
         # Sandbox config

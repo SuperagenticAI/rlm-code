@@ -103,6 +103,12 @@ sandbox:
   pure_rlm_strict: false
   pure_rlm_output_mode: summarize
   pure_rlm_max_iteration_output_chars: 12000
+  pure_rlm_profile: reference
+  pure_rlm_root_observation_mode: configured
+  pure_rlm_history_policy: profile
+  pure_rlm_max_root_history_chars: 40000
+  pure_rlm_history_preserve_last: 2
+  pure_rlm_decomposition_hint: false
   monty_type_check: false
   monty_max_allocations: null
   monty_max_memory: null

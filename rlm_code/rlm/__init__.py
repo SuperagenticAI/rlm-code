@@ -154,6 +154,11 @@ from .repl_types import (
     REPLResult,
     REPLVariable,
 )
+from .repository_context import (
+    RepositoryContextBuilder,
+    RepositoryContextProfile,
+    RepositoryContextResult,
+)
 from .runner import (
     RLMBenchmarkComparison,
     RLMBenchmarkReport,
@@ -197,6 +202,12 @@ from .trajectory import (
     compare_trajectories,
     load_trajectory,
 )
+from .trajectory_similarity import (
+    TrajectorySimilarity,
+    compare_trajectory_similarity,
+    nearest_training_trajectories,
+    trajectory_tokens,
+)
 
 __all__ = [
     # Environments
@@ -206,6 +217,13 @@ __all__ = [
     "GenericRLMEnvironment",
     "PureRLMConfig",
     "PureRLMEnvironment",
+    "RepositoryContextBuilder",
+    "RepositoryContextProfile",
+    "RepositoryContextResult",
+    "TrajectorySimilarity",
+    "compare_trajectory_similarity",
+    "nearest_training_trajectories",
+    "trajectory_tokens",
     "RLMRewardProfile",
     # REPL types
     "ImmutableHistory",

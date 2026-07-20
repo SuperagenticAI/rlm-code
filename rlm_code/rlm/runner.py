@@ -45,6 +45,11 @@ from .events import RLMEventBus
 from .frameworks import FrameworkAdapterRegistry, FrameworkEpisodeResult
 from .observability import RLMObservability
 from .pure_rlm_environment import PureRLMConfig, PureRLMEnvironment
+from .repository_context import (
+    RepositoryContextBuilder,
+    RepositoryContextResult,
+    describe_explicit_context,
+)
 from .visualizer import build_run_visualization
 
 logger = get_logger(__name__)
@@ -63,6 +68,74 @@ class _RoleAwareConnector:
         self._connector = connector
         self.sub_model = sub_model
         self.sub_provider = sub_provider
+        self._usage_lock = threading.Lock()
+        self._role_usage: dict[str, dict[str, int]] = {
+            "root": {"total_calls": 0, "prompt_tokens": 0, "completion_tokens": 0},
+            "sub": {"total_calls": 0, "prompt_tokens": 0, "completion_tokens": 0},
+        }
+
+    def _snapshot(self) -> dict[str, int] | None:
+        snapshot = getattr(self._connector, "usage_snapshot", None)
+        if not callable(snapshot):
+            return None
+        try:
+            value = snapshot()
+        except Exception:
+            return None
+        return value if isinstance(value, dict) else None
+
+    def _record_role_call(
+        self,
+        role: str,
+        before: dict[str, int] | None,
+        after: dict[str, int] | None,
+    ) -> None:
+        normalized = "sub" if str(role).strip().lower() == "sub" else "root"
+        before = before or {}
+        after = after or {}
+        with self._usage_lock:
+            row = self._role_usage[normalized]
+            row["total_calls"] += 1
+            for key in ("prompt_tokens", "completion_tokens"):
+                row[key] += max(0, int(after.get(key, 0)) - int(before.get(key, 0)))
+
+    def role_usage_snapshot(self) -> dict[str, dict[str, int]]:
+        with self._usage_lock:
+            return {role: dict(values) for role, values in self._role_usage.items()}
+
+    @staticmethod
+    def role_usage_delta(
+        before: dict[str, dict[str, int]],
+        after: dict[str, dict[str, int]],
+    ) -> dict[str, dict[str, int]]:
+        return {
+            role: {
+                key: max(0, int(after.get(role, {}).get(key, 0)) - int(values.get(key, 0)))
+                for key in ("total_calls", "prompt_tokens", "completion_tokens")
+            }
+            for role, values in before.items()
+        }
+
+    def role_usage_summary(self, totals: dict[str, int] | None = None) -> dict[str, dict[str, int]]:
+        """Return exact call counts and reconciled best-effort token attribution."""
+        usage = self.role_usage_snapshot()
+        if not totals:
+            return usage
+        for token_key in ("prompt_tokens", "completion_tokens"):
+            expected = max(0, int(totals.get(token_key, 0)))
+            observed = sum(row[token_key] for row in usage.values())
+            if observed <= 0:
+                continue
+            assigned = 0
+            roles = list(usage)
+            for index, role in enumerate(roles):
+                if index == len(roles) - 1:
+                    value = expected - assigned
+                else:
+                    value = round(expected * usage[role][token_key] / observed)
+                    assigned += value
+                usage[role][token_key] = max(0, value)
+        return usage
 
     def generate_response(
         self,
@@ -70,11 +143,15 @@ class _RoleAwareConnector:
         system_prompt: str | None = None,
         context: dict[str, Any] | None = None,
     ) -> str:
-        return self._connector.generate_response(
-            prompt=prompt,
-            system_prompt=system_prompt,
-            context=context,
-        )
+        before = self._snapshot()
+        try:
+            return self._connector.generate_response(
+                prompt=prompt,
+                system_prompt=system_prompt,
+                context=context,
+            )
+        finally:
+            self._record_role_call("root", before, self._snapshot())
 
     def generate_response_for_role(
         self,
@@ -96,25 +173,29 @@ class _RoleAwareConnector:
             if not selected_provider:
                 selected_provider = self.sub_provider
 
-        if selected_model and hasattr(self._connector, "generate_response_with_model"):
-            if "/" in selected_model and not selected_provider:
-                maybe_provider, inner_model = selected_model.split("/", 1)
-                selected_provider = maybe_provider
-                selected_model = inner_model
+        before = self._snapshot()
+        try:
+            if selected_model and hasattr(self._connector, "generate_response_with_model"):
+                if "/" in selected_model and not selected_provider:
+                    maybe_provider, inner_model = selected_model.split("/", 1)
+                    selected_provider = maybe_provider
+                    selected_model = inner_model
 
-            return self._connector.generate_response_with_model(
+                return self._connector.generate_response_with_model(
+                    prompt=prompt,
+                    model_name=selected_model,
+                    model_type=selected_provider,
+                    system_prompt=system_prompt,
+                    context=context,
+                )
+
+            return self._connector.generate_response(
                 prompt=prompt,
-                model_name=selected_model,
-                model_type=selected_provider,
                 system_prompt=system_prompt,
                 context=context,
             )
-
-        return self.generate_response(
-            prompt=prompt,
-            system_prompt=system_prompt,
-            context=context,
-        )
+        finally:
+            self._record_role_call(normalized_role, before, self._snapshot())
 
 
 @dataclass(slots=True)
@@ -131,7 +212,7 @@ class RLMRunResult:
     finished_at: str
     environment: str
     task: str
-    usage_summary: dict[str, int] | None = None
+    usage_summary: dict[str, Any] | None = None
 
 
 @dataclass(slots=True)
@@ -202,6 +283,7 @@ class RLMRunner(BenchmarkManagerMixin, ChatSessionMixin, DelegationMixin, Action
         self.mcp_manager = mcp_manager
         self.event_bus = event_bus or RLMEventBus()
         self.context_store = LazyFileContext(workdir=self.workdir)
+        self.repository_context_builder = RepositoryContextBuilder(workdir=self.workdir)
         self._max_parallelism = max(1, int(max_parallelism))
         self._parallel_semaphore = threading.BoundedSemaphore(value=self._max_parallelism)
         self._cancel_lock = threading.RLock()
@@ -365,6 +447,18 @@ class RLMRunner(BenchmarkManagerMixin, ChatSessionMixin, DelegationMixin, Action
         if sandbox_cfg is None:
             return
 
+        def string_setting(name: str, default: str) -> str:
+            value = getattr(sandbox_cfg, name, default)
+            return value if isinstance(value, str) and value.strip() else default
+
+        def int_setting(name: str, default: int) -> int:
+            value = getattr(sandbox_cfg, name, default)
+            return value if isinstance(value, int) and not isinstance(value, bool) else default
+
+        def bool_setting(name: str, default: bool) -> bool:
+            value = getattr(sandbox_cfg, name, default)
+            return value if isinstance(value, bool) else default
+
         backend = (
             str(getattr(sandbox_cfg, "pure_rlm_backend", "docker") or "docker").strip().lower()
         )
@@ -376,10 +470,8 @@ class RLMRunner(BenchmarkManagerMixin, ChatSessionMixin, DelegationMixin, Action
             )
             backend = "docker"
         self._pure_rlm_backend = backend
-        self._pure_rlm_allow_unsafe_exec = bool(
-            getattr(sandbox_cfg, "pure_rlm_allow_unsafe_exec", False)
-        )
-        self._pure_rlm_strict = bool(getattr(sandbox_cfg, "pure_rlm_strict", False))
+        self._pure_rlm_allow_unsafe_exec = bool_setting("pure_rlm_allow_unsafe_exec", False)
+        self._pure_rlm_strict = bool_setting("pure_rlm_strict", False)
         self._pure_rlm_config = PureRLMConfig(
             max_iteration_output_chars=max(
                 2000,
@@ -390,6 +482,20 @@ class RLMRunner(BenchmarkManagerMixin, ChatSessionMixin, DelegationMixin, Action
             )
             .strip()
             .lower(),
+            profile=string_setting("pure_rlm_profile", "reference").strip().lower(),
+            root_observation_mode=string_setting("pure_rlm_root_observation_mode", "configured")
+            .strip()
+            .lower(),
+            history_policy=string_setting("pure_rlm_history_policy", "profile").strip().lower(),
+            max_root_history_chars=max(
+                1000,
+                int_setting("pure_rlm_max_root_history_chars", 40000),
+            ),
+            history_preserve_last=max(
+                1,
+                int_setting("pure_rlm_history_preserve_last", 2),
+            ),
+            decomposition_hint=bool_setting("pure_rlm_decomposition_hint", False),
         )
 
     def _pure_rlm_secure_backend_guidance(self) -> str:
@@ -486,7 +592,15 @@ class RLMRunner(BenchmarkManagerMixin, ChatSessionMixin, DelegationMixin, Action
                 break
         return refs
 
-    def _build_pure_rlm_initial_context(self, task: str) -> dict[str, str]:
+    def _build_pure_rlm_initial_context(
+        self,
+        task: str,
+        *,
+        profile: str = "auto",
+        paths: list[str] | None = None,
+        include: list[str] | None = None,
+        exclude: list[str] | None = None,
+    ) -> RepositoryContextResult:
         """
         Build a small real-code context for Pure RLM runs.
 
@@ -495,28 +609,16 @@ class RLMRunner(BenchmarkManagerMixin, ChatSessionMixin, DelegationMixin, Action
         start with useful workspace data, so we seed `context` with explicit
         files named in the task, falling back to a compact repository snapshot.
         """
-        refs = self._extract_task_file_refs(task)
-        if not refs:
-            refs = self.context_store.discover(limit=12)
-
-        context: dict[str, str] = {}
-        for ref in refs:
-            snippet = self.context_store.read(ref, max_chars=12000)
-            if snippet:
-                context[ref.path] = snippet
-
-        if context:
-            return context
-
-        discovered = self.context_store.discover(limit=80)
-        tree = "\n".join(ref.path for ref in discovered)
-        return {
-            "_workspace": (
-                f"Workspace: {self.workdir}\n"
-                "No explicit file snippets were loaded. Available files:\n"
-                f"{tree}"
-            ).strip()
-        }
+        selected_paths = list(paths or [])
+        if not selected_paths:
+            selected_paths = [ref.path for ref in self._extract_task_file_refs(task)]
+        return self.repository_context_builder.build(
+            task,
+            profile=profile,
+            paths=selected_paths,
+            include=include,
+            exclude=exclude,
+        )
 
     def _initialize_pure_rlm_run_context(
         self,
@@ -525,15 +627,53 @@ class RLMRunner(BenchmarkManagerMixin, ChatSessionMixin, DelegationMixin, Action
         *,
         run_id: str,
         run_path: Path,
-    ) -> int:
+        context: Any | None = None,
+        context_description: str | None = None,
+        context_profile: str = "auto",
+        context_paths: list[str] | None = None,
+        context_include: list[str] | None = None,
+        context_exclude: list[str] | None = None,
+        pure_rlm_profile: str | None = None,
+        root_observation_mode: str | None = None,
+        history_policy: str | None = None,
+        decomposition_hint: bool | None = None,
+    ) -> dict[str, Any]:
         """Initialize `context` for Pure RLM runs and persist a context event."""
         if env.name != "pure_rlm" or not hasattr(env, "initialize_context"):
-            return 0
+            return {"files": 0, "chars": 0, "profile": None, "source": None}
 
-        context = self._build_pure_rlm_initial_context(task)
+        configure_run = getattr(env, "configure_run", None)
+        if callable(configure_run):
+            configure_run(
+                profile=pure_rlm_profile,
+                root_observation_mode=root_observation_mode,
+                history_policy=history_policy,
+                decomposition_hint=decomposition_hint,
+            )
+
+        if context is None:
+            selected = self._build_pure_rlm_initial_context(
+                task,
+                profile=context_profile,
+                paths=context_paths,
+                include=context_include,
+                exclude=context_exclude,
+            )
+            context = selected.context
+            labels = list(selected.files)
+            context_chars = selected.total_chars
+            effective_profile = selected.profile
+            source = selected.source
+            search_terms = list(selected.search_terms)
+        else:
+            labels, context_chars = describe_explicit_context(context)
+            effective_profile = "explicit"
+            source = "caller"
+            search_terms = []
+
         env.initialize_context(
             context,
-            description="Workspace files selected for this Pure RLM run",
+            description=context_description or "Workspace evidence selected for this Pure RLM run",
             additional_vars={"query": task},
         )
         context_event = {
@@ -541,19 +681,29 @@ class RLMRunner(BenchmarkManagerMixin, ChatSessionMixin, DelegationMixin, Action
             "run_id": run_id,
             "environment": env.name,
             "timestamp": self._utc_now(),
-            "context_files": list(context.keys()),
-            "context_chars": sum(len(value) for value in context.values()),
+            "context_files": labels,
+            "context_chars": context_chars,
+            "context_profile": effective_profile,
+            "context_source": source,
+            "search_terms": search_terms,
+            "pure_rlm_profile": getattr(env, "run_profile", None),
         }
         self._append_event(run_path, context_event)
         self._emit_runtime_event(
             "context_load",
             {
                 "run_id": run_id,
-                "files": len(context),
+                "files": len(labels),
                 "chars": context_event["context_chars"],
+                "profile": effective_profile,
             },
         )
-        return len(context)
+        return {
+            "files": len(labels),
+            "chars": context_chars,
+            "profile": effective_profile,
+            "source": source,
+        }
 
     def run_task(
         self,
@@ -569,6 +719,16 @@ class RLMRunner(BenchmarkManagerMixin, ChatSessionMixin, DelegationMixin, Action
         max_children_per_step: int = 4,
         parallelism: int = 2,
         time_budget_seconds: int | None = None,
+        context: Any | None = None,
+        context_description: str | None = None,
+        context_profile: str = "auto",
+        context_paths: list[str] | None = None,
+        context_include: list[str] | None = None,
+        context_exclude: list[str] | None = None,
+        pure_rlm_profile: str | None = None,
+        root_observation_mode: str | None = None,
+        history_policy: str | None = None,
+        decomposition_hint: bool | None = None,
         _recursion_state: _RecursionState | None = None,
         _depth: int = 0,
         _parent_run_id: str | None = None,
@@ -684,11 +844,21 @@ class RLMRunner(BenchmarkManagerMixin, ChatSessionMixin, DelegationMixin, Action
         final_response = ""
         cancelled = False
         trajectory: list[dict[str, Any]] = []
-        context_files = self._initialize_pure_rlm_run_context(
+        context_metadata = self._initialize_pure_rlm_run_context(
             env,
             cleaned_task,
             run_id=run_id,
             run_path=run_path,
+            context=context,
+            context_description=context_description,
+            context_profile=context_profile,
+            context_paths=context_paths,
+            context_include=context_include,
+            context_exclude=context_exclude,
+            pure_rlm_profile=pure_rlm_profile,
+            root_observation_mode=root_observation_mode,
+            history_policy=history_policy,
+            decomposition_hint=decomposition_hint,
         )
         usage_start = self._usage_snapshot()
         self.observability.on_run_start(
@@ -710,7 +880,11 @@ class RLMRunner(BenchmarkManagerMixin, ChatSessionMixin, DelegationMixin, Action
                 "parent_run_id": _parent_run_id,
                 "pure_rlm_backend": self._pure_rlm_backend if env.name == "pure_rlm" else None,
                 "pure_rlm_strict": strict_pure_mode if env.name == "pure_rlm" else None,
-                "context_files": context_files if env.name == "pure_rlm" else None,
+                "context_files": context_metadata["files"] if env.name == "pure_rlm" else None,
+                "context_profile": context_metadata["profile"] if env.name == "pure_rlm" else None,
+                "pure_rlm_profile": getattr(env, "run_profile", None)
+                if env.name == "pure_rlm"
+                else None,
             },
         )
         self._emit_runtime_event(
@@ -722,7 +896,8 @@ class RLMRunner(BenchmarkManagerMixin, ChatSessionMixin, DelegationMixin, Action
                 "framework": native_framework,
                 "depth": _depth,
                 "parent_run_id": _parent_run_id,
-                "context_files": context_files if env.name == "pure_rlm" else None,
+                "context_files": context_metadata["files"] if env.name == "pure_rlm" else None,
+                "context_profile": context_metadata["profile"] if env.name == "pure_rlm" else None,
             },
         )
 
@@ -738,6 +913,7 @@ class RLMRunner(BenchmarkManagerMixin, ChatSessionMixin, DelegationMixin, Action
                     break
 
                 step_usage_before = self._usage_snapshot()
+                step_role_usage_before = model_router.role_usage_snapshot()
                 planner_prompt = env.planner_prompt(cleaned_task, memory, trajectory, step_index)
                 candidates = self._propose_step_candidates(
                     planner_prompt=planner_prompt,
@@ -764,6 +940,10 @@ class RLMRunner(BenchmarkManagerMixin, ChatSessionMixin, DelegationMixin, Action
                     "planner_raw": planner_raw,
                     "depth": _depth,
                     "parent_run_id": _parent_run_id,
+                    "root_prompt_chars": len(planner_prompt),
+                    "root_prompt_sha256": hashlib.sha256(
+                        planner_prompt.encode("utf-8")
+                    ).hexdigest(),
                 }
                 if branch_width > 1:
                     step_event["branch"] = {
@@ -837,6 +1017,10 @@ class RLMRunner(BenchmarkManagerMixin, ChatSessionMixin, DelegationMixin, Action
                 step_event["observation"] = action_result.observation
                 step_event["reward"] = action_result.reward
                 step_event["usage"] = step_usage
+                step_event["role_usage"] = model_router.role_usage_delta(
+                    step_role_usage_before,
+                    model_router.role_usage_snapshot(),
+                )
                 trajectory.append(step_event)
                 self._append_event(run_path, step_event)
                 self.observability.on_step(
@@ -882,16 +1066,23 @@ class RLMRunner(BenchmarkManagerMixin, ChatSessionMixin, DelegationMixin, Action
             ):
                 final_response = "Stopped due to time budget."
             else:
+                synthesis_trajectory = trajectory
+                sanitize_for_root = getattr(env, "sanitize_trajectory_for_root", None)
+                if callable(sanitize_for_root):
+                    synthesis_trajectory = sanitize_for_root(trajectory)
                 final_response = self._synthesize_final_response(
                     cleaned_task,
-                    trajectory,
+                    synthesis_trajectory,
                     completed,
                     environment=env.name,
+                    model_router=model_router,
                 )
 
         finished = self._utc_now()
         usage_end = self._usage_snapshot()
         run_usage = self._usage_delta(usage_start, usage_end)
+        run_usage["roles"] = model_router.role_usage_summary(run_usage)
+        harness_metrics = getattr(env, "get_harness_metrics", lambda: {})()
         final_event = {
             "type": "final",
             "run_id": run_id,
@@ -907,6 +1098,7 @@ class RLMRunner(BenchmarkManagerMixin, ChatSessionMixin, DelegationMixin, Action
             "depth": _depth,
             "parent_run_id": _parent_run_id,
             "cancelled": cancelled,
+            "harness": harness_metrics,
         }
         self._append_event(run_path, final_event)
         result = RLMRunResult(
@@ -956,6 +1148,14 @@ class RLMRunner(BenchmarkManagerMixin, ChatSessionMixin, DelegationMixin, Action
         max_children_per_step: int = 4,
         parallelism: int = 2,
         time_budget_seconds: int | None = None,
+        context: Any | None = None,
+        context_description: str | None = None,
+        context_profile: str = "auto",
+        context_paths: list[str] | None = None,
+        pure_rlm_profile: str | None = None,
+        root_observation_mode: str | None = None,
+        history_policy: str | None = None,
+        decomposition_hint: bool | None = None,
     ) -> RLMRunResult:
         """
         Async version of ``run_task``.
@@ -979,6 +1179,14 @@ class RLMRunner(BenchmarkManagerMixin, ChatSessionMixin, DelegationMixin, Action
             max_children_per_step=max_children_per_step,
             parallelism=parallelism,
             time_budget_seconds=time_budget_seconds,
+            context=context,
+            context_description=context_description,
+            context_profile=context_profile,
+            context_paths=context_paths,
+            pure_rlm_profile=pure_rlm_profile,
+            root_observation_mode=root_observation_mode,
+            history_policy=history_policy,
+            decomposition_hint=decomposition_hint,
         )
 
     def list_runs(self, limit: int = 10) -> list[dict[str, Any]]:

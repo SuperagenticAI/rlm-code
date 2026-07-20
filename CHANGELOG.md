@@ -5,6 +5,28 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.11] - 2026-07-20
+
+### Added
+- Opt-in `repo_evidence` and locally in-distribution (`lid`) Pure RLM harness profiles with focused decomposition guidance.
+- Deterministic `mini`, `evidence`, `full`, and explicit repository context profiles through the public `RepositoryContextBuilder` API.
+- Opaque, constant-shape root observations; structural root history; and automatic offloading of older history to versioned REPL variables.
+- Root/submodel call attribution, bounded subcall trace previews with hashes, and July-post trajectory similarity metrics.
+- Benchmark metadata for explicit context, expected answers, task family, domain, split, and length buckets.
+- API-key-free cross-domain harness proof with an 8× evaluation-length extrapolation.
+- Maintained AI Engineer World's Fair 2026 live probe, prompts, and use-case notes under `examples/aie_world_fair_2026`.
+
+### Changed
+- Pure RLM caller-provided contexts are preserved rather than replaced by automatic runner discovery.
+- Evidence context selection ranks matching files before applying file budgets.
+- Incomplete `repo_evidence` and `lid` runs sanitize trajectories before root-model fallback synthesis.
+- Release source distributions now include the `examples/` directory.
+- Corrected the RLM paper link to arXiv:2512.24601.
+
+### Fixed
+- Pure RLM paradigm comparison now passes its supplied context through the runner and reports measured submodel calls.
+- Configuration parsing now handles absent or mocked harness settings without changing compatibility defaults.
+
 ## [0.1.10] - 2026-06-28
 
 ### Fixed
@@ -91,6 +113,8 @@ Initial public release of **RLM Code**.
 - Unsafe local `exec` usage preserved only as an explicit, opt-in path for advanced development scenarios.
 
 [0.1.5]: https://github.com/SuperagenticAI/rlm-code/releases/tag/v0.1.5
+[0.1.11]: https://github.com/SuperagenticAI/rlm-code/releases/tag/v0.1.11
+[0.1.10]: https://github.com/SuperagenticAI/rlm-code/releases/tag/v0.1.10
 [0.1.6]: https://github.com/SuperagenticAI/rlm-code/releases/tag/v0.1.6
 [0.1.9]: https://github.com/SuperagenticAI/rlm-code/releases/tag/v0.1.9
 [0.1.8]: https://github.com/SuperagenticAI/rlm-code/releases/tag/v0.1.8

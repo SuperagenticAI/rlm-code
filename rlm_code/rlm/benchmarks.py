@@ -21,6 +21,15 @@ class RLMBenchmarkCase:
     environment: str = "dspy"
     max_steps: int = 4
     exec_timeout: int = 30
+    context: Any | None = None
+    expected_answer: str | None = None
+    rubric: str | None = None
+    task_family: str | None = None
+    domain: str | None = None
+    split: str | None = None
+    length_bucket: str | None = None
+    context_profile: str = "auto"
+    pure_rlm_profile: str | None = None
 
 
 _PRESET_DESCRIPTIONS: dict[str, str] = {
@@ -934,6 +943,43 @@ def _parse_cases(
                 environment=environment,
                 max_steps=max_steps,
                 exec_timeout=exec_timeout,
+                context=raw_case.get("context"),
+                expected_answer=(
+                    str(raw_case.get("expected_answer")).strip()
+                    if raw_case.get("expected_answer") is not None
+                    else None
+                ),
+                rubric=(
+                    str(raw_case.get("rubric")).strip()
+                    if raw_case.get("rubric") is not None
+                    else None
+                ),
+                task_family=(
+                    str(raw_case.get("task_family")).strip()
+                    if raw_case.get("task_family") is not None
+                    else None
+                ),
+                domain=(
+                    str(raw_case.get("domain")).strip()
+                    if raw_case.get("domain") is not None
+                    else None
+                ),
+                split=(
+                    str(raw_case.get("split")).strip()
+                    if raw_case.get("split") is not None
+                    else None
+                ),
+                length_bucket=(
+                    str(raw_case.get("length_bucket")).strip()
+                    if raw_case.get("length_bucket") is not None
+                    else None
+                ),
+                context_profile=str(raw_case.get("context_profile") or "auto").strip(),
+                pure_rlm_profile=(
+                    str(raw_case.get("pure_rlm_profile")).strip()
+                    if raw_case.get("pure_rlm_profile") is not None
+                    else None
+                ),
             )
         )
     return parsed

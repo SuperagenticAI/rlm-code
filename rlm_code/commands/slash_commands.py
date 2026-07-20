@@ -2068,6 +2068,11 @@ class SlashCommandHandler:
             environment = "generic"
             sub_model: str | None = None
             sub_provider: str | None = None
+            pure_rlm_profile: str | None = None
+            context_profile: str | None = None
+            root_observation_mode: str | None = None
+            history_policy: str | None = None
+            decomposition_hint: bool | None = None
             task_tokens: list[str] = []
 
             for token in args[1:]:
@@ -2131,6 +2136,42 @@ class SlashCommandHandler:
                         sub_model = sub_spec
                 elif lowered.startswith("sub_provider="):
                     sub_provider = token.split("=", 1)[1].strip().lower() or None
+                elif lowered.startswith("profile=") or lowered.startswith("harness="):
+                    value = token.split("=", 1)[1].strip().lower().replace("-", "_")
+                    if value not in {"reference", "repo_evidence", "lid"}:
+                        show_error_message(
+                            "Invalid Pure RLM profile. Use reference|repo_evidence|lid."
+                        )
+                        return
+                    pure_rlm_profile = value
+                elif lowered.startswith("context_profile="):
+                    value = token.split("=", 1)[1].strip().lower().replace("-", "_")
+                    if value not in {"auto", "mini", "evidence", "full", "explicit"}:
+                        show_error_message(
+                            "Invalid context profile. Use auto|mini|evidence|full|explicit."
+                        )
+                        return
+                    context_profile = value
+                elif lowered.startswith("observe="):
+                    value = token.split("=", 1)[1].strip().lower()
+                    if value not in {"configured", "raw", "metadata", "opaque"}:
+                        show_error_message(
+                            "Invalid observation mode. Use configured|raw|metadata|opaque."
+                        )
+                        return
+                    root_observation_mode = value
+                elif lowered.startswith("history="):
+                    value = token.split("=", 1)[1].strip().lower()
+                    if value not in {"full", "structural", "offload"}:
+                        show_error_message("Invalid history policy. Use full|structural|offload.")
+                        return
+                    history_policy = value
+                elif lowered.startswith("decompose="):
+                    value = token.split("=", 1)[1].strip().lower()
+                    if value not in {"on", "off", "true", "false", "1", "0", "yes", "no"}:
+                        show_error_message("Invalid decompose value. Use on|off.")
+                        return
+                    decomposition_hint = value in {"on", "true", "1", "yes"}
                 else:
                     task_tokens.append(token)
 
@@ -2140,7 +2181,8 @@ class SlashCommandHandler:
                     "Usage: /rlm run <task> [steps=N] [timeout=N] [env=generic|dspy|pure_rlm|trace_analysis] "
                     "[depth=N] [children=N] [parallel=N] [budget=N] "
                     f"[framework={framework_opts}] "
-                    "[branch=N] [sub=provider/model]"
+                    "[branch=N] [sub=provider/model] [profile=reference|repo_evidence|lid] "
+                    "[context_profile=auto|mini|evidence|full]"
                 )
                 return
 
@@ -2161,6 +2203,10 @@ class SlashCommandHandler:
             if sub_model:
                 sub_display = f"{sub_provider}/{sub_model}" if sub_provider else sub_model
                 console.print(f"  Sub-model route: [cyan]{sub_display}[/cyan]")
+            if pure_rlm_profile:
+                console.print(f"  Pure RLM profile: [cyan]{pure_rlm_profile}[/cyan]")
+            if context_profile:
+                console.print(f"  Context profile: [cyan]{context_profile}[/cyan]")
             console.print(
                 f"  Sandbox runtime: [cyan]{self.execution_engine.get_runtime_name()}[/cyan]"
             )
@@ -2184,6 +2230,16 @@ class SlashCommandHandler:
                 run_kwargs["sub_model"] = sub_model
             if sub_provider:
                 run_kwargs["sub_provider"] = sub_provider
+            if pure_rlm_profile:
+                run_kwargs["pure_rlm_profile"] = pure_rlm_profile
+            if context_profile:
+                run_kwargs["context_profile"] = context_profile
+            if root_observation_mode:
+                run_kwargs["root_observation_mode"] = root_observation_mode
+            if history_policy:
+                run_kwargs["history_policy"] = history_policy
+            if decomposition_hint is not None:
+                run_kwargs["decomposition_hint"] = decomposition_hint
 
             result = self.rlm_runner.run_task(
                 **run_kwargs,

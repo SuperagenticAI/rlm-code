@@ -78,6 +78,12 @@ class PureRLMConfig:
     max_workers: int = 8             # Thread pool size for batched queries
     sub_model: str | None = None     # Override model for sub-LLM calls
     sub_provider: str | None = None  # Override provider for sub-LLM calls
+    profile: str = "reference"       # reference | repo_evidence | lid
+    root_observation_mode: str = "configured"
+    history_policy: str = "profile"  # profile | full | structural | offload
+    max_root_history_chars: int = 40000
+    history_preserve_last: int = 2
+    decomposition_hint: bool = False
 ```
 
 | Parameter | Default | Description |
@@ -88,6 +94,53 @@ class PureRLMConfig:
 | `max_workers` | `8` | `ThreadPoolExecutor` worker count for `llm_query_batched()` |
 | `sub_model` | `None` | Model name for sub-LLM calls (falls back to root model) |
 | `sub_provider` | `None` | Provider for sub-LLM calls |
+| `profile` | `reference` | Harness profile. `lid` enables opaque observations, structural offloading, and a decomposition hint by default. |
+| `root_observation_mode` | `configured` | Root-visible REPL output: `raw`, `metadata`, `opaque`, or the configured legacy output policy. |
+| `history_policy` | `profile` | Use the profile default, keep full assistant history, retain code structure only, or offload older structural messages to REPL variables. |
+| `max_root_history_chars` | `40000` | Root-history threshold before `offload` stores older messages as `history_N`. |
+| `history_preserve_last` | `2` | Recent action/result pairs kept after an offload. |
+| `decomposition_hint` | `False` | Add an explicit focused-subcall/decomposition hint. Enabled automatically by `repo_evidence` and `lid`. |
+
+### Harness profiles
+
+| Profile | Root observation | History | Decomposition hint | Intended use |
+|---|---|---|---|---|
+| `reference` | Existing configured behavior | Full | Off | Compatibility and reference-style experiments |
+| `repo_evidence` | Metadata with previews | Structural | On | Repository analysis with bounded evidence and citations |
+| `lid` | Opaque counts/status only | Structural history offloaded to REPL | On | Cross-domain and length-generalization experiments |
+
+`opaque` affects only what is fed back into the root model. Bounded stdout and
+subcall prompt/answer previews remain in the persisted runner trace, together
+with full character counts and SHA-256 digests, for replay and debugging. The
+`lid` profile is therefore an exposure policy, not a destructive logging
+policy.
+
+From the TUI:
+
+```text
+/rlm run env=pure_rlm profile=lid context_profile=evidence steps=12 <task>
+```
+
+Programmatically, caller context is now explicit and is not replaced by
+automatic repository discovery:
+
+```python
+result = runner.run_task(
+    task="Answer from the supplied evidence",
+    environment="pure_rlm",
+    context={"evidence.md": evidence},
+    pure_rlm_profile="lid",
+)
+```
+
+The repository builder and trajectory metrics are public APIs:
+
+```python
+from rlm_code.rlm import RepositoryContextBuilder, compare_trajectory_similarity
+
+selected = RepositoryContextBuilder(workdir).build(task, profile="evidence")
+similarity = compare_trajectory_similarity(train_actions, eval_actions)
+```
 
 ### Context Initialization
 

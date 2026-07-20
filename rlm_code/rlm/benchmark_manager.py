@@ -901,8 +901,11 @@ class BenchmarkManagerMixin:
             branch_width=max(1, int(branch_width)),
             sub_model=sub_model,
             sub_provider=sub_provider,
+            context=case.context,
+            context_profile=case.context_profile,
+            pure_rlm_profile=case.pure_rlm_profile,
         )
-        return {
+        payload = {
             "case_id": case.case_id,
             "description": case.description,
             "task": case.task,
@@ -917,7 +920,17 @@ class BenchmarkManagerMixin:
             "total_reward": float(result.total_reward),
             "usage": dict(result.usage_summary or {}),
             "final_response": str(result.final_response or ""),
+            "task_family": case.task_family,
+            "domain": case.domain,
+            "split": case.split,
+            "length_bucket": case.length_bucket,
+            "expected_answer": case.expected_answer,
         }
+        if case.expected_answer is not None:
+            expected = " ".join(case.expected_answer.lower().split())
+            actual = " ".join(str(result.final_response or "").lower().split())
+            payload["answer_match"] = expected == actual or expected in actual
+        return payload
 
     def _run_benchmark_case_harness(
         self,

@@ -87,6 +87,12 @@ rlm:
 | `pure_rlm_strict` | `bool` | `false` |
 | `pure_rlm_output_mode` | `str` | `summarize` |
 | `pure_rlm_max_iteration_output_chars` | `int` | `12000` |
+| `pure_rlm_profile` | `str` | `reference` |
+| `pure_rlm_root_observation_mode` | `str` | `configured` |
+| `pure_rlm_history_policy` | `str` | `profile` |
+| `pure_rlm_max_root_history_chars` | `int` | `40000` |
+| `pure_rlm_history_preserve_last` | `int` | `2` |
+| `pure_rlm_decomposition_hint` | `bool` | `false` |
 | `monty_type_check` | `bool` | `false` |
 | `monty_max_allocations` | `int \| null` | `null` |
 | `monty_max_memory` | `int \| null` | `null` |

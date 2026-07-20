@@ -14,6 +14,7 @@ Key differences from traditional coding agents:
 
 from __future__ import annotations
 
+import hashlib
 import inspect
 import io
 import json
@@ -270,6 +271,27 @@ If you're unsure what variables exist, you can call SHOW_VARS() in a repl block 
 Think step by step carefully, plan, and execute this plan immediately in your response -- do not just say "I will do this" or "I will do that". Output to the REPL environment and recursive LLMs as much as possible. Remember to explicitly answer the original query in your final answer.
 """
 
+PURE_RLM_REPO_EVIDENCE_ADDENDUM = """
+Repository-evidence harness rules:
+- Treat `context` as offloaded evidence. Inspect and transform it with code; do not ask the root model to memorize repository contents.
+- Put independent semantic checks into focused `llm_query` or `llm_query_batched` calls. Include the relevant evidence and request file/line citations.
+- Assign sub-LLM responses to variables. Prefer structural prints (counts, keys, success flags) over printing source text or semantic answers into root history.
+- Aggregate evidence programmatically and finish with FINAL_VAR when the answer is already stored in a variable.
+- Preserve reusable decomposition: discovery -> bounded evidence -> parallel semantic checks -> programmatic aggregation -> finalization.
+"""
+
+PURE_RLM_LID_ADDENDUM = """
+Local-in-distribution (LID) harness rules:
+- Keep root-model observations task-structural. Domain values and sub-LLM answers should remain in REPL variables unless a later subcall explicitly needs them.
+- Do not print `context`, source excerpts, or sub-LLM responses. Printing shapes, lengths, identifiers of generic buffers, and success flags is allowed.
+- Never send the entire problem to one subcall when it has separable evidence units. Decompose into bounded, independently checkable prompts and use batched calls where possible.
+- Reuse the same control-flow pattern for structurally similar tasks even when domain, vocabulary, or context length changes.
+"""
+
+_DECOMPOSITION_HINT = """
+Harness hint: first identify separable evidence units. Store focused subcall results in variables, avoid printing their values, aggregate in the REPL, and use FINAL_VAR for the stored result.
+"""
+
 
 # User prompt templates (matching reference implementation)
 _USER_PROMPT = (
@@ -337,6 +359,13 @@ class PureRLMConfig:
     max_workers: int = 8
     sub_model: str | None = None
     sub_provider: str | None = None
+    profile: str = "reference"  # reference | repo_evidence | lid
+    root_observation_mode: str = "configured"  # configured | raw | metadata | opaque
+    history_policy: str = "profile"  # profile | full | structural | offload
+    max_root_history_chars: int = 40000
+    history_preserve_last: int = 2
+    decomposition_hint: bool = False
+    trace_subcall_preview_chars: int = 500
 
 
 @dataclass
@@ -432,6 +461,9 @@ class PureRLMEnvironment:
 
     name = "pure_rlm"
     _OUTPUT_METADATA_MODES = {"truncate", "summarize", "metadata"}
+    _RUN_PROFILES = {"reference", "repo_evidence", "lid"}
+    _ROOT_OBSERVATION_MODES = {"configured", "raw", "metadata", "opaque"}
+    _HISTORY_POLICIES = {"full", "structural", "offload"}
 
     def _make_safe_open(self) -> Callable:
         """Create a restricted open() that only allows reading files under workdir."""
@@ -488,6 +520,13 @@ class PureRLMEnvironment:
             )
             output_mode = "summarize"
         self.config.output_metadata_mode = output_mode
+        self.config.max_root_history_chars = max(
+            1000, int(self.config.max_root_history_chars or 40000)
+        )
+        self.config.history_preserve_last = max(1, int(self.config.history_preserve_last or 2))
+        self.config.trace_subcall_preview_chars = max(
+            0, int(self.config.trace_subcall_preview_chars or 0)
+        )
 
         # User-registered tools (injected into REPL namespace)
         self._user_tools: list[Callable] = list(tools or [])
@@ -533,6 +572,15 @@ class PureRLMEnvironment:
         self._context_count: int = 0
         self._history_count: int = 0
         self._root_prompt: str | None = None
+        self._run_profile = "reference"
+        self._root_observation_mode = "configured"
+        self._history_policy = "full"
+        self._decomposition_hint = False
+        self._history_offloads = 0
+        self._root_exposed_chars = 0
+        self._root_hidden_chars = 0
+        self._structural_actions: list[str] = []
+        self.configure_run()
 
         # Multi-file management state (from RLM-From-Scratch)
         self._files: dict[str, dict[str, Any]] = {}
@@ -540,6 +588,118 @@ class PureRLMEnvironment:
 
         # Will be set when execute_action is called with llm_connector
         self._llm_connector: Any = None
+
+    @staticmethod
+    def _normalize_choice(value: Any, supported: set[str], label: str) -> str:
+        normalized = str(value or "").strip().lower().replace("-", "_")
+        if normalized not in supported:
+            choices = ", ".join(sorted(supported))
+            raise ValueError(f"Unknown {label} '{value}'. Supported: {choices}")
+        return normalized
+
+    def configure_run(
+        self,
+        *,
+        profile: str | None = None,
+        root_observation_mode: str | None = None,
+        history_policy: str | None = None,
+        decomposition_hint: bool | None = None,
+    ) -> None:
+        """Configure root-model exposure policies for the next initialized run."""
+        selected_profile = self._normalize_choice(
+            profile or self.config.profile,
+            self._RUN_PROFILES,
+            "Pure RLM profile",
+        )
+        profile_defaults = {
+            "reference": ("configured", "full", False),
+            "repo_evidence": ("metadata", "structural", True),
+            "lid": ("opaque", "offload", True),
+        }
+        default_observation, default_history, default_hint = profile_defaults[selected_profile]
+
+        configured_observation = str(self.config.root_observation_mode or "configured")
+        configured_history = str(self.config.history_policy or "profile")
+        observation = (
+            root_observation_mode
+            if root_observation_mode is not None
+            else (
+                configured_observation
+                if selected_profile == "reference" or configured_observation != "configured"
+                else default_observation
+            )
+        )
+        history = (
+            history_policy
+            if history_policy is not None
+            else (default_history if configured_history == "profile" else configured_history)
+        )
+        hint = (
+            bool(decomposition_hint)
+            if decomposition_hint is not None
+            else (bool(self.config.decomposition_hint) or default_hint)
+        )
+
+        self._run_profile = selected_profile
+        self._root_observation_mode = self._normalize_choice(
+            observation,
+            self._ROOT_OBSERVATION_MODES,
+            "root observation mode",
+        )
+        self._history_policy = self._normalize_choice(
+            history,
+            self._HISTORY_POLICIES,
+            "history policy",
+        )
+        self._decomposition_hint = hint
+
+    @property
+    def run_profile(self) -> str:
+        return self._run_profile
+
+    def get_harness_metrics(self) -> dict[str, Any]:
+        """Return exposure and structural-trajectory metrics for persisted traces."""
+        return {
+            "profile": self._run_profile,
+            "root_observation_mode": self._root_observation_mode,
+            "history_policy": self._history_policy,
+            "decomposition_hint": self._decomposition_hint,
+            "history_offloads": self._history_offloads,
+            "root_exposed_chars": self._root_exposed_chars,
+            "root_hidden_chars": self._root_hidden_chars,
+            "structural_actions": list(self._structural_actions),
+        }
+
+    def sanitize_trajectory_for_root(
+        self, trajectory: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Remove domain-bearing trace fields before root-model fallback synthesis."""
+        if self._run_profile == "reference":
+            return trajectory
+        sanitized: list[dict[str, Any]] = []
+        for event in trajectory:
+            action = event.get("action", {})
+            observation = event.get("observation", {})
+            sanitized.append(
+                {
+                    "step": event.get("step"),
+                    "reward": event.get("reward"),
+                    "action": {
+                        "action": action.get("action"),
+                        "code": action.get("code", ""),
+                        "done": action.get("done", False),
+                    },
+                    "observation": {
+                        "success": observation.get("success"),
+                        "execution_time": observation.get("execution_time"),
+                        "llm_calls_made": observation.get("llm_calls_made", 0),
+                        "code_blocks_executed": observation.get("code_blocks_executed", 0),
+                        "repl_variable_count": len(observation.get("repl_variables", []) or []),
+                        "final_detected": observation.get("final_detected", False),
+                    },
+                }
+            )
+        return sanitized
 
     def _interpreter_enabled(self) -> bool:
         return self._interpreter is not None and callable(
@@ -595,6 +755,10 @@ class PureRLMEnvironment:
         self._history_count = 0
         self._files = {}
         self._active_file = None
+        self._history_offloads = 0
+        self._root_exposed_chars = 0
+        self._root_hidden_chars = 0
+        self._structural_actions = []
 
         # Store context as variable (versioned: context_0, alias context)
         self._namespace["context"] = context
@@ -672,7 +836,7 @@ class PureRLMEnvironment:
             lengths_display = str(context_lengths)
 
         # Build system prompt with optional tool docs and signature info
-        system_prompt = PURE_RLM_SYSTEM_PROMPT
+        system_prompt = self.system_prompt()
         tool_docs = _format_tool_docs(self._user_tools)
         if tool_docs:
             system_prompt += f"\n\nAdditional tools available in the REPL:\n{tool_docs}"
@@ -881,6 +1045,26 @@ class PureRLMEnvironment:
 
         return show_vars
 
+    def _subcall_trace_record(
+        self,
+        prompt: str,
+        response: str,
+        *,
+        model: str | None,
+        batched: bool = False,
+    ) -> dict[str, Any]:
+        preview = self.config.trace_subcall_preview_chars
+        return {
+            "prompt": prompt[:preview],
+            "prompt_chars": len(prompt),
+            "prompt_sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
+            "response": response[:preview],
+            "response_chars": len(response),
+            "response_sha256": hashlib.sha256(response.encode("utf-8")).hexdigest(),
+            "model": model,
+            "batched": batched,
+        }
+
     def _make_llm_query(self) -> Callable[[str, str | None], str]:
         """Create llm_query function for recursive LLM calls."""
 
@@ -923,11 +1107,7 @@ class PureRLMEnvironment:
                 # Track the call
                 with self._lock:
                     self._pending_llm_calls.append(
-                        {
-                            "prompt": prompt[:500],
-                            "response": result[:500],
-                            "model": model,
-                        }
+                        self._subcall_trace_record(prompt, result, model=model)
                     )
 
                 return result
@@ -995,12 +1175,12 @@ class PureRLMEnvironment:
             with self._lock:
                 for prompt, response in zip(prompts, results):
                     self._pending_llm_calls.append(
-                        {
-                            "prompt": prompt[:500],
-                            "response": response[:500],
-                            "model": model,
-                            "batched": True,
-                        }
+                        self._subcall_trace_record(
+                            prompt,
+                            response,
+                            model=model,
+                            batched=True,
+                        )
                     )
 
             return results
@@ -1009,7 +1189,12 @@ class PureRLMEnvironment:
 
     def system_prompt(self) -> str:
         """Return the Pure RLM system prompt."""
-        return PURE_RLM_SYSTEM_PROMPT
+        prompt = PURE_RLM_SYSTEM_PROMPT
+        if self._run_profile in {"repo_evidence", "lid"}:
+            prompt += "\n\n" + PURE_RLM_REPO_EVIDENCE_ADDENDUM.strip()
+        if self._run_profile == "lid":
+            prompt += "\n\n" + PURE_RLM_LID_ADDENDUM.strip()
+        return prompt
 
     def planner_prompt(
         self,
@@ -1035,6 +1220,8 @@ class PureRLMEnvironment:
             context_count=self._context_count,
             history_count=self._history_count,
         )
+        if self._decomposition_hint:
+            user_prompt += "\n\n" + _DECOMPOSITION_HINT.strip()
 
         # Format the full message history as a single prompt
         # This preserves the conversation context across iterations
@@ -1052,9 +1239,11 @@ class PureRLMEnvironment:
         formatted_history = "\n\n---\n\n".join(history_parts) if history_parts else ""
 
         if formatted_history:
-            return f"Task: {task}\n\n## Conversation History\n\n{formatted_history}\n\n---\n\n{user_prompt}"
+            prompt = f"Task: {task}\n\n## Conversation History\n\n{formatted_history}\n\n---\n\n{user_prompt}"
         else:
-            return f"Task: {task}\n\n{user_prompt}"
+            prompt = f"Task: {task}\n\n{user_prompt}"
+        self._root_exposed_chars += len(prompt)
+        return prompt
 
     # ── User variable listing (for output formatting) ────────────────────
 
@@ -1164,6 +1353,70 @@ class PureRLMEnvironment:
             return self._summarize_output_for_history(text)
         return self._clip_output_text(text, self.config.max_iteration_output_chars)
 
+    @staticmethod
+    def _normalize_code_structure(code: str) -> str:
+        """Remove domain literals while retaining a comparable control-flow shape."""
+        normalized = re.sub(r"(?s)(?:'''|\"\"\").*?(?:'''|\"\"\")", "<str>", code)
+        normalized = re.sub(r"'(?:\\.|[^'\\])*'|\"(?:\\.|[^\"\\])*\"", "<str>", normalized)
+        normalized = re.sub(r"\b\d+(?:\.\d+)?\b", "<num>", normalized)
+        return " ".join(normalized.split())
+
+    def _assistant_history_content(
+        self, response: str, code_blocks: list[str] | None = None
+    ) -> str:
+        if self._history_policy == "full":
+            return response
+        blocks = list(code_blocks or [])
+        if not blocks:
+            return "[Structural assistant action: no executable code]"
+        return "\n\n".join(f"```repl\n{code}\n```" for code in blocks)
+
+    @staticmethod
+    def _opaque_execution_result(result: REPLResult) -> str:
+        stdout = result.stdout or ""
+        stderr = result.stderr or ""
+        return (
+            "[Opaque REPL Result] "
+            f"success={'yes' if result.success else 'no'}, "
+            f"stdout_chars={len(stdout)}, stdout_lines={stdout.count(chr(10)) + bool(stdout)}, "
+            f"stderr_chars={len(stderr)}, llm_calls={len(result.llm_calls)}, "
+            f"visible_variables={len(result.locals)}"
+        )
+
+    def _maybe_offload_root_history(self) -> None:
+        if self._history_policy != "offload":
+            return
+        total_chars = sum(len(message.get("content", "")) for message in self._message_history)
+        if total_chars <= self.config.max_root_history_chars:
+            return
+        preserve = max(2, self.config.history_preserve_last * 2)
+        if len(self._message_history) <= 2 + preserve:
+            return
+        older = [dict(message) for message in self._message_history[2:-preserve]]
+        if not older:
+            return
+        self.add_history(older)
+        history_name = f"history_{self._history_count - 1}"
+        notice = {
+            "role": "user",
+            "content": (
+                f"[Structural history offload] messages={len(older)}, "
+                f"stored_in={history_name}. Load it programmatically only if required."
+            ),
+        }
+        self._message_history = [
+            *self._message_history[:2],
+            notice,
+            *self._message_history[-preserve:],
+        ]
+        self._history_offloads += 1
+
+    def _append_assistant_history(self, response: str) -> None:
+        content = self._assistant_history_content(response)
+        self._root_hidden_chars += max(0, len(response) - len(content))
+        self._message_history.append({"role": "assistant", "content": content})
+        self._maybe_offload_root_history()
+
     def _format_iteration_messages(
         self,
         response: str,
@@ -1175,11 +1428,24 @@ class PureRLMEnvironment:
 
         Returns assistant + user message pairs for each code block execution.
         """
-        messages = [{"role": "assistant", "content": response}]
+        assistant_content = self._assistant_history_content(response, code_blocks)
+        self._root_hidden_chars += max(0, len(response) - len(assistant_content))
+        messages = [{"role": "assistant", "content": assistant_content}]
 
         for code, result in zip(code_blocks, results):
-            formatted_result = self._format_execution_result(result)
-            formatted_result = self._format_output_for_history(formatted_result)
+            raw_result = self._format_execution_result(result)
+            if self._root_observation_mode == "opaque":
+                formatted_result = self._opaque_execution_result(result)
+            elif self._root_observation_mode == "metadata":
+                formatted_result = self._metadata_output_for_history(raw_result)
+            elif self._root_observation_mode == "raw":
+                formatted_result = self._clip_output_text(
+                    raw_result, self.config.max_iteration_output_chars
+                )
+            else:
+                formatted_result = self._format_output_for_history(raw_result)
+            self._root_hidden_chars += max(0, len(raw_result) - len(formatted_result))
+            self._structural_actions.append(self._normalize_code_structure(code))
 
             execution_message = {
                 "role": "user",
@@ -1289,7 +1555,7 @@ class PureRLMEnvironment:
                 )
             # Update message history with the final response
             if raw_response:
-                self._message_history.append({"role": "assistant", "content": raw_response})
+                self._append_assistant_history(raw_response)
             self._iteration_count += 1
             return EnvironmentActionResult(
                 observation={"message": "FINAL_VAR resolved.", "final_detected": True},
@@ -1302,7 +1568,7 @@ class PureRLMEnvironment:
         # Handle direct final response
         if action.get("done") and action.get("final_response"):
             if raw_response:
-                self._message_history.append({"role": "assistant", "content": raw_response})
+                self._append_assistant_history(raw_response)
             self._iteration_count += 1
             return EnvironmentActionResult(
                 observation={"message": "Task completed via done flag."},
@@ -1315,7 +1581,7 @@ class PureRLMEnvironment:
         if action_name == "final":
             final_response = str(action.get("final_response") or "Task complete.").strip()
             if raw_response:
-                self._message_history.append({"role": "assistant", "content": raw_response})
+                self._append_assistant_history(raw_response)
             self._iteration_count += 1
             return EnvironmentActionResult(
                 observation={"message": "Planner marked run complete."},
@@ -1341,7 +1607,7 @@ class PureRLMEnvironment:
         if not code_blocks:
             # No code to execute - just append to history and continue
             if raw_response:
-                self._message_history.append({"role": "assistant", "content": raw_response})
+                self._append_assistant_history(raw_response)
             self._iteration_count += 1
             return EnvironmentActionResult(
                 observation={"error": "No code provided for execution."},
@@ -1397,12 +1663,18 @@ class PureRLMEnvironment:
                 break  # Stop executing further blocks after FINAL/SUBMIT
 
         # Update message history with iteration results (matching reference)
+        if self._root_observation_mode in {"metadata", "opaque"}:
+            self._root_hidden_chars += sum(
+                int(call.get("response_chars", len(str(call.get("response", "")))))
+                for call in total_llm_calls
+            )
         iteration_messages = self._format_iteration_messages(
             response=raw_response or reasoning,
             code_blocks=code_blocks[: len(all_results)],
             results=all_results,
         )
         self._message_history.extend(iteration_messages)
+        self._maybe_offload_root_history()
         self._iteration_count += 1
 
         # Also check for FINAL in the text response (if not found in code)
@@ -1425,6 +1697,7 @@ class PureRLMEnvironment:
                     "stdout": "\n".join(combined_stdout)[: self.config.max_output_chars],
                     "final_detected": True,
                     "repl_variables": self._get_user_variables(),
+                    "sub_llm_calls": total_llm_calls,
                 },
                 reward=1.0,
                 done=True,
@@ -1466,6 +1739,7 @@ class PureRLMEnvironment:
                 "stderr": combined_result.stderr[:2000] if combined_result.stderr else "",
                 "execution_time": total_time,
                 "llm_calls_made": len(total_llm_calls),
+                "sub_llm_calls": total_llm_calls,
                 "code_blocks_executed": len(all_results),
                 "repl_variables": self._get_user_variables(),
             },

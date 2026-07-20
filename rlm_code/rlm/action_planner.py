@@ -339,7 +339,11 @@ class ActionPlannerMixin:
         return candidates
 
     def _extract_answer_from_trajectory(
-        self, task: str, trajectory: list[dict[str, Any]], environment: str
+        self,
+        task: str,
+        trajectory: list[dict[str, Any]],
+        environment: str,
+        model_router: Any | None = None,
     ) -> str | None:
         """
         Extract fallback: when max_steps is exhausted without FINAL/SUBMIT,
@@ -379,7 +383,8 @@ class ActionPlannerMixin:
             f"the answer, nothing else."
         )
         try:
-            response = self.llm_connector.generate_response(
+            connector = model_router or self.llm_connector
+            response = connector.generate_response(
                 prompt=prompt,
                 system_prompt="You extract answers from incomplete agent trajectories. Be concise and direct.",
             )
@@ -391,11 +396,21 @@ class ActionPlannerMixin:
         return None
 
     def _synthesize_final_response(
-        self, task: str, trajectory: list[dict[str, Any]], completed: bool, environment: str
+        self,
+        task: str,
+        trajectory: list[dict[str, Any]],
+        completed: bool,
+        environment: str,
+        model_router: Any | None = None,
     ) -> str:
         # Try extract fallback first (more context-rich)
         if not completed:
-            extracted = self._extract_answer_from_trajectory(task, trajectory, environment)
+            extracted = self._extract_answer_from_trajectory(
+                task,
+                trajectory,
+                environment,
+                model_router=model_router,
+            )
             if extracted:
                 return extracted
 
@@ -417,7 +432,8 @@ class ActionPlannerMixin:
             "Provide a concise final response for the user."
         )
         try:
-            response = self.llm_connector.generate_response(
+            connector = model_router or self.llm_connector
+            response = connector.generate_response(
                 prompt=prompt,
                 system_prompt="You are a concise engineering assistant.",
             )
