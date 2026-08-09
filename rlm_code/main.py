@@ -283,6 +283,11 @@ def cli(verbose: bool, debug: bool, version: bool, skip_safety_check: bool):
 
 def main():
     """Main entry point for the CLI."""
+    if len(sys.argv) > 1 and sys.argv[1] == "agent":
+        from .agent.terminal import agent_cli
+
+        agent_cli.main(args=sys.argv[2:], prog_name="rlm-code agent")
+        return
     cli()
 
 

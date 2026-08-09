@@ -66,7 +66,7 @@ def compare_trajectory_similarity(
     left: str | Iterable[str],
     right: str | Iterable[str],
 ) -> TrajectorySimilarity:
-    """Compare two root trajectories using the July harness-post metrics."""
+    """Compare two root trajectories using harness-generalization metrics."""
     left_tokens = trajectory_tokens(left)
     right_tokens = trajectory_tokens(right)
     longest = max(len(left_tokens), len(right_tokens))

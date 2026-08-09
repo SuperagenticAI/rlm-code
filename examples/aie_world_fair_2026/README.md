@@ -56,5 +56,5 @@ uv run --frozen python examples/aie_world_fair_2026/rlm_probe.py
 The in-process option executes model-written Python in the host process. Use it
 only with a trusted model and repository; Docker is the recommended path.
 
-For the API-key-free July harness/generalization proof, see
-[`../july_harness_generalization`](../july_harness_generalization/README.md).
+For the API-key-free harness generalization proof, see
+[`../harness_generalization`](../harness_generalization/README.md).

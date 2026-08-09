@@ -25,10 +25,28 @@ RLM Code implements the [Recursive Language Models](https://arxiv.org/abs/2512.2
 
 RLM Code wraps this algorithm in an interactive terminal UI with built-in benchmarks, trajectory replay, and observability.
 
+## Release v0.1.12
+
+This release introduces an experimental native coding-agent workflow for working
+on a repository from the command line. Give the agent a task and it can inspect
+the project, edit files, run checks, and show its activity as it works.
+
+- Start coding tasks with `rlm-code agent run`
+- Keep Python variables and working context available between model turns
+- Search, read, and update repository files under the selected approval policy
+- Run project commands and tests through the configured sandbox
+- See Python activity, approvals, effects, usage, and the final result in the terminal
+- Cancel long-running work or constrain it with turn and time limits
+- Resume a saved root-agent session, including supported Python state
+
+The native coding agent is experimental in v0.1.12. It currently runs one root
+agent. Concurrent child agents, parent/child messaging, an agent-tree view, and
+replay or resume of a complete multi-agent hierarchy are not included yet.
+
 ## Release v0.1.11
 
 This release adds a locally in-distribution harness profile based on the RLM
-authors' July 2026 generalization work and brings the AI Engineer World's Fair
+authors' harness generalization work and brings the AI Engineer World's Fair
 2026 live probe into the main repository.
 
 - New `reference`, `repo_evidence`, and `lid` Pure RLM profiles
@@ -44,10 +62,10 @@ Example:
 /rlm run "Validate pure_rlm_environment.py and cite context, REPL, llm_query, and FINAL evidence" env=pure_rlm steps=6
 ```
 
-## July 2026 locally in-distribution harness
+## Locally in-distribution harness generalization
 
 The opt-in `lid` Pure RLM profile implements the harness pattern from the RLM
-authors' [July 2026 generalization post](https://alexzhang13.github.io/blog/2026/harness/):
+authors' [harness generalization post](https://alexzhang13.github.io/blog/2026/harness/):
 
 - repository context profiles (`mini`, `evidence`, `full`, or explicit caller context);
 - semantic subcall outputs retained in REPL variables instead of root history;
@@ -60,7 +78,7 @@ authors' [July 2026 generalization post](https://alexzhang13.github.io/blog/2026
 Run the offline, API-key-free proof (including a cross-domain 8× length test):
 
 ```bash
-uv run python examples/july_harness_generalization/demo.py
+uv run python examples/harness_generalization/demo.py
 ```
 
 Use the same profile with a connected model:
@@ -69,7 +87,7 @@ Use the same profile with a connected model:
 /rlm run env=pure_rlm profile=lid context_profile=evidence steps=12 <your task>
 ```
 
-See the [demo guide](examples/july_harness_generalization/README.md) for its
+See the [demo guide](examples/harness_generalization/README.md) for its
 claims, checks, and limitations.
 
 The maintained [AI Engineer World's Fair 2026 talk probe](examples/aie_world_fair_2026/README.md)
@@ -208,9 +226,46 @@ After at least two benchmark runs, export a compare report:
 
 Walk through the last run one step at a time, see what code the LLM wrote, what output it got, and what it did next.
 
-### 7. Use RLM Code as a coding agent (local/BYOK/ACP)
+### 7. Use the native coding agent (experimental)
 
-RLM Code can also be used as a coding-agent harness in the TUI, Just like Claude Code, Codex etc. It has mimimal harnesss to steer the model to write the code.
+Run the command from the repository you want the agent to work on:
+
+```bash
+rlm-code agent run "fix the failing tests and add a regression test" \
+  --repository . \
+  --sandbox docker \
+  --approval confirm-high
+```
+
+Pass `--model provider/model` to select a model explicitly, or omit it to use
+the default model in your project configuration. The terminal displays the
+session ID, Python activity, repository and command actions, approvals, usage,
+and the final response.
+
+To continue a saved root-agent session, use the session ID shown by the earlier
+run:
+
+```bash
+rlm-code agent run "continue the task and rerun verification" \
+  --repository . \
+  --sandbox docker \
+  --resume <session-id>
+```
+
+Docker is the recommended sandbox. Apple Container is also suitable when
+configured. The `local` runtime is intended only for development and does not
+provide a container isolation boundary. Use `--approval confirm-high` (the
+default) or `--approval confirm-all` for interactive control. Use
+`--approval auto` only in a trusted repository and environment.
+
+In v0.1.12 this experimental command operates as a single root agent. It does
+not yet provide concurrent child agents, parent/child communication, an agent
+tree, or replay and resume of a complete multi-agent hierarchy.
+
+#### Existing TUI coding harness
+
+RLM Code can also be used as a coding-agent harness in the TUI. It provides a
+minimal workflow for steering a model to inspect and update code.
 
 ```text
 /harness tools

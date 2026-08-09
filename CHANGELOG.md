@@ -5,13 +5,31 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.12] - 2026-08-09
+
+### Added
+- Experimental `rlm-code agent run` workflow for repository coding tasks.
+- A persistent Python workspace that keeps variables and working context available between model turns.
+- Repository search, file updates, command execution, and test runs under the selected sandbox and approval policy.
+- Live terminal visibility for Python activity, repository and command actions, approvals, usage, and final results.
+- Usage accounting, cancellation, and configurable turn and time limits.
+- Saved root-agent sessions that can resume their conversation and supported Python state.
+
+### Security
+- Repository and command actions are checked by RLM Code's path, sandbox, approval, and audit controls.
+- Docker or Apple Container is recommended for isolation. The `local` runtime is intended for development in trusted environments.
+
+### Known limitations
+- The experimental native agent currently runs as a single root agent.
+- Concurrent child agents, parent/child communication, an agent-tree view, and replay or resume of a complete multi-agent hierarchy are not included in this release.
+
 ## [0.1.11] - 2026-07-20
 
 ### Added
 - Opt-in `repo_evidence` and locally in-distribution (`lid`) Pure RLM harness profiles with focused decomposition guidance.
 - Deterministic `mini`, `evidence`, `full`, and explicit repository context profiles through the public `RepositoryContextBuilder` API.
 - Opaque, constant-shape root observations; structural root history; and automatic offloading of older history to versioned REPL variables.
-- Root/submodel call attribution, bounded subcall trace previews with hashes, and July-post trajectory similarity metrics.
+- Root/submodel call attribution, bounded subcall trace previews with hashes, and harness trajectory similarity metrics.
 - Benchmark metadata for explicit context, expected answers, task family, domain, split, and length buckets.
 - API-key-free cross-domain harness proof with an 8× evaluation-length extrapolation.
 - Maintained AI Engineer World's Fair 2026 live probe, prompts, and use-case notes under `examples/aie_world_fair_2026`.
@@ -113,6 +131,7 @@ Initial public release of **RLM Code**.
 - Unsafe local `exec` usage preserved only as an explicit, opt-in path for advanced development scenarios.
 
 [0.1.5]: https://github.com/SuperagenticAI/rlm-code/releases/tag/v0.1.5
+[0.1.12]: https://github.com/SuperagenticAI/rlm-code/releases/tag/v0.1.12
 [0.1.11]: https://github.com/SuperagenticAI/rlm-code/releases/tag/v0.1.11
 [0.1.10]: https://github.com/SuperagenticAI/rlm-code/releases/tag/v0.1.10
 [0.1.6]: https://github.com/SuperagenticAI/rlm-code/releases/tag/v0.1.6

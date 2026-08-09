@@ -136,6 +136,21 @@ def test_execution_sandbox_uses_runtime_override(monkeypatch):
     assert stderr == ""
 
 
+def test_execution_sandbox_executes_in_explicit_workdir_without_leaking_wrapper(tmp_path):
+    sandbox = ExecutionSandbox(config_manager=_CfgManager())
+    sandbox.set_runtime("local")
+
+    return_code, stdout, stderr = sandbox.execute_in_workdir(
+        "from pathlib import Path\nprint(Path.cwd().name)",
+        tmp_path,
+    )
+
+    assert return_code == 0
+    assert stdout.strip() == tmp_path.name
+    assert stderr == ""
+    assert not list(tmp_path.glob(".rlm_agent_*.py"))
+
+
 def test_project_config_loads_sandbox_settings(tmp_path):
     config_path = tmp_path / "dspy_config.yaml"
     config_path.write_text(

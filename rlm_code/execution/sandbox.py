@@ -43,8 +43,9 @@ class ExecutionSandbox:
 
         self.timeout = configured_timeout
         self.memory_limit_mb = configured_memory
-        self.temp_dir = None
+        self.temp_dir: Path | None = None
         self.runtime_override: str | None = None
+        self.last_runtime_name: str | None = None
 
     def get_runtime_name(self) -> str:
         """Return currently selected runtime backend name."""
@@ -67,7 +68,7 @@ class ExecutionSandbox:
         except Exception:
             return None
 
-    def execute(self, code: str, inputs: dict[str, Any] = None) -> tuple[int, str, str]:
+    def execute(self, code: str, inputs: dict[str, Any] | None = None) -> tuple[int, str, str]:
         """
         Execute code in sandbox.
 
@@ -80,10 +81,11 @@ class ExecutionSandbox:
         """
         # Create temporary directory for execution
         with tempfile.TemporaryDirectory() as temp_dir:
-            self.temp_dir = Path(temp_dir)
+            execution_dir = Path(temp_dir)
+            self.temp_dir = execution_dir
 
             # Write code to temporary file
-            code_file = self.temp_dir / "generated_code.py"
+            code_file = execution_dir / "generated_code.py"
 
             # Wrap code with input handling if needed
             if inputs:
@@ -93,50 +95,90 @@ class ExecutionSandbox:
 
             code_file.write_text(wrapped_code)
 
-            # Execute with selected runtime backend
+            return self._execute_file(code_file=code_file, workdir=execution_dir)
+
+    def execute_in_workdir(
+        self,
+        code: str,
+        workdir: Path,
+        inputs: dict[str, Any] | None = None,
+    ) -> tuple[int, str, str]:
+        """Execute code with an explicit, policy-checked repository workdir.
+
+        The generated wrapper is created as a short-lived file directly below
+        the workdir so container runtimes can mount the repository without
+        gaining access to unrelated host paths. ``execute()`` retains its
+        existing isolated-temporary-directory semantics.
+        """
+        resolved_workdir = workdir.expanduser().resolve()
+        if not resolved_workdir.is_dir():
+            raise ValueError(f"Sandbox workdir is not a directory: {resolved_workdir}")
+
+        with tempfile.TemporaryDirectory(prefix="rlm_agent_env_") as environment_dir:
+            environment_path = Path(environment_dir)
+            self.temp_dir = environment_path
+            file_descriptor, raw_path = tempfile.mkstemp(
+                prefix=".rlm_agent_",
+                suffix=".py",
+                dir=resolved_workdir,
+            )
+            os.close(file_descriptor)
+            code_file = Path(raw_path)
             try:
-                # Prefer Python from project venv if available
-                from ..core.venv_utils import get_project_python
+                wrapped_code = self._wrap_code_with_inputs(code, inputs) if inputs else code
+                code_file.write_text(wrapped_code, encoding="utf-8")
+                return self._execute_file(code_file=code_file, workdir=resolved_workdir)
+            finally:
+                code_file.unlink(missing_ok=True)
 
-                python_exe = get_project_python(Path.cwd())
-                if python_exe is None:
-                    # No project venv - fallback to sys.executable
-                    python_exe = Path(sys.executable)
-                    logger.debug("No project venv found - using sys.executable")
-                else:
-                    logger.debug(f"Using project venv Python: {python_exe}")
+    def _execute_file(self, code_file: Path, workdir: Path) -> tuple[int, str, str]:
+        """Execute a prepared Python file through the resolved Superbox runtime."""
 
-                sandbox_config = self._get_sandbox_config()
-                superbox = Superbox(
-                    sandbox_config=sandbox_config,
-                    runtime_override=self.runtime_override,
-                )
-                resolution = superbox.resolve_runtime()
-                runtime_name = resolution.runtime_name
-                self._enforce_runtime_policy(
-                    runtime_name=runtime_name,
-                    workdir=self.temp_dir,
-                    sandbox_config=sandbox_config,
-                )
-                runtime = resolution.runtime
+        # Execute with selected runtime backend
+        try:
+            # Prefer Python from project venv if available
+            from ..core.venv_utils import get_project_python
 
-                request = RuntimeExecutionRequest(
-                    code_file=code_file,
-                    workdir=self.temp_dir,
-                    timeout_seconds=self.timeout,
-                    python_executable=python_exe,
-                    env=self._get_safe_env(runtime_name=runtime_name),
-                )
-                result = runtime.execute(request)
+            python_exe = get_project_python(workdir)
+            if python_exe is None:
+                # No project venv - fallback to sys.executable
+                python_exe = Path(sys.executable)
+                logger.debug("No project venv found - using sys.executable")
+            else:
+                logger.debug(f"Using project venv Python: {python_exe}")
 
-                return result.return_code, result.stdout, result.stderr
+            sandbox_config = self._get_sandbox_config()
+            superbox = Superbox(
+                sandbox_config=sandbox_config,
+                runtime_override=self.runtime_override,
+            )
+            resolution = superbox.resolve_runtime()
+            runtime_name = resolution.runtime_name
+            self.last_runtime_name = runtime_name
+            self._enforce_runtime_policy(
+                runtime_name=runtime_name,
+                workdir=workdir,
+                sandbox_config=sandbox_config,
+            )
+            runtime = resolution.runtime
 
-            except subprocess.TimeoutExpired:
-                logger.warning(f"Execution timeout after {self.timeout}s")
-                return -1, "", f"Execution timeout after {self.timeout} seconds"
-            except Exception as e:
-                logger.error(f"Execution failed: {e}")
-                return -1, "", f"Execution error: {e!s}"
+            request = RuntimeExecutionRequest(
+                code_file=code_file,
+                workdir=workdir,
+                timeout_seconds=self.timeout,
+                python_executable=python_exe,
+                env=self._get_safe_env(runtime_name=runtime_name),
+            )
+            result = runtime.execute(request)
+
+            return result.return_code, result.stdout, result.stderr
+
+        except subprocess.TimeoutExpired:
+            logger.warning(f"Execution timeout after {self.timeout}s")
+            return -1, "", f"Execution timeout after {self.timeout} seconds"
+        except Exception as e:
+            logger.error(f"Execution failed: {e}")
+            return -1, "", f"Execution error: {e!s}"
 
     def _wrap_code_with_inputs(self, code: str, inputs: dict[str, Any]) -> str:
         """
@@ -220,7 +262,8 @@ class ExecutionSandbox:
         if not configured_roots:
             configured_roots = [".", tempfile.gettempdir()]
 
-        base = Path.cwd().resolve()
+        configured_root = getattr(self.config_manager, "project_root", None)
+        base = Path(configured_root or Path.cwd()).expanduser().resolve()
         resolved: list[Path] = []
         for item in configured_roots:
             value = str(item).strip()
