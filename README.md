@@ -25,6 +25,24 @@ RLM Code implements the [Recursive Language Models](https://arxiv.org/abs/2512.2
 
 RLM Code wraps this algorithm in an interactive terminal UI with built-in benchmarks, trajectory replay, and observability.
 
+## Release v0.1.13
+
+This release expands the experimental native coding agent with live recursive
+agents. The root agent can start multiple children concurrently, exchange
+messages with them, collect their results, apply the solution, and run
+verification under the configured sandbox and approval policy.
+
+- Run concurrent child agents from the persistent Python workspace
+- Message, steer, wait for, cancel, and delete child agents
+- See the live agent hierarchy and activity in the terminal
+- Preserve the complete root-and-child trajectory with stable ancestry
+- Replay a hierarchy with `rlm-code agent replay <session-id>`
+- Resume saved sessions with child records, results, supported Python state, and undelivered messages
+
+The native runtime remains experimental. Active children are settled when the
+RLM Code process exits; background continuation, daemon supervision, and crash
+recovery are planned for a later release.
+
 ## Release v0.1.12
 
 This release introduces an experimental native coding-agent workflow for working
@@ -258,9 +276,16 @@ provide a container isolation boundary. Use `--approval confirm-high` (the
 default) or `--approval confirm-all` for interactive control. Use
 `--approval auto` only in a trusted repository and environment.
 
-In v0.1.12 this experimental command operates as a single root agent. It does
-not yet provide concurrent child agents, parent/child communication, an agent
-tree, or replay and resume of a complete multi-agent hierarchy.
+The agent can now run concurrent children, communicate with them, and preserve
+their hierarchy in the session trajectory. Replay a complete saved hierarchy
+with:
+
+```bash
+rlm-code agent replay <session-id> --repository .
+```
+
+Active children do not continue running after the RLM Code process exits.
+Background continuation and automatic crash recovery remain future work.
 
 #### Existing TUI coding harness
 

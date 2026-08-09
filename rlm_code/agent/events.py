@@ -39,6 +39,11 @@ class AgentEventType(str, Enum):
     KERNEL_CHECKPOINTED = "kernel.checkpointed"
     KERNEL_RESTORED = "kernel.restored"
     USAGE_UPDATED = "usage.updated"
+    AGENT_SPAWNED = "agent.spawned"
+    AGENT_MESSAGE_SENT = "agent.message.sent"
+    AGENT_STEERED = "agent.steered"
+    AGENT_CANCELLED = "agent.cancelled"
+    AGENT_DELETED = "agent.deleted"
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +55,8 @@ class AgentEvent:
     session_id: str
     type: AgentEventType
     timestamp: str
+    agent_id: str = "root"
+    parent_agent_id: str | None = None
     data: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -67,6 +74,10 @@ class AgentEvent:
             session_id=str(payload["session_id"]),
             type=AgentEventType(str(payload["type"])),
             timestamp=str(payload["timestamp"]),
+            agent_id=str(payload.get("agent_id") or "root"),
+            parent_agent_id=(
+                str(payload["parent_agent_id"]) if payload.get("parent_agent_id") else None
+            ),
             data=dict(payload.get("data") or {}),
         )
 
@@ -89,7 +100,14 @@ class EventJournal:
             last = max(last, event.sequence)
         return last + 1
 
-    def append(self, event_type: AgentEventType, data: dict[str, Any] | None = None) -> AgentEvent:
+    def append(
+        self,
+        event_type: AgentEventType,
+        data: dict[str, Any] | None = None,
+        *,
+        agent_id: str = "root",
+        parent_agent_id: str | None = None,
+    ) -> AgentEvent:
         """Append, flush, and return one event."""
         with self._lock:
             sequence = self._next_sequence
@@ -99,6 +117,8 @@ class EventJournal:
                 session_id=self.session_id,
                 type=event_type,
                 timestamp=_utc_now(),
+                agent_id=agent_id,
+                parent_agent_id=parent_agent_id,
                 data=dict(data or {}),
             )
             line = json.dumps(event.to_dict(), ensure_ascii=False, default=str)

@@ -80,9 +80,36 @@ writes a file, runs a test command through the selected sandbox, records approva
 decisions and ordered events, and resumes the saved Python state. Separate
 tests cover traversal rejection and active cancellation.
 
+## Live recursive-agent extension
+
+The next vertical slice adds an in-process supervisor beside the root runtime.
+Root and child agents keep the same one-tool model contract: coordination is an
+`rlm` object inside persistent Python, never a new model-facing tool. A bounded
+supervisor schedules children concurrently and enforces global child capacity,
+depth, per-child turn, token, and time budgets.
+
+Every child has a stable ID, parent ID, model, sandbox, status, result, usage,
+and assigned budgets. The root and every descendant append to the same ordered
+session journal while keeping separate Python checkpoints. Spawn, messaging,
+steering, follow-up, wait, cancellation, and deletion actions pass through the
+same capability broker and approval audit as repository and shell effects.
+Mailbox sends and their delivery acknowledgements are journaled so an
+undelivered message can be restored with the session.
+
+The terminal mirrors child events into the active root stream and renders
+hierarchy activity as it happens. `rlm-code agent replay <session-id>` renders
+the complete root-and-child trajectory in its original global event order.
+Resuming the root restores its supported Python state and durable child
+registry; a follow-up message can reopen a settled or interrupted child.
+
+This extension is durable session recovery, not durable background execution.
+Closing the process settles active in-process children. Daemon-owned workers,
+detach/reattach while work continues, heartbeats, orphan recovery, fork, clone,
+and automatic crash restart remain later supervision work.
+
 ## Deferred by design
 
-Live child agents, mailboxes, session trees, fork/clone, daemon supervision,
-skills, MCP, compaction, goals, schedules, continual harness refinement, and a
-full terminal redesign are later phases. No competing runtime adapter,
-TypeScript runtime, or additional model-facing tool is introduced.
+Fork/clone, daemon supervision, background detach/reattach, heartbeats, orphan
+recovery, skills, MCP, compaction, goals, schedules, continual harness
+refinement, and a full terminal redesign are later phases. No competing runtime
+adapter, TypeScript runtime, or additional model-facing tool is introduced.

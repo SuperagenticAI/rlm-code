@@ -115,6 +115,20 @@ class _CapabilityProxy:
     _METHODS = {
         "repo": frozenset({"help", "list", "read", "search", "write", "replace"}),
         "shell": frozenset({"help", "run"}),
+        "rlm": frozenset(
+            {
+                "help",
+                "spawn",
+                "spawn_batch",
+                "list",
+                "send",
+                "steer",
+                "wait",
+                "wait_all",
+                "cancel",
+                "delete",
+            }
+        ),
     }
 
     def __init__(self, name: str, connection: Connection) -> None:
@@ -182,7 +196,7 @@ def _clip(value: str, limit: int) -> str:
 def _snapshot_variables(namespace: dict[str, Any], limit: int = 300) -> dict[str, str]:
     result: dict[str, str] = {}
     for name, value in namespace.items():
-        if name.startswith("_") or name in {"repo", "shell"} or callable(value):
+        if name.startswith("_") or name in {"repo", "shell", "rlm"} or callable(value):
             continue
         try:
             result[name] = _clip(repr(value), limit)
@@ -286,7 +300,7 @@ def _checkpoint_namespace(
     skipped: list[dict[str, str]] = []
     total = 0
     for name, value in namespace.items():
-        if name.startswith("_") or name in {"repo", "shell"} or callable(value):
+        if name.startswith("_") or name in {"repo", "shell", "rlm"} or callable(value):
             continue
         try:
             blob = _pickle_checkpoint_value(value)
@@ -365,7 +379,11 @@ def _restore_namespace(namespace: dict[str, Any], snapshot_path: Path) -> dict[s
             "path": str(snapshot_path),
         }
     for name, blob in blobs.items():
-        if not isinstance(name, str) or name.startswith("_") or name in {"repo", "shell"}:
+        if not isinstance(name, str) or name.startswith("_") or name in {
+            "repo",
+            "shell",
+            "rlm",
+        }:
             continue
         try:
             namespace[name] = pickle.loads(blob)
@@ -390,6 +408,7 @@ def _kernel_worker(
         },
         "repo": _CapabilityProxy("repo", connection),
         "shell": _CapabilityProxy("shell", connection),
+        "rlm": _CapabilityProxy("rlm", connection),
     }
     snapshot_path = Path(snapshot_path_value)
     restore = _restore_namespace(namespace, snapshot_path)

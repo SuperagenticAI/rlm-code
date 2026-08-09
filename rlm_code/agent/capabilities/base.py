@@ -118,7 +118,11 @@ class CapabilityBroker:
             raise EffectDenied(approval.reason or f"{capability_name}.{method} was denied")
 
         try:
-            result = await asyncio.to_thread(capability.invoke, method, args, kwargs)
+            async_invoke = getattr(capability, "ainvoke", None)
+            if callable(async_invoke):
+                result = await async_invoke(method, args, kwargs)
+            else:
+                result = await asyncio.to_thread(capability.invoke, method, args, kwargs)
         except Exception as exc:
             self.emit(
                 AgentEventType.EFFECT_FAILED,

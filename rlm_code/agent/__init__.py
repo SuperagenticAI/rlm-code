@@ -1,5 +1,6 @@
 """Public native coding-agent API."""
 
+from .coordination import AgentRecord, AgentSupervisor
 from .events import AgentEvent, AgentEventStream, AgentEventType, EventJournal
 from .model import (
     PYTHON_TOOL,
@@ -20,6 +21,8 @@ __all__ = [
     "AgentEventStream",
     "AgentEventType",
     "AgentResult",
+    "AgentRecord",
+    "AgentSupervisor",
     "EventJournal",
     "LegacyConnectorModel",
     "ModelClient",

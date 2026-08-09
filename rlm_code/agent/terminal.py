@@ -11,7 +11,7 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 
 from ..rlm.approval import ApprovalGate, ApprovalPolicy, ConsoleApprovalHandler
-from .events import AgentEvent, AgentEventType
+from .events import AgentEvent, AgentEventType, EventJournal
 from .runtime import Agent, AgentResult
 
 console = Console()
@@ -21,6 +21,13 @@ def render_event(event: AgentEvent) -> None:
     """Render the smallest useful live view of a native-agent event."""
     data = event.data
     if event.type in {AgentEventType.SESSION_STARTED, AgentEventType.SESSION_RESUMED}:
+        if event.agent_id != "root":
+            action = "resumed" if event.type == AgentEventType.SESSION_RESUMED else "started"
+            console.print(
+                f"[cyan]├─ {event.agent_id}[/cyan] {action} "
+                f"[dim](parent: {event.parent_agent_id or 'root'})[/dim]"
+            )
+            return
         console.print(
             Panel.fit(
                 f"Session: [cyan]{event.session_id}[/cyan]\n"
@@ -35,13 +42,14 @@ def render_event(event: AgentEvent) -> None:
         console.print(
             Panel(
                 Syntax(str(data.get("code") or ""), "python", word_wrap=True),
-                title=f"Python · turn {data.get('turn', '?')}",
+                title=f"Python · {event.agent_id} · turn {data.get('turn', '?')}",
                 border_style="blue",
             )
         )
     elif event.type == AgentEventType.EFFECT_REQUESTED:
         console.print(
-            f"[dim]effect[/dim] {data.get('capability')}.{data.get('method')} "
+            f"[dim]{event.agent_id} effect[/dim] "
+            f"{data.get('capability')}.{data.get('method')} "
             f"[dim]{data.get('args', '')}[/dim]"
         )
     elif event.type == AgentEventType.APPROVAL_RESOLVED:
@@ -54,9 +62,30 @@ def render_event(event: AgentEvent) -> None:
         output = str(result.get("stdout") or "")
         error = str(result.get("error") or result.get("stderr") or "")
         if output:
-            console.print(Panel(output.rstrip(), title="Python output", border_style="green"))
+            console.print(
+                Panel(
+                    output.rstrip(), title=f"Python output · {event.agent_id}", border_style="green"
+                )
+            )
         if error:
-            console.print(Panel(error.rstrip(), title="Python error", border_style="red"))
+            console.print(
+                Panel(error.rstrip(), title=f"Python error · {event.agent_id}", border_style="red")
+            )
+    elif event.type == AgentEventType.AGENT_SPAWNED:
+        depth = max(1, int(data.get("depth", 1) or 1))
+        branch = "  " * (depth - 1) + "├─"
+        console.print(
+            f"[cyan]{branch} {data.get('agent_id')}[/cyan] queued [dim]{data.get('task', '')}[/dim]"
+        )
+    elif event.type in {AgentEventType.AGENT_MESSAGE_SENT, AgentEventType.AGENT_STEERED}:
+        action = "steered" if event.type == AgentEventType.AGENT_STEERED else "messaged"
+        console.print(
+            f"[magenta]{data.get('from_agent_id')} → {data.get('to_agent_id')}[/magenta] "
+            f"{action} [dim]{data.get('message', '')}[/dim]"
+        )
+    elif event.type in {AgentEventType.AGENT_CANCELLED, AgentEventType.AGENT_DELETED}:
+        action = "cancelled" if event.type == AgentEventType.AGENT_CANCELLED else "deleted"
+        console.print(f"[yellow]└─ {data.get('agent_id')} {action}[/yellow]")
     elif event.type == AgentEventType.USAGE_UPDATED:
         usage = data.get("usage") or {}
         console.print(
@@ -76,6 +105,12 @@ def render_event(event: AgentEvent) -> None:
         style = "green" if event.type == AgentEventType.SESSION_COMPLETED else "yellow"
         if event.type == AgentEventType.SESSION_FAILED:
             style = "red"
+        if event.agent_id != "root":
+            console.print(
+                f"[{style}]└─ {event.agent_id} {data.get('status', event.type.value)}"
+                f"[/{style}] [dim]{data.get('final_response', '')}[/dim]"
+            )
+            return
         usage = data.get("usage") or {}
         usage_line = (
             "\n\n[dim]"
@@ -94,6 +129,28 @@ def render_event(event: AgentEvent) -> None:
                 border_style=style,
             )
         )
+
+
+def replay_terminal_session(session_id: str, repository: Path) -> int:
+    """Render the complete persisted hierarchy in global event order."""
+    valid_characters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-"
+    if not session_id or any(character not in valid_characters for character in session_id):
+        raise click.ClickException("Invalid native-agent session id")
+    journal_path = (
+        repository.expanduser().resolve()
+        / ".rlm_code"
+        / "agent"
+        / "sessions"
+        / session_id
+        / "events.jsonl"
+    )
+    if not journal_path.is_file():
+        raise click.ClickException(f"Native agent session not found: {session_id}")
+    events = EventJournal(journal_path, session_id).load()
+    for event in events:
+        render_event(event)
+    console.print(f"[dim]Replayed {len(events)} events from {journal_path}[/dim]")
+    return len(events)
 
 
 async def run_terminal_agent(
@@ -198,4 +255,18 @@ def agent_run_command(
         raise click.exceptions.Exit(1)
 
 
-__all__ = ["agent_cli", "render_event", "run_terminal_agent"]
+@agent_cli.command("replay")
+@click.argument("session_id")
+@click.option(
+    "--repository",
+    "repository_path",
+    type=click.Path(path_type=Path, file_okay=False, exists=True),
+    default=Path("."),
+    show_default=True,
+)
+def agent_replay_command(session_id: str, repository_path: Path) -> None:
+    """Replay the complete live hierarchy for SESSION_ID."""
+    replay_terminal_session(session_id, repository_path)
+
+
+__all__ = ["agent_cli", "render_event", "replay_terminal_session", "run_terminal_agent"]

@@ -8,14 +8,16 @@ import json
 import re
 import time
 import uuid
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from ..core.config import ConfigManager
 from ..execution.sandbox import ExecutionSandbox
 from ..rlm.approval import ApprovalAuditLog, ApprovalGate, ApprovalPolicy
 from .capabilities import CapabilityBroker, RepositoryCapability, ShellCapability
+from .coordination import AgentRecord, AgentSupervisor, CoordinationCapability
 from .events import AgentEvent, AgentEventStream, AgentEventType, EventJournal
 from .kernel import KernelResult, PersistentPythonKernel
 from .model import (
@@ -38,6 +40,8 @@ Inside Python, use only these preloaded policy-controlled objects for effects:
 
 - `repo.help()`, `repo.list(...)`, `repo.search(...)`, `repo.read(...)`, `repo.write(...)`, `repo.replace(...)`
 - `shell.help()`, `shell.run(["program", "arg", ...], cwd=".", timeout=30)`
+- `rlm.help()`, `rlm.spawn(...)`, `rlm.spawn_batch(...)`, `rlm.send(...)`, `rlm.steer(...)`
+- `rlm.list()`, `rlm.wait(...)`, `rlm.wait_all(...)`, `rlm.cancel(...)`, `rlm.delete(...)`
 
 The Python environment intentionally has no raw imports, open, subprocess, network, eval, or exec.
 Use ordinary Python for computation and the capability objects for all repository and command work.
@@ -88,6 +92,15 @@ class Agent:
         max_tokens: int | None = None,
         time_budget_seconds: float | None = None,
         python_timeout_seconds: float = 120.0,
+        model_client_factory: Callable[[str, str], ModelClient] | None = None,
+        max_child_concurrency: int = 4,
+        max_children: int = 16,
+        max_child_depth: int = 3,
+        agent_id: str = "root",
+        parent_agent_id: str | None = None,
+        supervisor: AgentSupervisor | None = None,
+        _journal: EventJournal | None = None,
+        _agent_dir: Path | None = None,
     ) -> None:
         self.repository = Path(repository).expanduser().resolve()
         if not self.repository.is_dir():
@@ -97,6 +110,10 @@ class Agent:
         if sandbox:
             self.execution_sandbox.set_runtime(sandbox)
 
+        self.agent_id = agent_id
+        self.parent_agent_id = parent_agent_id
+        self._provided_model_client = model_client is not None
+        self._model_client_factory = model_client_factory
         self.model = model or getattr(model_client, "model", None) or "unknown"
         self.model_client = model_client or self._build_legacy_model(connector)
         self.max_turns = max(1, int(max_turns))
@@ -107,14 +124,17 @@ class Agent:
         self.python_timeout_seconds = max(0.1, float(python_timeout_seconds))
 
         self.session_id = self._resolve_session_id(session_id)
-        self.session_dir = self.repository / ".rlm_code" / "agent" / "sessions" / self.session_id
+        self.root_session_dir = (
+            self.repository / ".rlm_code" / "agent" / "sessions" / self.session_id
+        )
+        self.session_dir = _agent_dir or self.root_session_dir
         self.metadata_path = self.session_dir / "metadata.json"
-        self.journal_path = self.session_dir / "events.jsonl"
+        self.journal_path = self.root_session_dir / "events.jsonl"
         self._resuming = bool(resume)
         self._prepare_session_storage()
-        self.journal = EventJournal(self.journal_path, self.session_id)
+        self.journal = _journal or EventJournal(self.journal_path, self.session_id)
 
-        audit_log = ApprovalAuditLog(self.session_dir / "approvals.jsonl")
+        audit_log = ApprovalAuditLog(self.root_session_dir / "approvals.jsonl")
         self.approval_gate = approval_gate or ApprovalGate(
             policy=approval_policy,
             audit_log=audit_log,
@@ -126,11 +146,23 @@ class Agent:
         self._active_task: asyncio.Task[None] | None = None
         self._cancel_requested = asyncio.Event()
         self._run_lock = asyncio.Lock()
+        self._external_messages: deque[tuple[str, str, bool, str]] = deque()
         self._invocations = 0
         self._active_turn = 0
         self._messages = self._load_messages() if self._resuming else []
         self.usage = self._load_usage() if self._resuming else Usage()
         self._invocation_elapsed_base = self.usage.elapsed_seconds
+
+        self._owns_supervisor = supervisor is None
+        self.supervisor = supervisor or AgentSupervisor(
+            session_id=self.session_id,
+            journal=self.journal,
+            max_concurrency=max_child_concurrency,
+            max_children=max_children,
+            max_depth=max_child_depth,
+        )
+        if self._owns_supervisor:
+            self.supervisor.register_root(self)
 
         self.broker = CapabilityBroker(self.approval_gate, self._emit)
         self.broker.effect_count = self.usage.effects
@@ -142,6 +174,7 @@ class Agent:
                 default_timeout=int(self.python_timeout_seconds),
             )
         )
+        self.broker.register(CoordinationCapability(self.supervisor, self))
         self.kernel = PersistentPythonKernel(
             snapshot_path=self.session_dir / "kernel-state.pkl",
             effect_handler=self.broker.execute,
@@ -189,7 +222,29 @@ class Agent:
         """Persist supported state and release the kernel process."""
         if self._active_task is not None and not self._active_task.done():
             await self.cancel()
+        if self._owns_supervisor:
+            await self.supervisor.close()
         await self.kernel.close()
+
+    def enqueue_message(
+        self,
+        message: str,
+        *,
+        steer: bool,
+        sender: str,
+        message_id: str,
+    ) -> None:
+        """Queue one parent, child, or sibling message for the next model turn."""
+        item = (sender, message, steer, message_id)
+        if steer:
+            self._external_messages.appendleft(item)
+        else:
+            self._external_messages.append(item)
+
+    def _publish_external_event(self, event: AgentEvent) -> None:
+        stream = self._active_stream
+        if stream is not None:
+            stream.push(event)
 
     def _request_cancel(self) -> None:
         self._cancel_requested.set()
@@ -253,6 +308,8 @@ class Agent:
                 "model": self.model,
                 "sandbox": self.execution_sandbox.get_runtime_name(),
                 "python_tool_only": True,
+                "agent_id": self.agent_id,
+                "parent_agent_id": self.parent_agent_id,
             },
         )
         restore = await self.kernel.start()
@@ -290,6 +347,8 @@ class Agent:
                     event_type=AgentEventType.SESSION_INTERRUPTED,
                     reason="token_budget",
                 )
+
+            self._drain_external_messages()
 
             request = ModelRequest(
                 model=self.model,
@@ -464,10 +523,35 @@ class Agent:
         )
 
     def _emit(self, event_type: AgentEventType, data: dict[str, Any]) -> AgentEvent:
-        event = self.journal.append(event_type, data)
+        event = self.journal.append(
+            event_type,
+            data,
+            agent_id=self.agent_id,
+            parent_agent_id=self.parent_agent_id,
+        )
         if self._active_stream is not None:
             self._active_stream.push(event)
+        self.supervisor.publish(event, self)
         return event
+
+    def _drain_external_messages(self) -> None:
+        while self._external_messages:
+            sender, content, steer, message_id = self._external_messages.popleft()
+            prefix = "Steering" if steer else "Message"
+            message = ModelMessage(
+                role="user",
+                content=f"[{prefix} from agent {sender}]\n{content}",
+            )
+            self._messages.append(message)
+            self._emit(
+                AgentEventType.USER_MESSAGE,
+                {
+                    "message": message.to_dict(),
+                    "sender_agent_id": sender,
+                    "steer": steer,
+                    "message_id": message_id,
+                },
+            )
 
     def _prepare_session_storage(self) -> None:
         self.session_dir.mkdir(parents=True, exist_ok=True)
@@ -480,15 +564,20 @@ class Agent:
                 raise ValueError(
                     f"Session {self.session_id} belongs to {stored_repository}, not {self.repository}"
                 )
+            stored_agent_id = str(metadata.get("agent_id") or "root")
+            if stored_agent_id != self.agent_id:
+                raise ValueError(f"Agent state belongs to {stored_agent_id}, not {self.agent_id}")
             if self.model == "unknown" and metadata.get("model"):
                 self.model = str(metadata["model"])
             return
 
-        if self.metadata_path.exists() or self.journal_path.exists():
+        if self.metadata_path.exists() or (self.agent_id == "root" and self.journal_path.exists()):
             raise ValueError(f"Native agent session already exists: {self.session_id}")
         metadata = {
             "version": 1,
             "session_id": self.session_id,
+            "agent_id": self.agent_id,
+            "parent_agent_id": self.parent_agent_id,
             "repository": str(self.repository),
             "model": self.model,
             "sandbox": self.execution_sandbox.get_runtime_name(),
@@ -502,6 +591,8 @@ class Agent:
         messages: list[ModelMessage] = []
         pending_tool_calls: list[str] = []
         for event in EventJournal(self.journal_path, self.session_id).load():
+            if event.agent_id != self.agent_id:
+                continue
             if event.type == AgentEventType.USER_MESSAGE:
                 payload = event.data.get("message")
                 if isinstance(payload, dict):
@@ -549,6 +640,8 @@ class Agent:
         python_calls = 0
         effects = 0
         for event in EventJournal(self.journal_path, self.session_id).load():
+            if event.agent_id != self.agent_id:
+                continue
             raw_usage = event.data.get("usage")
             if isinstance(raw_usage, dict):
                 latest = Usage.from_dict(raw_usage)
@@ -563,6 +656,59 @@ class Agent:
         result.python_calls = max(result.python_calls, python_calls)
         result.effects = max(result.effects, effects)
         return result
+
+    def _create_child_agent(self, record: AgentRecord) -> Agent:
+        return self._build_child_agent(
+            record,
+            resume=False,
+            max_turns=record.max_turns,
+            max_tokens=record.max_tokens,
+            time_budget_seconds=record.time_budget_seconds,
+        )
+
+    def _restore_child_agent(self, record: AgentRecord) -> Agent:
+        return self._build_child_agent(
+            record,
+            resume=True,
+            max_turns=record.max_turns,
+            max_tokens=record.max_tokens,
+            time_budget_seconds=record.time_budget_seconds,
+        )
+
+    def _build_child_agent(
+        self,
+        record: AgentRecord,
+        *,
+        resume: bool,
+        max_turns: int,
+        max_tokens: int | None,
+        time_budget_seconds: float | None,
+    ) -> Agent:
+        child_model_client: ModelClient | None = None
+        if self._model_client_factory is not None:
+            child_model_client = self._model_client_factory(record.agent_id, record.model)
+        elif self._provided_model_client:
+            child_model_client = self.model_client
+        return Agent(
+            repository=self.repository,
+            sandbox=record.sandbox,
+            model=record.model,
+            model_client=child_model_client,
+            config_manager=self.config_manager,
+            approval_gate=self.approval_gate,
+            session_id=self.session_id,
+            resume=resume,
+            max_turns=max_turns,
+            max_tokens=max_tokens,
+            time_budget_seconds=time_budget_seconds,
+            python_timeout_seconds=self.python_timeout_seconds,
+            model_client_factory=self._model_client_factory,
+            agent_id=record.agent_id,
+            parent_agent_id=record.parent_agent_id,
+            supervisor=self.supervisor,
+            _journal=self.journal,
+            _agent_dir=self.root_session_dir / "agents" / record.agent_id,
+        )
 
     def _build_legacy_model(self, connector: Any | None) -> ModelClient:
         if connector is None:

@@ -5,6 +5,19 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.13] - 2026-08-09
+
+### Added
+- Experimental concurrent child agents for the native coding workflow, including parent/child messaging, steering, follow-up work, waiting, cancellation, and deletion.
+- Live terminal activity for the agent hierarchy and a replay command for the complete root-and-child trajectory.
+- Durable child status, ancestry, model, sandbox, budget, result, usage, and mailbox records that remain available when a root session resumes.
+
+### Security
+- Child repository and command actions use the same configured sandbox, approval policy, limits, and audit trail as the root agent.
+
+### Known limitations
+- Background children do not continue running after the RLM Code process exits. Resumed sessions recover their hierarchy, completed results, supported Python checkpoints, and undelivered messages; daemon-backed execution and automatic crash recovery remain future work.
+
 ## [0.1.12] - 2026-08-09
 
 ### Added
@@ -131,6 +144,7 @@ Initial public release of **RLM Code**.
 - Unsafe local `exec` usage preserved only as an explicit, opt-in path for advanced development scenarios.
 
 [0.1.5]: https://github.com/SuperagenticAI/rlm-code/releases/tag/v0.1.5
+[0.1.13]: https://github.com/SuperagenticAI/rlm-code/releases/tag/v0.1.13
 [0.1.12]: https://github.com/SuperagenticAI/rlm-code/releases/tag/v0.1.12
 [0.1.11]: https://github.com/SuperagenticAI/rlm-code/releases/tag/v0.1.11
 [0.1.10]: https://github.com/SuperagenticAI/rlm-code/releases/tag/v0.1.10
