@@ -379,11 +379,16 @@ def _restore_namespace(namespace: dict[str, Any], snapshot_path: Path) -> dict[s
             "path": str(snapshot_path),
         }
     for name, blob in blobs.items():
-        if not isinstance(name, str) or name.startswith("_") or name in {
-            "repo",
-            "shell",
-            "rlm",
-        }:
+        if (
+            not isinstance(name, str)
+            or name.startswith("_")
+            or name
+            in {
+                "repo",
+                "shell",
+                "rlm",
+            }
+        ):
             continue
         try:
             namespace[name] = pickle.loads(blob)
