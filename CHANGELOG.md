@@ -5,6 +5,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.14] - 2026-09-05
+
+### Changed
+- Bumped GitHub Actions dependencies used by CI, pre-commit, docs deploy, and release workflows: `actions/checkout` 4 to 6, `actions/cache` 4 to 5, `astral-sh/setup-uv` 4 to 7, and `actions/upload-artifact` 4 to 7.
+
 ## [0.1.13] - 2026-08-09
 
 ### Added

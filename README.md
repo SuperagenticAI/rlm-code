@@ -25,6 +25,17 @@ RLM Code implements the [Recursive Language Models](https://arxiv.org/abs/2512.2
 
 RLM Code wraps this algorithm in an interactive terminal UI with built-in benchmarks, trajectory replay, and observability.
 
+## Release v0.1.14
+
+Hygiene release: GitHub Actions dependency bumps so CI, pre-commit, docs deploy, and release workflows stay current.
+
+- `actions/checkout` 4 to 6
+- `actions/cache` 4 to 5
+- `astral-sh/setup-uv` 4 to 7
+- `actions/upload-artifact` 4 to 7
+
+No product behavior changes in this release. The experimental native recursive agent from v0.1.13 is unchanged; daemon supervision and crash recovery remain planned.
+
 ## Release v0.1.13
 
 This release expands the experimental native coding agent with live recursive
